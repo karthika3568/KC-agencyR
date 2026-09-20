@@ -43,7 +43,10 @@ class CreditLedgerService
             ->execute(['id' => $customerId]);
 
         $balanceBefore = $this->currentOutstanding($customerId);
-        $signedAmount = $type === 'payment_received' ? -abs($amount) : abs($amount);
+        // sale_credit increases what the customer owes; payment_received and
+        // credit_reversal (e.g. a sales return against a credit sale) both reduce it.
+        $reducesBalance = in_array($type, ['payment_received', 'credit_reversal'], true);
+        $signedAmount = $reducesBalance ? -abs($amount) : abs($amount);
         $balanceAfter = round($balanceBefore + $signedAmount, 2);
 
         $this->pdo->prepare(

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Helpers\CodeGenerator;
 use App\Helpers\Response;
 use App\Middleware\JwtAuthMiddleware;
 use App\Middleware\PermissionMiddleware;
@@ -16,6 +17,12 @@ use PDO;
  * branches.switch_context is hard-locked to their own home branch on every
  * read and write; ?branch_id= from the query string is ignored for them so
  * they can never see or write another branch's rows just by editing the URL.
+ *
+ * $autoDefaults: [column => fn(array $claims): mixed] applied on create only
+ * when the caller didn't already supply that column (e.g. created_by,
+ * expense_date defaulting to today). $codePrefix/$codeColumn auto-generate a
+ * code like "EXP00001" from the new row's own id, same convention as
+ * CrudController.
  */
 class BranchScopedCrudController
 {
@@ -24,7 +31,10 @@ class BranchScopedCrudController
         private string $table,
         private array $columns,
         private string $managePermission,
-        private string $orderBy = 'id'
+        private string $orderBy = 'id',
+        private ?string $codePrefix = null,
+        private string $codeColumn = 'code',
+        private array $autoDefaults = []
     ) {
     }
 
@@ -70,8 +80,18 @@ class BranchScopedCrudController
 
         $data = json_decode(file_get_contents('php://input'), true) ?? [];
         $data['branch_id'] = $this->resolveBranchId($claims);
+        foreach ($this->autoDefaults as $column => $default) {
+            if (!isset($data[$column]) || $data[$column] === '') {
+                $data[$column] = $default($claims);
+            }
+        }
 
         $id = $this->model()->create($data);
+
+        if ($this->codePrefix !== null) {
+            $this->model()->update($id, [$this->codeColumn => CodeGenerator::fromId($this->codePrefix, $id)]);
+        }
+
         Response::json($this->model()->find($id), 201);
     }
 

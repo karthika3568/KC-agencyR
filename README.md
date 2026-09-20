@@ -1,4 +1,4 @@
-# POS / Distributor Billing System — Phase 1 + 2 + 3 + 4
+# POS / Distributor Billing System — Phase 1 + 2 + 3 + 4 + 5
 
 Multi-branch, role-based POS + distributor billing system.
 
@@ -18,8 +18,13 @@ Multi-branch, role-based POS + distributor billing system.
   with FIFO/manual allocation across unpaid GRNs, stock adjustments, van/
   salesman stock issue + day-end return, and a combined Stock Hub view.
 
-Sales returns, cash handover/reconciliation, expenses, and reports still
-don't exist — they land in later phases.
+- **Phase 5**: Post-sale — sales returns (with or without the original
+  invoice, admin-approval path for untraceable ones), purchase returns,
+  customer collections with FIFO oldest-bill auto-deduction, cash handover &
+  reconciliation with discrepancy tracking, and branch-wise expenses/income.
+
+Reports and the Staff & Permissions admin screen still don't exist — they
+land in the final phases.
 
 ## Stack
 
@@ -44,6 +49,8 @@ don't exist — they land in later phases.
    5. `backend/database/schema_phase3.sql`
    6. `backend/database/seed_phase3.sql`
    7. `backend/database/schema_phase4.sql`
+   8. `backend/database/schema_phase5.sql`
+   9. `backend/database/seed_phase5.sql`
 
 Or from the command line:
 
@@ -55,6 +62,8 @@ mysql -u root -p pos_system < backend/database/seed_phase2.sql
 mysql -u root -p pos_system < backend/database/schema_phase3.sql
 mysql -u root -p pos_system < backend/database/seed_phase3.sql
 mysql -u root -p pos_system < backend/database/schema_phase4.sql
+mysql -u root -p pos_system < backend/database/schema_phase5.sql
+mysql -u root -p pos_system < backend/database/seed_phase5.sql
 ```
 
 ## 2. Backend setup
@@ -223,6 +232,57 @@ Open `http://localhost:5173` and log in.
   stock to this salesman" dropdown has names to show — full Staff Accounts
   management (create/edit logins, the permission-toggle screen) is still
   Phase 6, untouched here.
+
+## Phase 5 — what's new
+
+- **Sales Returns** (`/returns` → Sales Returns): `returns.sales_return`
+  creates a return with or without the original invoice. With an invoice, it
+  auto-approves and immediately adds stock back; if `refund_action=
+  credit_note` and a customer is attached, it also posts a `credit_reversal`
+  to the customer's ledger (reducing what they owe — a bug where this
+  actually *increased* their balance was caught and fixed during testing,
+  see `CreditLedgerService`). Without an invoice ("untraceable"), the return
+  sits at `pending_approval` with zero stock/credit effect until someone with
+  `returns.approve_untraceable_return` approves or rejects it — verified live:
+  a cashier's untraceable return got a 403 on self-approval, then the Super
+  Admin's approval flipped it and applied the stock movement.
+- **Purchase Returns** (`/returns` → Purchase Returns):
+  `returns.purchase_return` mirrors the above on the supplier side — reduces
+  stock and posts a `debit_note_adjustment` to the supplier ledger.
+- **Customer Collections** (`/collections`): `credit.view_shopwide_outstanding`
+  sees the "Route Pending Credit Balances" panel; `collections.
+  field_collection_entry` opens the Collect modal, which shows a live FIFO
+  preview (oldest invoice first) as the amount is typed and updates every
+  touched invoice's `paid_amount`/`payment_status` in one transaction —
+  tested through the real UI end to end (₹130 owed → collected ₹80 → ₹50
+  remains, receipt `REC00002` recorded).
+- **Cash Handover & Reconciliation** (`/cash-handover`):
+  `handover.submit_cash_handover` batches a salesman's not-yet-handed-over
+  collections (split cash vs digital) into one handover;
+  `handover.verify_reconcile` counts the physical cash and the system flags
+  `discrepancy_flagged` whenever verified ≠ submitted (tested: submitted 35,
+  verified 30 → discrepancy -5.00, flagged red in the register).
+- **Expenses & Income** (`/expenses`): `expenses.manage` records branch-wise
+  operating expenses (against a seeded category list) and extra income/
+  receipts, each with an auto-generated `EXP00001`/`INC00001` code.
+
+### Assumptions / simplifications in Phase 5
+
+- **`BranchScopedCrudController` gained optional auto-code-generation and
+  `autoDefaults`** (column → `fn($claims)`, e.g. `created_by`,
+  `expense_date`) so expenses/income didn't need bespoke controllers — same
+  reuse pattern as Phase 2's `CrudController` code-prefix support.
+- **Both new ledger services (`SupplierLedgerService` in Phase 4 and
+  `CreditLedgerService` here) needed a sign-convention fix** for their
+  "reversal" transaction types (`debit_note_adjustment`, `credit_reversal`)
+  — both were initially coded to increase the balance like the ledger's
+  primary "charge" type, when a reversal must decrease it. Caught by
+  end-to-end testing (a return was making the customer owe *more*), fixed,
+  and re-verified before commit.
+- **Cash handover batches every un-linked collection**, not just cash ones —
+  the register still shows the cash/digital split per section 4.16, but a
+  UPI collection sits in the same handover batch for audit completeness
+  rather than needing a separate reconciliation flow.
 
 ## Default Super Admin login (seeded — change immediately)
 

@@ -7,11 +7,15 @@ require_once __DIR__ . '/../config/database.php';
 
 use App\Controllers\AuthController;
 use App\Controllers\BranchScopedCrudController;
+use App\Controllers\CashHandoverController;
+use App\Controllers\CollectionController;
 use App\Controllers\CrudController;
 use App\Controllers\InvoiceController;
 use App\Controllers\ItemController;
 use App\Controllers\PurchaseController;
 use App\Controllers\PurchaseRequestController;
+use App\Controllers\PurchaseReturnController;
+use App\Controllers\SalesReturnController;
 use App\Controllers\StockAdjustmentController;
 use App\Controllers\StockHubController;
 use App\Controllers\SupplierPaymentController;
@@ -186,6 +190,63 @@ $router->get('/api/stock-hub/low-stock', fn () => $stockHub->lowStock());
 
 $users = new UserController($pdo);
 $router->get('/api/users', fn () => $users->index());
+
+// ---------------------------------------------------------------
+// Post-sale: returns, collections, cash handover, expenses (Phase 5)
+// ---------------------------------------------------------------
+$salesReturns = new SalesReturnController($pdo);
+$router->get('/api/sales-returns', fn () => $salesReturns->index());
+$router->post('/api/sales-returns', fn () => $salesReturns->store());
+$router->get('/api/sales-returns/{id}', fn ($id) => $salesReturns->show($id));
+$router->post('/api/sales-returns/{id}/approve', fn ($id) => $salesReturns->approve($id));
+$router->post('/api/sales-returns/{id}/reject', fn ($id) => $salesReturns->reject($id));
+
+$purchaseReturns = new PurchaseReturnController($pdo);
+$router->get('/api/purchase-returns', fn () => $purchaseReturns->index());
+$router->post('/api/purchase-returns', fn () => $purchaseReturns->store());
+$router->get('/api/purchase-returns/{id}', fn ($id) => $purchaseReturns->show($id));
+
+$collections = new CollectionController($pdo);
+$router->get('/api/collections', fn () => $collections->index());
+$router->get('/api/collections/pending', fn () => $collections->pending());
+$router->post('/api/collections', fn () => $collections->store());
+$router->get('/api/customers/{id}/unpaid-invoices', fn ($id) => $collections->unpaidInvoices($id));
+
+$cashHandovers = new CashHandoverController($pdo);
+$router->get('/api/cash-handovers', fn () => $cashHandovers->index());
+$router->get('/api/cash-handovers/pending', fn () => $cashHandovers->pending());
+$router->post('/api/cash-handovers', fn () => $cashHandovers->store());
+$router->post('/api/cash-handovers/{id}/verify', fn ($id) => $cashHandovers->verify($id));
+
+$expenseCategories = new CrudController($pdo, 'expense_categories', ['name'], 'expenses.manage');
+$router->get('/api/expense-categories', fn () => $expenseCategories->index());
+$router->post('/api/expense-categories', fn () => $expenseCategories->store());
+
+$expenses = new BranchScopedCrudController(
+    $pdo, 'expenses',
+    ['branch_id', 'category_id', 'amount', 'payment_mode', 'description', 'expense_date', 'created_by', 'expense_no'],
+    'expenses.manage', 'id', 'EXP', 'expense_no',
+    [
+        'created_by' => fn ($claims) => (int) $claims['sub'],
+        'expense_date' => fn () => date('Y-m-d'),
+    ]
+);
+$router->get('/api/expenses', fn () => $expenses->index());
+$router->post('/api/expenses', fn () => $expenses->store());
+$router->delete('/api/expenses/{id}', fn ($id) => $expenses->destroy($id));
+
+$otherIncome = new BranchScopedCrudController(
+    $pdo, 'other_income',
+    ['branch_id', 'amount', 'payment_mode', 'description', 'income_date', 'created_by', 'receipt_no'],
+    'expenses.manage', 'id', 'INC', 'receipt_no',
+    [
+        'created_by' => fn ($claims) => (int) $claims['sub'],
+        'income_date' => fn () => date('Y-m-d'),
+    ]
+);
+$router->get('/api/other-income', fn () => $otherIncome->index());
+$router->post('/api/other-income', fn () => $otherIncome->store());
+$router->delete('/api/other-income/{id}', fn ($id) => $otherIncome->destroy($id));
 
 try {
     $router->dispatch($method, $uri);

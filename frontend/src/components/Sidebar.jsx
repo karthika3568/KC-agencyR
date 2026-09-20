@@ -8,6 +8,10 @@ const MENU_ITEMS = [
   { to: '/parties', label: 'Parties', perm: 'parties.manage_customers' },
   { to: '/purchasing', label: 'Purchasing', perm: 'purchases.create_grn' },
   { to: '/inventory', label: 'Inventory', perm: 'inventory.view_stock' },
+  { to: '/returns', label: 'Returns', perm: 'returns.sales_return' },
+  { to: '/collections', label: 'Collections', perm: 'collections.field_collection_entry' },
+  { to: '/cash-handover', label: 'Cash Handover', perm: 'handover.submit_cash_handover' },
+  { to: '/expenses', label: 'Expenses & Income', perm: 'expenses.manage' },
   { to: '/reports', label: 'Reports', perm: 'reports.view_all' },
   { to: '/staff', label: 'Staff & Permissions', perm: 'staff.manage_permissions' },
 ];

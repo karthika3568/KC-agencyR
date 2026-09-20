@@ -9,6 +9,10 @@ import { POS } from './pages/POS.jsx';
 import { InvoicePrint } from './pages/InvoicePrint.jsx';
 import { Purchasing } from './pages/Purchasing.jsx';
 import { Inventory } from './pages/Inventory.jsx';
+import { Returns } from './pages/Returns.jsx';
+import { Collections } from './pages/Collections.jsx';
+import { CashHandover } from './pages/CashHandover.jsx';
+import { Expenses } from './pages/Expenses.jsx';
 import { StubPage } from './pages/StubPage.jsx';
 
 function Protected({ children }) {
@@ -29,6 +33,10 @@ export default function App() {
       <Route path="/parties" element={<Protected><Parties /></Protected>} />
       <Route path="/purchasing" element={<Protected><Purchasing /></Protected>} />
       <Route path="/inventory" element={<Protected><Inventory /></Protected>} />
+      <Route path="/returns" element={<Protected><Returns /></Protected>} />
+      <Route path="/collections" element={<Protected><Collections /></Protected>} />
+      <Route path="/cash-handover" element={<Protected><CashHandover /></Protected>} />
+      <Route path="/expenses" element={<Protected><Expenses /></Protected>} />
       <Route path="/reports" element={<Protected><StubPage title="Reports" /></Protected>} />
       <Route path="/staff" element={<Protected><StubPage title="Staff & Permissions" /></Protected>} />
       <Route path="/print/invoice/:id" element={<ProtectedRoute><InvoicePrint /></ProtectedRoute>} />
