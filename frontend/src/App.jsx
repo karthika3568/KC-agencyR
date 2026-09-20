@@ -16,6 +16,7 @@ import { Expenses } from './pages/Expenses.jsx';
 import { Reports } from './pages/Reports.jsx';
 import { StaffPermissions } from './pages/StaffPermissions.jsx';
 import { Settings } from './pages/Settings.jsx';
+import { Branches } from './pages/Branches.jsx';
 
 function Protected({ children }) {
   return (
@@ -42,6 +43,7 @@ export default function App() {
       <Route path="/reports" element={<Protected><Reports /></Protected>} />
       <Route path="/staff" element={<Protected><StaffPermissions /></Protected>} />
       <Route path="/settings" element={<Protected><Settings /></Protected>} />
+      <Route path="/branches" element={<Protected><Branches /></Protected>} />
       <Route path="/print/invoice/:id" element={<ProtectedRoute><InvoicePrint /></ProtectedRoute>} />
     </Routes>
   );

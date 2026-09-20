@@ -6,6 +6,7 @@ require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/../config/database.php';
 
 use App\Controllers\AuthController;
+use App\Controllers\BranchController;
 use App\Controllers\BranchScopedCrudController;
 use App\Controllers\CashHandoverController;
 use App\Controllers\CollectionController;
@@ -279,6 +280,12 @@ $router->get('/api/reports/item-wise-sales', fn () => $reports->itemWiseSales())
 $router->get('/api/reports/credit-outstanding', fn () => $reports->creditOutstanding());
 $router->get('/api/reports/expense-income', fn () => $reports->expenseIncome());
 $router->get('/api/reports/profit', fn () => $reports->profitReport());
+
+$branches = new BranchController($pdo);
+$router->get('/api/branches', fn () => $branches->index());
+$router->post('/api/branches', fn () => $branches->store());
+$router->get('/api/branches/{id}', fn ($id) => $branches->show($id));
+$router->put('/api/branches/{id}', fn ($id) => $branches->update($id));
 
 $settings = new SettingsController($pdo);
 $router->get('/api/settings/branch', fn () => $settings->branchProfile());

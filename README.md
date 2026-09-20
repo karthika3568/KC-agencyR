@@ -434,6 +434,30 @@ schema file's one-time-apply convention). If deploying to real MariaDB,
 this schema will work; if there's ever a genuine MariaDB-only feature
 introduced later, re-verify against both.
 
+## Post-Phase-7 fix: Branch create + working header switcher
+
+The backend always supported multiple branches (schema, `?branch_id=`
+resolution in nearly every controller, per-branch stock/invoices/parties),
+but there was no way to actually *create* a branch from the UI, and the
+header branch switcher was still a hardcoded single-option stub from Phase
+1's placeholder. Fixed:
+
+- **`/branches`** (gated `branches.manage`, Super Admin by default): lists
+  every branch and a "+ Create Branch" form with the full address/GSTIN/PAN
+  fields from section 3.1. Creating one also seeds its `INV-`/`EST-`
+  invoice-number sequences immediately rather than relying on
+  `InvoiceNumberService`'s self-heal-on-first-use path.
+- **Header branch switcher** (`branches.switch_context`) now fetches the
+  real branch list, defaults to the user's own home branch, and — critically
+  — actually changes what data every screen shows. A new `branchStore`
+  (Zustand, persisted) holds the selection; `apiClient` attaches it as
+  `?branch_id=` on every request; switching triggers
+  `queryClient.invalidateQueries()` so the whole app refetches under the new
+  branch. Verified live: created "North Branch" and "South Branch" through
+  the real UI, switched to North Branch, and watched the Dashboard correctly
+  show all-zero KPIs and the Main-Branch-only cash-handover discrepancy
+  banner disappear — then switched back and got the original numbers back.
+
 ## Default Super Admin login (seeded — change immediately)
 
 ```

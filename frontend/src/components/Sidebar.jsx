@@ -15,6 +15,7 @@ const MENU_ITEMS = [
   { to: '/reports', label: 'Reports', perm: 'reports.view_all' },
   { to: '/staff', label: 'Staff & Permissions', perm: 'staff.manage_permissions' },
   { to: '/settings', label: 'Settings', perm: 'settings.manage' },
+  { to: '/branches', label: 'Branches', perm: 'branches.manage' },
 ];
 
 export function Sidebar() {
