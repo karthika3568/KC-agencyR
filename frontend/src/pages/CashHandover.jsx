@@ -30,22 +30,22 @@ export function CashHandover() {
 
   return (
     <div>
-      <h1 className="mb-4 text-2xl font-bold text-gray-800">Cash Handover &amp; Reconciliation</h1>
+      <h1 className="mb-4 text-2xl font-bold text-ink">Cash Handover &amp; Reconciliation</h1>
 
-      <div className="mb-4 rounded-lg border border-gray-200 bg-white">
-        <div className="border-b border-gray-100 px-4 py-3 font-semibold text-gray-800">
+      <div className="mb-4 card">
+        <div className="border-b border-border-soft px-4 py-3 font-semibold text-ink">
           Pending Salesman Collections Ready for Handover
         </div>
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-100 text-left text-xs uppercase text-gray-400">
+            <tr className="border-b border-border-soft text-left text-xs uppercase text-ink-muted">
               <th className="px-4 py-2">Salesman</th><th className="px-4 py-2">Cash Collected</th><th className="px-4 py-2">Digital/UPI</th>
               <th className="px-4 py-2">Total</th><th className="px-4 py-2">Cash Being Handed Over</th><th></th>
             </tr>
           </thead>
           <tbody>
             {pending.map((p) => (
-              <tr key={p.employee_id} className="border-b border-gray-50">
+              <tr key={p.employee_id} className="border-b border-border-soft">
                 <td className="px-4 py-2">{p.employee_name}</td>
                 <td className="px-4 py-2">{p.cash_amount}</td>
                 <td className="px-4 py-2">{p.digital_amount}</td>
@@ -69,7 +69,7 @@ export function CashHandover() {
                           submitted_amount: Number(submittedAmounts[p.employee_id] ?? p.cash_amount),
                         })
                       }
-                      className="rounded bg-blue-600 px-3 py-1 text-xs font-semibold text-white"
+                      className="rounded bg-success px-3 py-1 text-xs font-semibold text-white"
                     >
                       Handover Cash
                     </button>
@@ -77,28 +77,28 @@ export function CashHandover() {
                 </td>
               </tr>
             ))}
-            {pending.length === 0 && <tr><td colSpan={6} className="px-4 py-6 text-center text-gray-400">Nothing pending handover.</td></tr>}
+            {pending.length === 0 && <tr><td colSpan={6} className="px-4 py-6 text-center text-ink-muted">Nothing pending handover.</td></tr>}
           </tbody>
         </table>
       </div>
 
-      <div className="rounded-lg border border-gray-200 bg-white">
-        <div className="border-b border-gray-100 px-4 py-3 font-semibold text-gray-800">Reconciliation Audit Register</div>
+      <div className="card">
+        <div className="border-b border-border-soft px-4 py-3 font-semibold text-ink">Reconciliation Audit Register</div>
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-100 text-left text-xs uppercase text-gray-400">
+            <tr className="border-b border-border-soft text-left text-xs uppercase text-ink-muted">
               <th className="px-4 py-2">Handover #</th><th className="px-4 py-2">Salesman</th><th className="px-4 py-2">Submitted</th>
               <th className="px-4 py-2">Verified</th><th className="px-4 py-2">Discrepancy</th><th className="px-4 py-2">Status</th><th></th>
             </tr>
           </thead>
           <tbody>
             {register.map((h) => (
-              <tr key={h.id} className="border-b border-gray-50">
+              <tr key={h.id} className="border-b border-border-soft">
                 <td className="px-4 py-2">{h.handover_no}</td>
                 <td className="px-4 py-2">{h.employee_name}</td>
                 <td className="px-4 py-2">{h.submitted_amount}</td>
                 <td className="px-4 py-2">{h.verified_amount ?? '-'}</td>
-                <td className={`px-4 py-2 font-medium ${h.discrepancy && Math.abs(h.discrepancy) > 0.009 ? 'text-red-600' : 'text-green-600'}`}>
+                <td className={`px-4 py-2 font-medium ${h.discrepancy && Math.abs(h.discrepancy) > 0.009 ? 'text-red-600' : 'text-success'}`}>
                   {h.discrepancy ?? '-'}
                 </td>
                 <td className="px-4 py-2 capitalize">{h.status.replace('_', ' ')}</td>
@@ -124,7 +124,7 @@ export function CashHandover() {
                 </td>
               </tr>
             ))}
-            {register.length === 0 && <tr><td colSpan={7} className="px-4 py-6 text-center text-gray-400">No handovers yet.</td></tr>}
+            {register.length === 0 && <tr><td colSpan={7} className="px-4 py-6 text-center text-ink-muted">No handovers yet.</td></tr>}
           </tbody>
         </table>
       </div>

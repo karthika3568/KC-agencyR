@@ -137,7 +137,7 @@ export function Catalog() {
 
   return (
     <div>
-      <h1 className="mb-4 text-2xl font-bold text-gray-800">Catalog</h1>
+      <h1 className="mb-4 text-2xl font-bold text-ink">Catalog</h1>
       <Tabs
         tabs={[
           { key: 'items', label: 'Items', content: <ItemsPanel canManage={canManage} /> },

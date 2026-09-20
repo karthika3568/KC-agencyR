@@ -91,7 +91,7 @@ export function Expenses() {
 
   return (
     <div>
-      <h1 className="mb-4 text-2xl font-bold text-gray-800">Expenses &amp; Income</h1>
+      <h1 className="mb-4 text-2xl font-bold text-ink">Expenses &amp; Income</h1>
       <Tabs
         tabs={[
           { key: 'expenses', label: 'Operating Expenses', content: <ExpensesPanel canManage={canManage} /> },

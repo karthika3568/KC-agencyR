@@ -152,7 +152,7 @@ export function Parties() {
 
   return (
     <div>
-      <h1 className="mb-4 text-2xl font-bold text-gray-800">Parties</h1>
+      <h1 className="mb-4 text-2xl font-bold text-ink">Parties</h1>
       <Tabs
         tabs={[
           { key: 'customers', label: 'Customers', content: <CustomersPanel canManage={canManageCustomers} /> },

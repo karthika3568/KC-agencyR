@@ -30,8 +30,8 @@ function CreateStaffForm() {
   const roles = rolesQuery.data || [];
 
   return (
-    <form onSubmit={submit} className="rounded-lg border border-gray-200 bg-white p-4">
-      <div className="mb-2 font-semibold text-gray-800">New Staff Account</div>
+    <form onSubmit={submit} className="card p-4">
+      <div className="mb-2 font-semibold text-ink">New Staff Account</div>
       <div className="flex flex-wrap gap-2">
         <input required placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input w-40" />
         <input required type="email" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="input w-48" />
@@ -42,7 +42,7 @@ function CreateStaffForm() {
         </select>
         <input placeholder="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="input w-32" />
       </div>
-      <button type="submit" className="mt-3 rounded bg-blue-600 px-4 py-1.5 text-sm font-semibold text-white">
+      <button type="submit" className="mt-3 rounded bg-success px-4 py-1.5 text-sm font-semibold text-white">
         Create Account
       </button>
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
@@ -89,27 +89,27 @@ function PermissionsPanel({ user, onClose }) {
 
   return (
     <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/30">
-      <div className="max-h-[80vh] w-[600px] overflow-auto rounded-lg bg-white p-5 shadow-lg">
-        <div className="mb-1 text-lg font-semibold text-gray-800">Permissions — {user.name}</div>
-        <p className="mb-3 text-xs text-gray-500">
+      <div className="max-h-[80vh] w-[600px] overflow-auto card p-5">
+        <div className="mb-1 text-lg font-semibold text-ink">Permissions — {user.name}</div>
+        <p className="mb-3 text-xs text-ink-muted">
           Click a badge to cycle: <em>Role default</em> → <em>Force allow</em> → <em>Force deny</em> → back to role default.
         </p>
 
         {Object.entries(grouped).map(([module, perms]) => (
           <div key={module} className="mb-3">
-            <div className="mb-1 text-xs font-bold uppercase text-gray-400">{module}</div>
+            <div className="mb-1 text-xs font-bold uppercase text-ink-muted">{module}</div>
             <div className="flex flex-col gap-1">
               {perms.map((row) => {
                 const override = currentOverride(row);
                 const effective = override === null ? row.role_grants : override;
                 let badgeLabel = 'Role default';
-                let badgeClass = 'bg-gray-100 text-gray-600';
-                if (override === true) { badgeLabel = 'Force allow'; badgeClass = 'bg-green-100 text-green-700'; }
+                let badgeClass = 'bg-gray-100 text-ink-muted';
+                if (override === true) { badgeLabel = 'Force allow'; badgeClass = 'bg-green-100 text-success'; }
                 if (override === false) { badgeLabel = 'Force deny'; badgeClass = 'bg-red-100 text-red-700'; }
 
                 return (
                   <div key={row.id} className="flex items-center justify-between text-sm">
-                    <span className={effective ? 'text-gray-800' : 'text-gray-400'}>{row.label}</span>
+                    <span className={effective ? 'text-ink' : 'text-ink-muted'}>{row.label}</span>
                     <button onClick={() => cycle(row)} className={`rounded px-2 py-0.5 text-xs font-medium ${badgeClass}`}>
                       {badgeLabel}
                     </button>
@@ -120,9 +120,9 @@ function PermissionsPanel({ user, onClose }) {
           </div>
         ))}
 
-        <div className="mt-4 flex justify-end gap-2 border-t border-gray-100 pt-3">
-          <button onClick={onClose} className="rounded bg-gray-100 px-3 py-1.5 text-sm text-gray-700">Close</button>
-          <button onClick={save} disabled={Object.keys(pending).length === 0} className="rounded bg-blue-600 px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-40">
+        <div className="mt-4 flex justify-end gap-2 border-t border-border-soft pt-3">
+          <button onClick={onClose} className="rounded bg-gray-100 px-3 py-1.5 text-sm text-ink">Close</button>
+          <button onClick={save} disabled={Object.keys(pending).length === 0} className="rounded bg-success px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-40">
             Save Changes
           </button>
         </div>
@@ -148,26 +148,26 @@ export function StaffPermissions() {
 
   return (
     <div>
-      <h1 className="mb-4 text-2xl font-bold text-gray-800">Staff &amp; Permissions</h1>
+      <h1 className="mb-4 text-2xl font-bold text-ink">Staff &amp; Permissions</h1>
 
       {canManageAccounts && <div className="mb-4"><CreateStaffForm /></div>}
 
-      <div className="rounded-lg border border-gray-200 bg-white">
-        <div className="border-b border-gray-100 px-4 py-3 font-semibold text-gray-800">Staff Accounts</div>
+      <div className="card">
+        <div className="border-b border-border-soft px-4 py-3 font-semibold text-ink">Staff Accounts</div>
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-100 text-left text-xs uppercase text-gray-400">
+            <tr className="border-b border-border-soft text-left text-xs uppercase text-ink-muted">
               <th className="px-4 py-2">Name</th><th className="px-4 py-2">Email</th><th className="px-4 py-2">Role</th>
               <th className="px-4 py-2">Branch</th><th className="px-4 py-2">Status</th><th></th>
             </tr>
           </thead>
           <tbody>
             {staff.map((u) => (
-              <tr key={u.id} className="border-b border-gray-50">
-                <td className="px-4 py-2 font-medium text-gray-800">{u.name}</td>
+              <tr key={u.id} className="border-b border-border-soft">
+                <td className="px-4 py-2 font-medium text-ink">{u.name}</td>
                 <td className="px-4 py-2">{u.email}</td>
                 <td className="px-4 py-2">{u.role_name}</td>
-                <td className="px-4 py-2 text-gray-500">{u.branch_name || '-'}</td>
+                <td className="px-4 py-2 text-ink-muted">{u.branch_name || '-'}</td>
                 <td className="px-4 py-2">
                   {canManageAccounts ? (
                     <select
@@ -184,14 +184,14 @@ export function StaffPermissions() {
                 </td>
                 <td className="px-4 py-2 text-right">
                   {canManagePermissions && (
-                    <button onClick={() => setSelected(u)} className="text-xs font-medium text-blue-600 hover:underline">
+                    <button onClick={() => setSelected(u)} className="text-xs font-medium text-gold hover:underline">
                       Permissions
                     </button>
                   )}
                 </td>
               </tr>
             ))}
-            {staff.length === 0 && <tr><td colSpan={6} className="px-4 py-6 text-center text-gray-400">No staff accounts.</td></tr>}
+            {staff.length === 0 && <tr><td colSpan={6} className="px-4 py-6 text-center text-ink-muted">No staff accounts.</td></tr>}
           </tbody>
         </table>
       </div>

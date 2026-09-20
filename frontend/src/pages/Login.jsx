@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth.jsx';
+import { Button } from '../components/Button.jsx';
 
 export function Login() {
   const { login } = useAuth();
@@ -25,33 +26,34 @@ export function Login() {
   };
 
   return (
-    <div className="flex h-screen items-center justify-center bg-gray-50">
-      <form onSubmit={handleSubmit} className="w-80 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <h1 className="mb-4 text-xl font-bold text-blue-700">POS System</h1>
-        <label className="mb-1 block text-sm font-medium text-gray-700">Email</label>
+    <div className="flex h-screen items-center justify-center bg-page">
+      <form onSubmit={handleSubmit} className="card w-80 p-6">
+        <div className="mb-6 flex flex-col items-center leading-none">
+          <span className="brand-wordmark text-2xl">POS System</span>
+          <span className="mt-1 text-[10px] font-medium uppercase tracking-widest text-ink-muted">
+            Distributor Billing &amp; Inventory
+          </span>
+        </div>
+        <label className="mb-1 block text-sm font-medium text-ink-muted">Email</label>
         <input
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="mb-3 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+          className="input mb-3"
           required
         />
-        <label className="mb-1 block text-sm font-medium text-gray-700">Password</label>
+        <label className="mb-1 block text-sm font-medium text-ink-muted">Password</label>
         <input
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="mb-4 w-full rounded border border-gray-300 px-3 py-2 text-sm"
+          className="input mb-4"
           required
         />
-        {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full rounded bg-blue-600 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-        >
+        {error && <p className="mb-3 text-sm text-danger">{error}</p>}
+        <Button type="submit" disabled={submitting} className="w-full" size="lg">
           {submitting ? 'Signing in…' : 'Sign in'}
-        </button>
+        </Button>
       </form>
     </div>
   );

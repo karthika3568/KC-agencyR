@@ -25,7 +25,7 @@ function ReturnLineEditor({ lines, setLines, items }) {
           <button onClick={() => removeLine(idx)} className="text-xs text-red-600">&times;</button>
         </div>
       ))}
-      <button onClick={addLine} className="self-start text-xs font-medium text-blue-600 hover:underline">+ Add line</button>
+      <button onClick={addLine} className="self-start text-xs font-medium text-gold hover:underline">+ Add line</button>
     </div>
   );
 }
@@ -76,9 +76,9 @@ function SalesReturnsPanel({ canCreate, canApprove }) {
   return (
     <div className="flex flex-col gap-4">
       {canCreate && (
-        <div className="rounded-lg border border-gray-200 bg-white p-4">
-          <div className="mb-2 font-semibold text-gray-800">New Sales Return</div>
-          <p className="mb-2 text-xs text-gray-500">
+        <div className="card p-4">
+          <div className="mb-2 font-semibold text-ink">New Sales Return</div>
+          <p className="mb-2 text-xs text-ink-muted">
             Leave Invoice # blank for an untraceable return (no original bill) — it will require admin approval before stock/credit are updated.
           </p>
           <div className="mb-2 flex flex-wrap gap-2">
@@ -94,41 +94,41 @@ function SalesReturnsPanel({ canCreate, canApprove }) {
             <input placeholder="Reason" value={reason} onChange={(e) => setReason(e.target.value)} className="input w-48" />
           </div>
           <ReturnLineEditor lines={lines} setLines={setLines} items={items} />
-          <button onClick={submit} className="mt-3 rounded bg-blue-600 px-4 py-1.5 text-sm font-semibold text-white">
+          <button onClick={submit} className="mt-3 rounded bg-success px-4 py-1.5 text-sm font-semibold text-white">
             Save Return
           </button>
           {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
         </div>
       )}
 
-      <div className="rounded-lg border border-gray-200 bg-white">
-        <div className="border-b border-gray-100 px-4 py-3 font-semibold text-gray-800">Sales Returns</div>
+      <div className="card">
+        <div className="border-b border-border-soft px-4 py-3 font-semibold text-ink">Sales Returns</div>
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-100 text-left text-xs uppercase text-gray-400">
+            <tr className="border-b border-border-soft text-left text-xs uppercase text-ink-muted">
               <th className="px-4 py-2">Return #</th><th className="px-4 py-2">Invoice</th><th className="px-4 py-2">Customer</th>
               <th className="px-4 py-2">Refund</th><th className="px-4 py-2">Status</th><th></th>
             </tr>
           </thead>
           <tbody>
             {returns.map((r) => (
-              <tr key={r.id} className="border-b border-gray-50">
+              <tr key={r.id} className="border-b border-border-soft">
                 <td className="px-4 py-2">{r.return_no}</td>
-                <td className="px-4 py-2">{r.invoice_no || <span className="text-amber-600">untraceable</span>}</td>
+                <td className="px-4 py-2">{r.invoice_no || <span className="text-warning">untraceable</span>}</td>
                 <td className="px-4 py-2">{r.customer_name || '-'}</td>
                 <td className="px-4 py-2 capitalize">{r.refund_action.replace('_', ' ')}</td>
                 <td className="px-4 py-2 capitalize">{r.status.replace('_', ' ')}</td>
                 <td className="px-4 py-2 text-right">
                   {r.status === 'pending_approval' && canApprove && (
                     <div className="flex justify-end gap-2">
-                      <button onClick={() => approveMutation.mutate(r.id)} className="text-xs font-medium text-green-600 hover:underline">Approve</button>
+                      <button onClick={() => approveMutation.mutate(r.id)} className="text-xs font-medium text-success hover:underline">Approve</button>
                       <button onClick={() => rejectMutation.mutate(r.id)} className="text-xs font-medium text-red-600 hover:underline">Reject</button>
                     </div>
                   )}
                 </td>
               </tr>
             ))}
-            {returns.length === 0 && <tr><td colSpan={6} className="px-4 py-6 text-center text-gray-400">No sales returns yet.</td></tr>}
+            {returns.length === 0 && <tr><td colSpan={6} className="px-4 py-6 text-center text-ink-muted">No sales returns yet.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -176,8 +176,8 @@ function PurchaseReturnsPanel({ canManage }) {
   return (
     <div className="flex flex-col gap-4">
       {canManage && (
-        <div className="rounded-lg border border-gray-200 bg-white p-4">
-          <div className="mb-2 font-semibold text-gray-800">New Purchase Return</div>
+        <div className="card p-4">
+          <div className="mb-2 font-semibold text-ink">New Purchase Return</div>
           <div className="mb-2 flex flex-wrap gap-2">
             <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className="input w-56">
               <option value="">Select supplier</option>
@@ -186,31 +186,31 @@ function PurchaseReturnsPanel({ canManage }) {
             <input placeholder="Reason" value={reason} onChange={(e) => setReason(e.target.value)} className="input w-48" />
           </div>
           <ReturnLineEditor lines={lines} setLines={setLines} items={items} />
-          <button onClick={submit} disabled={!supplierId} className="mt-3 rounded bg-blue-600 px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-40">
+          <button onClick={submit} disabled={!supplierId} className="mt-3 rounded bg-success px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-40">
             Save Return
           </button>
           {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
         </div>
       )}
 
-      <div className="rounded-lg border border-gray-200 bg-white">
-        <div className="border-b border-gray-100 px-4 py-3 font-semibold text-gray-800">Purchase Returns</div>
+      <div className="card">
+        <div className="border-b border-border-soft px-4 py-3 font-semibold text-ink">Purchase Returns</div>
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-100 text-left text-xs uppercase text-gray-400">
+            <tr className="border-b border-border-soft text-left text-xs uppercase text-ink-muted">
               <th className="px-4 py-2">Return #</th><th className="px-4 py-2">GRN</th><th className="px-4 py-2">Supplier</th><th className="px-4 py-2">Reason</th>
             </tr>
           </thead>
           <tbody>
             {returns.map((r) => (
-              <tr key={r.id} className="border-b border-gray-50">
+              <tr key={r.id} className="border-b border-border-soft">
                 <td className="px-4 py-2">{r.return_no}</td>
                 <td className="px-4 py-2">{r.grn_no || '-'}</td>
                 <td className="px-4 py-2">{r.supplier_name}</td>
-                <td className="px-4 py-2 text-gray-500">{r.reason || '-'}</td>
+                <td className="px-4 py-2 text-ink-muted">{r.reason || '-'}</td>
               </tr>
             ))}
-            {returns.length === 0 && <tr><td colSpan={4} className="px-4 py-6 text-center text-gray-400">No purchase returns yet.</td></tr>}
+            {returns.length === 0 && <tr><td colSpan={4} className="px-4 py-6 text-center text-ink-muted">No purchase returns yet.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -225,7 +225,7 @@ export function Returns() {
 
   return (
     <div>
-      <h1 className="mb-4 text-2xl font-bold text-gray-800">Returns</h1>
+      <h1 className="mb-4 text-2xl font-bold text-ink">Returns</h1>
       <Tabs
         tabs={[
           { key: 'sales', label: 'Sales Returns', content: <SalesReturnsPanel canCreate={canSalesReturn} canApprove={canApprove} /> },

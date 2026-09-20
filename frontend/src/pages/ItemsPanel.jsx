@@ -96,9 +96,9 @@ export function ItemsPanel({ canManage }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="rounded-lg border border-gray-200 bg-white">
-        <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-          <span className="font-semibold text-gray-800">Items</span>
+      <div className="card">
+        <div className="flex items-center justify-between border-b border-border-soft px-4 py-3">
+          <span className="font-semibold text-ink">Items</span>
           <div className="flex items-center gap-2">
             <input
               type="text"
@@ -109,7 +109,7 @@ export function ItemsPanel({ canManage }) {
             />
             <button
               onClick={() => itemsApi.downloadExport()}
-              className="rounded bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200"
+              className="rounded bg-gray-100 px-3 py-1.5 text-sm font-medium text-ink hover:bg-gray-200"
             >
               Export Excel
             </button>
@@ -117,7 +117,7 @@ export function ItemsPanel({ canManage }) {
         </div>
 
         {canManage && (
-          <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-3 border-b border-gray-100 px-4 py-4 sm:grid-cols-4">
+          <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-3 border-b border-border-soft px-4 py-4 sm:grid-cols-4">
             <Field label="Item name *">
               <input required value={form.item_name} onChange={(e) => handleChange('item_name', e.target.value)} className="input" />
             </Field>
@@ -176,7 +176,7 @@ export function ItemsPanel({ canManage }) {
               <input type="number" step="any" value={form.min_stock_threshold} onChange={(e) => handleChange('min_stock_threshold', e.target.value)} className="input" />
             </Field>
             <div className="col-span-full flex items-center gap-3">
-              <button type="submit" className="rounded bg-blue-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-blue-700">
+              <button type="submit" className="rounded bg-success px-4 py-1.5 text-sm font-semibold text-white hover:bg-success/90">
                 Add Item
               </button>
               {error && <span className="text-sm text-red-600">{error}</span>}
@@ -186,7 +186,7 @@ export function ItemsPanel({ canManage }) {
 
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-100 text-left text-xs uppercase text-gray-400">
+            <tr className="border-b border-border-soft text-left text-xs uppercase text-ink-muted">
               <th className="px-4 py-2">Code</th>
               <th className="px-4 py-2">Name</th>
               <th className="px-4 py-2">Category</th>
@@ -199,14 +199,14 @@ export function ItemsPanel({ canManage }) {
           </thead>
           <tbody>
             {items.map((item) => (
-              <tr key={item.id} className="border-b border-gray-50">
-                <td className="px-4 py-2 text-gray-500">{item.item_code}</td>
-                <td className="px-4 py-2 font-medium text-gray-800">{item.item_name}</td>
-                <td className="px-4 py-2 text-gray-600">{item.category_name || '—'}</td>
-                <td className="px-4 py-2 text-gray-600">{item.base_unit_code}</td>
-                <td className="px-4 py-2 text-gray-600">{item.mrp}</td>
-                <td className="px-4 py-2 text-gray-600">{item.retail_price}</td>
-                <td className="px-4 py-2 text-gray-600">{item.gst_percent ?? '—'}</td>
+              <tr key={item.id} className="border-b border-border-soft">
+                <td className="px-4 py-2 text-ink-muted">{item.item_code}</td>
+                <td className="px-4 py-2 font-medium text-ink">{item.item_name}</td>
+                <td className="px-4 py-2 text-ink-muted">{item.category_name || '—'}</td>
+                <td className="px-4 py-2 text-ink-muted">{item.base_unit_code}</td>
+                <td className="px-4 py-2 text-ink-muted">{item.mrp}</td>
+                <td className="px-4 py-2 text-ink-muted">{item.retail_price}</td>
+                <td className="px-4 py-2 text-ink-muted">{item.gst_percent ?? '—'}</td>
                 {canManage && (
                   <td className="px-4 py-2 text-right">
                     <button onClick={() => deleteItem.mutate(item.id)} className="text-xs font-medium text-red-600 hover:underline">
@@ -218,7 +218,7 @@ export function ItemsPanel({ canManage }) {
             ))}
             {items.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-6 text-center text-gray-400">No items yet.</td>
+                <td colSpan={8} className="px-4 py-6 text-center text-ink-muted">No items yet.</td>
               </tr>
             )}
           </tbody>
@@ -226,31 +226,31 @@ export function ItemsPanel({ canManage }) {
       </div>
 
       {canManage && (
-        <div className="rounded-lg border border-gray-200 bg-white p-4">
-          <div className="mb-2 font-semibold text-gray-800">Bulk Import (Excel)</div>
+        <div className="card p-4">
+          <div className="mb-2 font-semibold text-ink">Bulk Import (Excel)</div>
           <div className="flex flex-wrap items-center gap-2">
-            <button onClick={() => itemsApi.downloadImportTemplate()} className="rounded bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200">
+            <button onClick={() => itemsApi.downloadImportTemplate()} className="rounded bg-gray-100 px-3 py-1.5 text-sm font-medium text-ink hover:bg-gray-200">
               Download Template
             </button>
             <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleImportFile} className="text-sm" />
-            <button onClick={handlePreview} disabled={!importFile} className="rounded bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50">
+            <button onClick={handlePreview} disabled={!importFile} className="rounded bg-gray-100 px-3 py-1.5 text-sm font-medium text-ink hover:bg-gray-200 disabled:opacity-50">
               Preview
             </button>
-            <button onClick={handleCommit} disabled={!importFile || !importResult} className="rounded bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+            <button onClick={handleCommit} disabled={!importFile || !importResult} className="rounded bg-success px-3 py-1.5 text-sm font-semibold text-white hover:bg-success/90 disabled:opacity-50">
               Commit Import
             </button>
           </div>
 
           {importResult && (
             <div className="mt-3 text-sm">
-              <p className="mb-2 text-gray-600">
+              <p className="mb-2 text-ink-muted">
                 {importResult.total_rows} rows — {importResult.valid_rows} valid, {importResult.invalid_rows} invalid.
                 {importResult.committed && ` Inserted ${importResult.inserted}.`}
               </p>
-              <div className="max-h-64 overflow-auto rounded border border-gray-100">
+              <div className="max-h-64 overflow-auto rounded border border-border-soft">
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="bg-gray-50 text-left text-gray-500">
+                    <tr className="bg-page text-left text-ink-muted">
                       <th className="px-3 py-1.5">Row</th>
                       <th className="px-3 py-1.5">Item</th>
                       <th className="px-3 py-1.5">Errors</th>
@@ -278,7 +278,7 @@ export function ItemsPanel({ canManage }) {
 function Field({ label, children }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-gray-500">{label}</span>
+      <span className="text-xs font-medium text-ink-muted">{label}</span>
       {children}
     </label>
   );

@@ -458,6 +458,80 @@ header branch switcher was still a hardcoded single-option stub from Phase
   show all-zero KPIs and the Main-Branch-only cash-handover discrepancy
   banner disappear — then switched back and got the original numbers back.
 
+## UI redesign: dark navy/gold navbar + cream premium theme
+
+A visual-only pass (no business logic, API calls, or permission checks
+changed) restyling the entire frontend to a premium dark-navy-and-gold
+navbar over a warm cream page background, per a reference design.
+
+**Design tokens** — one source of truth in `frontend/tailwind.config.js`
+(`navbar`, `gold`, `page`, `border.soft`, `ink`/`ink.muted`/`ink.onnavy`,
+`success`, `warning`, `danger`, `highlight`) plus shared base classes in
+`frontend/src/index.css` (`.input`, `.card`, `.brand-wordmark`). The brand
+wordmark uses Playfair Display (loaded from Google Fonts in `index.html`)
+in gold — the same treatment is reused on the navbar and the Login page.
+
+**New shared components** (`frontend/src/components/`): `TopNav.jsx`
+(replaces the old `Sidebar.jsx` + `Header.jsx`, which were deleted — one
+horizontally-scrolling top navbar for every module the user has permission
+to see, active-route highlighting via a filled gold-on-navy pill, the
+branch switcher and user/logout block folded into it), `Badge.jsx`
+(GST/Non-GST/success/warning/danger/neutral pills), `Card.jsx` (the
+shared white rounded-panel wrapper), `Button.jsx` (primary/secondary/
+danger/ghost/gold variants, optional shortcut-hint pill — only used where
+a real keyboard shortcut exists), `StatusFooter.jsx` (persistent bottom
+bar: app version, live online dot, live clock).
+
+**POS/Billing screen** was rebuilt closely following the reference's
+two-column layout — a product grid with category-pill filtering (using the
+real categories list) and a Grid/List toggle on the left, and a live
+"Current Bill" panel with qty steppers, GST/Non-GST/Free-Qty badges, and a
+highlighted Total Amount box on the right — while every existing handler
+(add-to-cart, discount, hold/pay/clear, barcode-speed search-and-Enter)
+was kept byte-for-byte identical, just re-skinned. Verified live: added
+items via the new product grid, adjusted qty with the +/− steppers, and
+completed a real sale end-to-end — invoice created, stock deducted, and
+printed correctly, exactly as before the redesign.
+
+**Every other screen** (Catalog, Parties, Purchasing, Inventory, Returns,
+Collections, Cash Handover, Expenses, Reports, Staff & Permissions,
+Settings, Branches, Dashboard) was restyled by updating the shared
+`Tabs.jsx` and `EntityTable.jsx` components (used across most of them) plus
+a mechanical, page-by-page sweep mapping every old gray/blue/green/amber
+Tailwind class to its new token equivalent — no bespoke one-off colors were
+left behind (verified with a final grep). Screenshotted Inventory, Reports,
+Catalog, and Settings to confirm consistency.
+
+### What wasn't changed, and why
+
+- **Print templates** (`ThermalTemplate.jsx`, `A4Template.jsx`,
+  `InvoicePrint.jsx`) were deliberately left in their existing neutral
+  black-on-white print styling — these are physical documents handed to
+  customers, not app screens, and the reference design doesn't cover
+  invoice print layouts.
+- **No overall bill-level discount %/₹ toggle** was added to the POS
+  summary panel (the reference shows one) — this app's discount logic is
+  per-line only (`pos.apply_discount`, section 8 of the original spec); a
+  toggle that doesn't correspond to any real aggregate-discount calculation
+  would be a fabricated, non-functional control, which the brief explicitly
+  said to leave out rather than build.
+- **No Route/City field on the bill** — invoices don't carry a route/city
+  column (that's a customer-level attribute), so this field from the
+  reference has no real data to bind to and was omitted rather than faked.
+- **"+ Add Customer" navigates to `/parties`** rather than opening a new
+  quick-create modal inline in POS — that quick-create flow doesn't exist
+  today, so the button does something real (goes to the actual customer
+  management screen) instead of being a dead decoration.
+- **No keyboard shortcut hints** (no "F9"/"F6"/"F4" pills) — `Button`
+  supports one, but this pass didn't wire any real global key handlers, and
+  the brief was explicit: never fabricate a shortcut that doesn't exist.
+- **The navbar scrolls horizontally** rather than fitting all items like
+  the reference's 5-item example — this app has 14 permission-gated
+  modules, meaningfully more than the reference mockup, so a horizontal
+  scroll (rather than hiding modules behind a "More" menu, which would
+  reduce discoverability) was the straightforward way to keep every module
+  reachable from one consistent top-nav pattern.
+
 ## Default Super Admin login (seeded — change immediately)
 
 ```

@@ -44,9 +44,9 @@ function CollectModal({ customer, onClose }) {
 
   return (
     <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/30">
-      <div className="w-[480px] rounded-lg bg-white p-5 shadow-lg">
-        <div className="mb-1 text-lg font-semibold text-gray-800">Collect from {customer.ledger_name}</div>
-        <div className="mb-3 text-xs text-gray-500">
+      <div className="w-[480px] card p-5">
+        <div className="mb-1 text-lg font-semibold text-ink">Collect from {customer.ledger_name}</div>
+        <div className="mb-3 text-xs text-ink-muted">
           Route: {customer.route_id || '-'} · Credit limit: Rs. {customer.credit_limit} · Outstanding: Rs. {customer.total_due}
         </div>
 
@@ -60,10 +60,10 @@ function CollectModal({ customer, onClose }) {
           </select>
         </div>
 
-        <div className="mb-3 max-h-56 overflow-auto rounded border border-gray-100">
+        <div className="mb-3 max-h-56 overflow-auto rounded border border-border-soft">
           <table className="w-full text-xs">
             <thead>
-              <tr className="bg-gray-50 text-left text-gray-500">
+              <tr className="bg-page text-left text-ink-muted">
                 <th className="px-3 py-1.5">Invoice</th><th className="px-3 py-1.5">Pending</th><th className="px-3 py-1.5">This Pay</th><th className="px-3 py-1.5">Rem</th>
               </tr>
             </thead>
@@ -72,21 +72,21 @@ function CollectModal({ customer, onClose }) {
                 <tr key={inv.id}>
                   <td className="px-3 py-1.5">{inv.invoice_no}</td>
                   <td className="px-3 py-1.5">{inv.balance_due}</td>
-                  <td className="px-3 py-1.5 font-medium text-blue-700">{inv.applied.toFixed(2)}</td>
+                  <td className="px-3 py-1.5 font-medium text-gold">{inv.applied.toFixed(2)}</td>
                   <td className="px-3 py-1.5">{inv.remAfter.toFixed(2)}</td>
                 </tr>
               ))}
-              {unpaid.length === 0 && <tr><td colSpan={4} className="px-3 py-3 text-center text-gray-400">No unpaid invoices.</td></tr>}
+              {unpaid.length === 0 && <tr><td colSpan={4} className="px-3 py-3 text-center text-ink-muted">No unpaid invoices.</td></tr>}
             </tbody>
           </table>
         </div>
 
         {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
-        {success && <p className="mb-2 text-sm text-green-700">Collected Rs. {success.allocated_total} across {Object.keys(success.allocations).length} invoice(s).</p>}
+        {success && <p className="mb-2 text-sm text-success">Collected Rs. {success.allocated_total} across {Object.keys(success.allocations).length} invoice(s).</p>}
 
         <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="rounded bg-gray-100 px-3 py-1.5 text-sm text-gray-700">Close</button>
-          <button onClick={submit} disabled={!amount} className="rounded bg-blue-600 px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-40">
+          <button onClick={onClose} className="rounded bg-gray-100 px-3 py-1.5 text-sm text-ink">Close</button>
+          <button onClick={submit} disabled={!amount} className="rounded bg-success px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-40">
             Save Collection
           </button>
         </div>
@@ -109,60 +109,60 @@ export function Collections() {
 
   return (
     <div>
-      <h1 className="mb-4 text-2xl font-bold text-gray-800">Customer Collections</h1>
+      <h1 className="mb-4 text-2xl font-bold text-ink">Customer Collections</h1>
 
       {canViewAll && (
-        <div className="mb-4 rounded-lg border border-gray-200 bg-white">
-          <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-            <span className="font-semibold text-gray-800">Route Pending Credit Balances</span>
-            <span className="text-sm font-medium text-gray-600">Total pending: Rs. {routeTotal.toFixed(2)}</span>
+        <div className="mb-4 card">
+          <div className="flex items-center justify-between border-b border-border-soft px-4 py-3">
+            <span className="font-semibold text-ink">Route Pending Credit Balances</span>
+            <span className="text-sm font-medium text-ink-muted">Total pending: Rs. {routeTotal.toFixed(2)}</span>
           </div>
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-100 text-left text-xs uppercase text-gray-400">
+              <tr className="border-b border-border-soft text-left text-xs uppercase text-ink-muted">
                 <th className="px-4 py-2">Customer</th><th className="px-4 py-2">Phone</th><th className="px-4 py-2">Unpaid Bills</th><th className="px-4 py-2">Total Due</th><th></th>
               </tr>
             </thead>
             <tbody>
               {pending.map((c) => (
-                <tr key={c.customer_id} className="border-b border-gray-50">
+                <tr key={c.customer_id} className="border-b border-border-soft">
                   <td className="px-4 py-2">{c.ledger_name}</td>
                   <td className="px-4 py-2">{c.phone || '-'}</td>
                   <td className="px-4 py-2">{c.unpaid_invoice_count}</td>
                   <td className="px-4 py-2 font-medium text-red-600">{c.total_due}</td>
                   <td className="px-4 py-2 text-right">
                     {canCollect && (
-                      <button onClick={() => setSelected(c)} className="text-xs font-medium text-blue-600 hover:underline">Collect</button>
+                      <button onClick={() => setSelected(c)} className="text-xs font-medium text-gold hover:underline">Collect</button>
                     )}
                   </td>
                 </tr>
               ))}
-              {pending.length === 0 && <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-400">No customers with an outstanding balance.</td></tr>}
+              {pending.length === 0 && <tr><td colSpan={5} className="px-4 py-6 text-center text-ink-muted">No customers with an outstanding balance.</td></tr>}
             </tbody>
           </table>
         </div>
       )}
 
-      <div className="rounded-lg border border-gray-200 bg-white">
-        <div className="border-b border-gray-100 px-4 py-3 font-semibold text-gray-800">Past Collection Receipts</div>
+      <div className="card">
+        <div className="border-b border-border-soft px-4 py-3 font-semibold text-ink">Past Collection Receipts</div>
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-100 text-left text-xs uppercase text-gray-400">
+            <tr className="border-b border-border-soft text-left text-xs uppercase text-ink-muted">
               <th className="px-4 py-2">Receipt #</th><th className="px-4 py-2">Customer</th><th className="px-4 py-2">Amount</th><th className="px-4 py-2">Mode</th><th className="px-4 py-2">Collected By</th><th className="px-4 py-2">Date</th>
             </tr>
           </thead>
           <tbody>
             {history.map((c) => (
-              <tr key={c.id} className="border-b border-gray-50">
+              <tr key={c.id} className="border-b border-border-soft">
                 <td className="px-4 py-2">{c.receipt_no}</td>
                 <td className="px-4 py-2">{c.customer_name}</td>
                 <td className="px-4 py-2">{c.amount}</td>
                 <td className="px-4 py-2 capitalize">{c.payment_method}</td>
-                <td className="px-4 py-2 text-gray-500">{c.collected_by_name}</td>
-                <td className="px-4 py-2 text-gray-500">{c.collected_at}</td>
+                <td className="px-4 py-2 text-ink-muted">{c.collected_by_name}</td>
+                <td className="px-4 py-2 text-ink-muted">{c.collected_at}</td>
               </tr>
             ))}
-            {history.length === 0 && <tr><td colSpan={6} className="px-4 py-6 text-center text-gray-400">No collections yet.</td></tr>}
+            {history.length === 0 && <tr><td colSpan={6} className="px-4 py-6 text-center text-ink-muted">No collections yet.</td></tr>}
           </tbody>
         </table>
       </div>

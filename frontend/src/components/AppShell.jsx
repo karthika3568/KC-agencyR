@@ -1,14 +1,12 @@
-import { Sidebar } from './Sidebar.jsx';
-import { Header } from './Header.jsx';
+import { TopNav } from './TopNav.jsx';
+import { StatusFooter } from './StatusFooter.jsx';
 
 export function AppShell({ children }) {
   return (
-    <div className="flex">
-      <Sidebar />
-      <div className="flex flex-1 flex-col">
-        <Header />
-        <main className="flex-1 bg-gray-50 p-6">{children}</main>
-      </div>
+    <div className="flex min-h-screen flex-col bg-page">
+      <TopNav />
+      <main className="flex-1 p-6">{children}</main>
+      <StatusFooter />
     </div>
   );
 }

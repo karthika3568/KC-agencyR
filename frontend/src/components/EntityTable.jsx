@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { Plus } from 'lucide-react';
+import { Button } from './Button.jsx';
 
 /**
  * Generic "add row + list + delete" manager for simple catalog/party lookup
@@ -28,19 +30,19 @@ export function EntityTable({ title, fields, columns, rows, onCreate, onDelete, 
   };
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white">
-      <div className="border-b border-gray-100 px-4 py-3 font-semibold text-gray-800">{title}</div>
+    <div className="card">
+      <div className="border-b border-border-soft px-4 py-3 font-semibold text-ink">{title}</div>
 
       {canManage && (
-        <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-2 border-b border-gray-100 px-4 py-3">
+        <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-2 border-b border-border-soft px-4 py-3">
           {fields.map((f) => (
             <div key={f.name}>
-              <label className="mb-1 block text-xs font-medium text-gray-500">{f.label}</label>
+              <label className="mb-1 block text-xs font-medium text-ink-muted">{f.label}</label>
               {f.type === 'select' ? (
                 <select
                   value={form[f.name]}
                   onChange={(e) => handleChange(f.name, e.target.value)}
-                  className="rounded border border-gray-300 px-2 py-1 text-sm"
+                  className="input w-32"
                   required={f.required}
                 >
                   <option value="">--</option>
@@ -55,27 +57,23 @@ export function EntityTable({ title, fields, columns, rows, onCreate, onDelete, 
                   type={f.type || 'text'}
                   value={form[f.name]}
                   onChange={(e) => handleChange(f.name, e.target.value)}
-                  className="w-32 rounded border border-gray-300 px-2 py-1 text-sm"
+                  className="input w-32"
                   required={f.required}
                   step={f.type === 'number' ? 'any' : undefined}
                 />
               )}
             </div>
           ))}
-          <button
-            type="submit"
-            disabled={submitting}
-            className="rounded bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-          >
+          <Button type="submit" disabled={submitting} size="sm" icon={<Plus size={14} />}>
             Add
-          </button>
-          {error && <span className="text-sm text-red-600">{error}</span>}
+          </Button>
+          {error && <span className="text-sm text-danger">{error}</span>}
         </form>
       )}
 
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-gray-100 text-left text-xs uppercase text-gray-400">
+          <tr className="border-b border-border-soft bg-page/60 text-left text-xs uppercase text-ink-muted">
             {columns.map((c) => (
               <th key={c.key} className="px-4 py-2 font-medium">
                 {c.label}
@@ -86,9 +84,9 @@ export function EntityTable({ title, fields, columns, rows, onCreate, onDelete, 
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.id} className="border-b border-gray-50">
+            <tr key={row.id} className="border-b border-border-soft last:border-0">
               {columns.map((c) => (
-                <td key={c.key} className="px-4 py-2 text-gray-700">
+                <td key={c.key} className="px-4 py-2 text-ink">
                   {c.render ? c.render(row) : row[c.key]}
                 </td>
               ))}
@@ -96,7 +94,7 @@ export function EntityTable({ title, fields, columns, rows, onCreate, onDelete, 
                 <td className="px-4 py-2 text-right">
                   <button
                     onClick={() => onDelete(row.id)}
-                    className="text-xs font-medium text-red-600 hover:underline"
+                    className="text-xs font-medium text-danger hover:underline"
                   >
                     Delete
                   </button>
@@ -106,7 +104,7 @@ export function EntityTable({ title, fields, columns, rows, onCreate, onDelete, 
           ))}
           {rows.length === 0 && (
             <tr>
-              <td colSpan={columns.length + 1} className="px-4 py-6 text-center text-gray-400">
+              <td colSpan={columns.length + 1} className="px-4 py-6 text-center text-ink-muted">
                 No records yet.
               </td>
             </tr>

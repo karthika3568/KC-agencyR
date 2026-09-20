@@ -1,10 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
+import { AlertTriangle } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth.jsx';
 import { usePermission } from '../hooks/usePermission';
 import { dashboardApi } from '../api/admin';
+import { Card } from '../components/Card.jsx';
 
 const CARDS = [
-  { key: 'today_sales_revenue', label: "Today's Sales Revenue" },
+  { key: 'today_sales_revenue', label: "Today's Sales Revenue", highlight: true },
   { key: 'month_sales_total', label: 'Monthly Sales Total' },
   { key: 'today_purchases', label: "Today's Purchases" },
   { key: 'month_purchases_total', label: 'Monthly Purchases Total' },
@@ -29,19 +31,20 @@ export function Dashboard() {
 
   return (
     <div>
-      <h1 className="mb-1 text-2xl font-bold text-gray-800">Dashboard</h1>
-      <p className="mb-4 text-sm text-gray-500">
+      <h1 className="mb-1 text-2xl font-bold text-ink">Dashboard</h1>
+      <p className="mb-4 text-sm text-ink-muted">
         Welcome, {user?.name} · {user?.role}
       </p>
 
       {!canViewFinancials && (
-        <p className="text-gray-400">You don't have access to the financial summary.</p>
+        <p className="text-ink-muted">You don't have access to the financial summary.</p>
       )}
 
       {canViewFinancials && summary && summary.unresolved_handover_discrepancies?.length > 0 && (
-        <div className="mb-4 rounded-lg border border-red-300 bg-red-50 p-4">
-          <div className="font-semibold text-red-800">
-            ⚠ {summary.unresolved_handover_discrepancies.length} unresolved cash handover discrepanc
+        <Card className="mb-4 border-red-200 bg-red-50 p-4">
+          <div className="flex items-center gap-2 font-semibold text-danger">
+            <AlertTriangle size={18} />
+            {summary.unresolved_handover_discrepancies.length} unresolved cash handover discrepanc
             {summary.unresolved_handover_discrepancies.length === 1 ? 'y' : 'ies'}
           </div>
           <ul className="mt-2 space-y-1 text-sm text-red-700">
@@ -52,23 +55,26 @@ export function Dashboard() {
               </li>
             ))}
           </ul>
-          <a href="/cash-handover" className="mt-2 inline-block text-sm font-medium text-red-800 underline">
+          <a href="/cash-handover" className="mt-2 inline-block text-sm font-medium text-danger underline">
             Go to Cash Handover →
           </a>
-        </div>
+        </Card>
       )}
 
       {canViewFinancials && summary && (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           {CARDS.map((c) => (
-            <div key={c.key} className="rounded-lg border border-gray-200 bg-white p-4">
-              <div className="text-xs font-medium uppercase text-gray-400">{c.label}</div>
-              <div className="mt-1 text-xl font-bold text-gray-800">Rs. {summary[c.key]}</div>
+            <div
+              key={c.key}
+              className={`rounded-xl border p-4 ${c.highlight ? 'border-gold/30 bg-highlight' : 'card'}`}
+            >
+              <div className="text-xs font-medium uppercase text-ink-muted">{c.label}</div>
+              <div className="mt-1 text-xl font-bold text-ink">Rs. {summary[c.key]}</div>
             </div>
           ))}
-          <div className={`rounded-lg border p-4 ${summary.low_stock_count > 0 ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-white'}`}>
-            <div className="text-xs font-medium uppercase text-gray-400">Low Stock Alerts</div>
-            <div className="mt-1 text-xl font-bold text-gray-800">{summary.low_stock_count} item(s)</div>
+          <div className={`rounded-xl border p-4 ${summary.low_stock_count > 0 ? 'border-warning/30 bg-warning-bg' : 'card'}`}>
+            <div className="text-xs font-medium uppercase text-ink-muted">Low Stock Alerts</div>
+            <div className="mt-1 text-xl font-bold text-ink">{summary.low_stock_count} item(s)</div>
           </div>
         </div>
       )}

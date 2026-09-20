@@ -30,7 +30,7 @@ function ItemLineEditor({ lines, setLines, items, showTax }) {
           <button onClick={() => removeLine(idx)} className="text-xs text-red-600">&times;</button>
         </div>
       ))}
-      <button onClick={addLine} className="self-start text-xs font-medium text-blue-600 hover:underline">+ Add line</button>
+      <button onClick={addLine} className="self-start text-xs font-medium text-gold hover:underline">+ Add line</button>
     </div>
   );
 }
@@ -77,35 +77,35 @@ function PurchaseIndentsPanel({ canManage }) {
   return (
     <div className="flex flex-col gap-4">
       {canManage && (
-        <div className="rounded-lg border border-gray-200 bg-white p-4">
-          <div className="mb-2 font-semibold text-gray-800">New Purchase Indent</div>
+        <div className="card p-4">
+          <div className="mb-2 font-semibold text-ink">New Purchase Indent</div>
           <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className="input mb-2 w-64">
             <option value="">Select supplier</option>
             {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
           <ItemLineEditor lines={lines} setLines={setLines} items={items} showTax={false} />
-          <button onClick={submit} disabled={!supplierId} className="mt-3 rounded bg-blue-600 px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-40">
+          <button onClick={submit} disabled={!supplierId} className="mt-3 rounded bg-success px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-40">
             Create Indent
           </button>
           {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
         </div>
       )}
 
-      <div className="rounded-lg border border-gray-200 bg-white">
-        <div className="border-b border-gray-100 px-4 py-3 font-semibold text-gray-800">Purchase Indents</div>
+      <div className="card">
+        <div className="border-b border-border-soft px-4 py-3 font-semibold text-ink">Purchase Indents</div>
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-100 text-left text-xs uppercase text-gray-400">
+            <tr className="border-b border-border-soft text-left text-xs uppercase text-ink-muted">
               <th className="px-4 py-2">Request #</th><th className="px-4 py-2">Supplier</th><th className="px-4 py-2">Status</th><th className="px-4 py-2">Date</th><th></th>
             </tr>
           </thead>
           <tbody>
             {requests.map((r) => (
-              <tr key={r.id} className="border-b border-gray-50">
+              <tr key={r.id} className="border-b border-border-soft">
                 <td className="px-4 py-2">{r.request_no}</td>
                 <td className="px-4 py-2">{r.supplier_name}</td>
                 <td className="px-4 py-2 capitalize">{r.status.replace(/_/g, ' ')}</td>
-                <td className="px-4 py-2 text-gray-500">{r.created_at}</td>
+                <td className="px-4 py-2 text-ink-muted">{r.created_at}</td>
                 <td className="px-4 py-2 text-right">
                   {r.status === 'open' && canManage && (
                     <button onClick={() => cancelMutation.mutate(r.id)} className="text-xs font-medium text-red-600 hover:underline">Cancel</button>
@@ -113,7 +113,7 @@ function PurchaseIndentsPanel({ canManage }) {
                 </td>
               </tr>
             ))}
-            {requests.length === 0 && <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-400">No indents yet.</td></tr>}
+            {requests.length === 0 && <tr><td colSpan={5} className="px-4 py-6 text-center text-ink-muted">No indents yet.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -172,8 +172,8 @@ function GrnPanel({ canManage, canViewCost, canDelete }) {
   return (
     <div className="flex flex-col gap-4">
       {canManage && (
-        <div className="rounded-lg border border-gray-200 bg-white p-4">
-          <div className="mb-2 font-semibold text-gray-800">New GRN (Goods Received)</div>
+        <div className="card p-4">
+          <div className="mb-2 font-semibold text-ink">New GRN (Goods Received)</div>
           <div className="mb-2 flex flex-wrap gap-2">
             <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className="input w-56">
               <option value="">Select supplier</option>
@@ -189,18 +189,18 @@ function GrnPanel({ canManage, canViewCost, canDelete }) {
             <input type="number" step="any" placeholder="Paid amount" value={paidAmount} onChange={(e) => setPaidAmount(e.target.value)} className="input w-32" />
           </div>
           <ItemLineEditor lines={lines} setLines={setLines} items={items} showTax />
-          <button onClick={submit} disabled={!supplierId} className="mt-3 rounded bg-blue-600 px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-40">
+          <button onClick={submit} disabled={!supplierId} className="mt-3 rounded bg-success px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-40">
             Save GRN &amp; Update Stock
           </button>
           {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
         </div>
       )}
 
-      <div className="rounded-lg border border-gray-200 bg-white">
-        <div className="border-b border-gray-100 px-4 py-3 font-semibold text-gray-800">GRN Register</div>
+      <div className="card">
+        <div className="border-b border-border-soft px-4 py-3 font-semibold text-ink">GRN Register</div>
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-100 text-left text-xs uppercase text-gray-400">
+            <tr className="border-b border-border-soft text-left text-xs uppercase text-ink-muted">
               <th className="px-4 py-2">GRN #</th><th className="px-4 py-2">Supplier Inv #</th><th className="px-4 py-2">Supplier</th>
               <th className="px-4 py-2">Date</th>
               {canViewCost && <th className="px-4 py-2">Grand Total</th>}
@@ -211,15 +211,15 @@ function GrnPanel({ canManage, canViewCost, canDelete }) {
           </thead>
           <tbody>
             {purchases.map((p) => (
-              <tr key={p.id} className={`border-b border-gray-50 ${p.status === 'cancelled' ? 'opacity-50 line-through' : ''}`}>
+              <tr key={p.id} className={`border-b border-border-soft ${p.status === 'cancelled' ? 'opacity-50 line-through' : ''}`}>
                 <td className="px-4 py-2">{p.grn_no}</td>
                 <td className="px-4 py-2">{p.supplier_invoice_no || '-'}</td>
                 <td className="px-4 py-2">{p.supplier_name}</td>
-                <td className="px-4 py-2 text-gray-500">{p.purchase_date}</td>
+                <td className="px-4 py-2 text-ink-muted">{p.purchase_date}</td>
                 {canViewCost && <td className="px-4 py-2">{p.grand_total}</td>}
                 {canViewCost && <td className="px-4 py-2">{p.paid_amount}</td>}
                 {canViewCost && (
-                  <td className={`px-4 py-2 font-medium ${Number(p.pending_balance) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                  <td className={`px-4 py-2 font-medium ${Number(p.pending_balance) > 0 ? 'text-red-600' : 'text-success'}`}>
                     {p.pending_balance}
                   </td>
                 )}
@@ -232,7 +232,7 @@ function GrnPanel({ canManage, canViewCost, canDelete }) {
                 </td>
               </tr>
             ))}
-            {purchases.length === 0 && <tr><td colSpan={8} className="px-4 py-6 text-center text-gray-400">No GRNs yet.</td></tr>}
+            {purchases.length === 0 && <tr><td colSpan={8} className="px-4 py-6 text-center text-ink-muted">No GRNs yet.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -302,8 +302,8 @@ function SupplierPaymentsPanel({ canManage }) {
   return (
     <div className="flex flex-col gap-4">
       {canManage && (
-        <div className="rounded-lg border border-gray-200 bg-white p-4">
-          <div className="mb-2 font-semibold text-gray-800">Record Supplier Payment</div>
+        <div className="card p-4">
+          <div className="mb-2 font-semibold text-ink">Record Supplier Payment</div>
           <div className="mb-3 flex flex-wrap gap-2">
             <select value={supplierId} onChange={(e) => { setSupplierId(e.target.value); setResult(null); }} className="input w-56">
               <option value="">Select supplier</option>
@@ -320,10 +320,10 @@ function SupplierPaymentsPanel({ canManage }) {
           </div>
 
           {supplierId && (
-            <div className="mb-3 overflow-hidden rounded border border-gray-100">
+            <div className="mb-3 overflow-hidden rounded border border-border-soft">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="bg-gray-50 text-left text-gray-500">
+                  <tr className="bg-page text-left text-ink-muted">
                     <th className="px-3 py-1.5">GRN #</th><th className="px-3 py-1.5">Pending</th><th className="px-3 py-1.5">This Pay (FIFO)</th><th className="px-3 py-1.5">Rem After</th>
                   </tr>
                 </thead>
@@ -332,44 +332,44 @@ function SupplierPaymentsPanel({ canManage }) {
                     <tr key={g.id}>
                       <td className="px-3 py-1.5">{g.grn_no}</td>
                       <td className="px-3 py-1.5">{g.pending_balance}</td>
-                      <td className="px-3 py-1.5 font-medium text-blue-700">{g.applied.toFixed(2)}</td>
+                      <td className="px-3 py-1.5 font-medium text-gold">{g.applied.toFixed(2)}</td>
                       <td className="px-3 py-1.5">{g.remAfter.toFixed(2)}</td>
                     </tr>
                   ))}
-                  {unpaid.length === 0 && <tr><td colSpan={4} className="px-3 py-3 text-center text-gray-400">No outstanding GRNs.</td></tr>}
+                  {unpaid.length === 0 && <tr><td colSpan={4} className="px-3 py-3 text-center text-ink-muted">No outstanding GRNs.</td></tr>}
                 </tbody>
               </table>
             </div>
           )}
 
-          <button onClick={submit} disabled={!supplierId || !amount} className="rounded bg-blue-600 px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-40">
+          <button onClick={submit} disabled={!supplierId || !amount} className="rounded bg-success px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-40">
             Settle Supplier Balance
           </button>
           {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-          {result && <p className="mt-2 text-sm text-green-700">Allocated Rs. {result.allocated_total} across {Object.keys(result.allocations).length} GRN(s).</p>}
+          {result && <p className="mt-2 text-sm text-success">Allocated Rs. {result.allocated_total} across {Object.keys(result.allocations).length} GRN(s).</p>}
         </div>
       )}
 
-      <div className="rounded-lg border border-gray-200 bg-white">
-        <div className="border-b border-gray-100 px-4 py-3 font-semibold text-gray-800">Supplier Payment Register</div>
+      <div className="card">
+        <div className="border-b border-border-soft px-4 py-3 font-semibold text-ink">Supplier Payment Register</div>
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-100 text-left text-xs uppercase text-gray-400">
+            <tr className="border-b border-border-soft text-left text-xs uppercase text-ink-muted">
               <th className="px-4 py-2">Code</th><th className="px-4 py-2">Supplier</th><th className="px-4 py-2">Mode</th><th className="px-4 py-2">Reference</th><th className="px-4 py-2">Amount</th><th className="px-4 py-2">Date</th>
             </tr>
           </thead>
           <tbody>
             {payments.map((p) => (
-              <tr key={p.id} className="border-b border-gray-50">
+              <tr key={p.id} className="border-b border-border-soft">
                 <td className="px-4 py-2">{p.payment_code}</td>
                 <td className="px-4 py-2">{p.supplier_name}</td>
                 <td className="px-4 py-2 capitalize">{p.payment_mode.replace('_', ' ')}</td>
                 <td className="px-4 py-2">{p.reference_no || '-'}</td>
                 <td className="px-4 py-2">{p.amount}</td>
-                <td className="px-4 py-2 text-gray-500">{p.paid_at}</td>
+                <td className="px-4 py-2 text-ink-muted">{p.paid_at}</td>
               </tr>
             ))}
-            {payments.length === 0 && <tr><td colSpan={6} className="px-4 py-6 text-center text-gray-400">No payments yet.</td></tr>}
+            {payments.length === 0 && <tr><td colSpan={6} className="px-4 py-6 text-center text-ink-muted">No payments yet.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -386,7 +386,7 @@ export function Purchasing() {
 
   return (
     <div>
-      <h1 className="mb-4 text-2xl font-bold text-gray-800">Purchasing</h1>
+      <h1 className="mb-4 text-2xl font-bold text-ink">Purchasing</h1>
       <Tabs
         tabs={[
           { key: 'indents', label: 'Purchase Indents', content: <PurchaseIndentsPanel canManage={canIndent} /> },

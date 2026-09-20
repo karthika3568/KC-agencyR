@@ -7,12 +7,12 @@ import { usePermission } from '../hooks/usePermission';
 function DateRangeBar({ from, to, setFrom, setTo, onExport, canExport }) {
   return (
     <div className="mb-3 flex items-center gap-2">
-      <label className="text-xs text-gray-500">From</label>
+      <label className="text-xs text-ink-muted">From</label>
       <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="input w-40" />
-      <label className="text-xs text-gray-500">To</label>
+      <label className="text-xs text-ink-muted">To</label>
       <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="input w-40" />
       {canExport && (
-        <button onClick={onExport} className="ml-auto rounded bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200">
+        <button onClick={onExport} className="ml-auto rounded bg-gray-100 px-3 py-1.5 text-sm font-medium text-ink hover:bg-gray-200">
           Export to Excel
         </button>
       )}
@@ -30,20 +30,20 @@ function useDateRange() {
 
 function GenericTable({ rows, columns }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+    <div className="overflow-x-auto card">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-gray-100 text-left text-xs uppercase text-gray-400">
+          <tr className="border-b border-border-soft text-left text-xs uppercase text-ink-muted">
             {columns.map((c) => <th key={c.key} className="whitespace-nowrap px-4 py-2">{c.label}</th>)}
           </tr>
         </thead>
         <tbody>
           {rows.map((r, i) => (
-            <tr key={i} className="border-b border-gray-50">
+            <tr key={i} className="border-b border-border-soft">
               {columns.map((c) => <td key={c.key} className="whitespace-nowrap px-4 py-2">{r[c.key]}</td>)}
             </tr>
           ))}
-          {rows.length === 0 && <tr><td colSpan={columns.length} className="px-4 py-6 text-center text-gray-400">No data for this range.</td></tr>}
+          {rows.length === 0 && <tr><td colSpan={columns.length} className="px-4 py-6 text-center text-ink-muted">No data for this range.</td></tr>}
         </tbody>
       </table>
     </div>
@@ -155,9 +155,9 @@ function ProfitPanel() {
   return (
     <div>
       <div className="mb-3 flex items-center gap-2">
-        <label className="text-xs text-gray-500">From</label>
+        <label className="text-xs text-ink-muted">From</label>
         <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="input w-40" />
-        <label className="text-xs text-gray-500">To</label>
+        <label className="text-xs text-ink-muted">To</label>
         <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="input w-40" />
       </div>
       {p && (
@@ -166,14 +166,14 @@ function ProfitPanel() {
             ['Revenue (ex-tax)', p.revenue], ['COGS', p.cogs], ['Gross Profit', p.gross_profit],
             ['Expenses', p.expenses], ['Net Profit', p.net_profit],
           ].map(([label, value]) => (
-            <div key={label} className="rounded-lg border border-gray-200 bg-white p-4">
-              <div className="text-xs font-medium uppercase text-gray-400">{label}</div>
-              <div className={`mt-1 text-xl font-bold ${Number(value) < 0 ? 'text-red-600' : 'text-gray-800'}`}>Rs. {value}</div>
+            <div key={label} className="card p-4">
+              <div className="text-xs font-medium uppercase text-ink-muted">{label}</div>
+              <div className={`mt-1 text-xl font-bold ${Number(value) < 0 ? 'text-red-600' : 'text-ink'}`}>Rs. {value}</div>
             </div>
           ))}
         </div>
       )}
-      <p className="mt-3 text-xs text-gray-400">
+      <p className="mt-3 text-xs text-ink-muted">
         COGS uses each item's current cost price (invoices don't snapshot cost at sale time) — see README assumptions.
       </p>
     </div>
@@ -214,8 +214,8 @@ export function Reports() {
 
   return (
     <div>
-      <h1 className="mb-4 text-2xl font-bold text-gray-800">Reports</h1>
-      {tabs.length === 0 ? <p className="text-gray-400">You don't have access to any reports.</p> : <Tabs tabs={tabs} />}
+      <h1 className="mb-4 text-2xl font-bold text-ink">Reports</h1>
+      {tabs.length === 0 ? <p className="text-ink-muted">You don't have access to any reports.</p> : <Tabs tabs={tabs} />}
     </div>
   );
 }
