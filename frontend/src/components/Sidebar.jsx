@@ -14,6 +14,7 @@ const MENU_ITEMS = [
   { to: '/expenses', label: 'Expenses & Income', perm: 'expenses.manage' },
   { to: '/reports', label: 'Reports', perm: 'reports.view_all' },
   { to: '/staff', label: 'Staff & Permissions', perm: 'staff.manage_permissions' },
+  { to: '/settings', label: 'Settings', perm: 'settings.manage' },
 ];
 
 export function Sidebar() {

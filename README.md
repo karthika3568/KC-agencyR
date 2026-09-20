@@ -1,4 +1,4 @@
-# POS / Distributor Billing System — Phase 1 + 2 + 3 + 4 + 5
+# POS / Distributor Billing System — Phase 1 + 2 + 3 + 4 + 5 + 6
 
 Multi-branch, role-based POS + distributor billing system.
 
@@ -23,8 +23,16 @@ Multi-branch, role-based POS + distributor billing system.
   customer collections with FIFO oldest-bill auto-deduction, cash handover &
   reconciliation with discrepancy tracking, and branch-wise expenses/income.
 
-Reports and the Staff & Permissions admin screen still don't exist — they
-land in the final phases.
+- **Phase 6**: Reports & Admin — a live Dashboard with real KPI cards, the
+  full report catalog (GST/Non-GST registers, purchase register, item-wise
+  sales, credit outstanding & aging, expense/income, profit P&L, low stock)
+  each with a date range and Excel export, the Staff & Permissions screen
+  (create accounts, toggle status, per-employee permission overrides), and
+  Settings (Company Profile, Thermal Printer Setup, Invoice Sequence
+  Prefixes).
+
+Only Phase 7 (PWA polish, real-device barcode/printer testing, load testing)
+remains.
 
 ## Stack
 
@@ -51,6 +59,7 @@ land in the final phases.
    7. `backend/database/schema_phase4.sql`
    8. `backend/database/schema_phase5.sql`
    9. `backend/database/seed_phase5.sql`
+   10. `backend/database/schema_phase6.sql`
 
 Or from the command line:
 
@@ -64,6 +73,7 @@ mysql -u root -p pos_system < backend/database/seed_phase3.sql
 mysql -u root -p pos_system < backend/database/schema_phase4.sql
 mysql -u root -p pos_system < backend/database/schema_phase5.sql
 mysql -u root -p pos_system < backend/database/seed_phase5.sql
+mysql -u root -p pos_system < backend/database/schema_phase6.sql
 ```
 
 ## 2. Backend setup
@@ -283,6 +293,69 @@ Open `http://localhost:5173` and log in.
   the register still shows the cash/digital split per section 4.16, but a
   UPI collection sits in the same handover batch for audit completeness
   rather than needing a separate reconciliation flow.
+
+## Phase 6 — what's new
+
+- **Dashboard** (`/`): real KPI cards — today's/monthly sales, today's/
+  monthly purchases, inventory valuation, customer & supplier net
+  outstanding, collections/expenses/income today, low-stock count — all
+  computed live from the actual tables, gated behind
+  `dashboard.view_financial_summary`.
+- **Reports** (`/reports`): GST Sales Register (hardcoded `bill_type='gst'`,
+  never toggleable, per rule 5), Non-GST Register (kept strictly separate),
+  Purchase Register, Item-wise Sales, Credit Outstanding & Aging, Expense &
+  Income, Profit (P&L), and Low Stock — each with a from/to date filter, each
+  gated behind its own permission code, and each with an "Export to Excel"
+  button gated additionally behind `reports.export_excel` (verified: exported
+  the GST register as a real downloadable `.xlsx`).
+- **Staff & Permissions** (`/staff`): `staff.manage_accounts` creates
+  accounts and toggles active/inactive; `staff.manage_permissions` opens a
+  per-employee panel where every permission shows its role default and can
+  be cycled through Role default → Force allow → Force deny → back to role
+  default. Verified live: granted a cashier `catalog.manage_price_lists`
+  through the real UI, confirmed via API it landed as an isolated override
+  without disturbing their existing `catalog.manage_items` override.
+- **Settings** (`/settings`): Company Profile edits the branch's own
+  `branches` row (address/GSTIN/etc. — the same fields Phase 1 seeded as
+  placeholders); Thermal Printer Setup edits `branch_print_settings` (bank/
+  UPI details, terms & conditions, printer type); Invoice Sequence Prefixes
+  lets `settings.manage` change the `INV-`/`EST-` prefix without touching the
+  running counter, so numbering never repeats or resets.
+
+### Two bugs caught and fixed during Phase 6 testing
+
+- **`POST /api/users` silently created accounts with `branch_id: null`** for
+  a Super Admin (or anyone with `branches.switch_context`) who didn't pass an
+  explicit `branch_id` — `resolveBranchId()` correctly returns "every branch"
+  (`null`) for that role on a *read*, but a new account needs one real home
+  branch. Fixed to fall back to the creator's own branch.
+- **Saving a permission override silently deleted every *other* override for
+  that user.** `setPermissionOverrides` did a delete-all-then-reinsert of
+  only the overrides in the current request, but the Staff & Permissions UI
+  only ever sends the permissions actually touched in that session (by
+  design, so a long scroll of 42 toggles doesn't need re-sending on every
+  save) — the mismatch meant saving one toggle wiped out every earlier one.
+  Changed to a targeted upsert/clear per permission_id instead of a full
+  replace; re-verified two independent overrides now coexist correctly.
+
+### Assumptions / simplifications in Phase 6
+
+- **Profit (P&L) report's COGS uses each item's *current* `cost_price`**,
+  not a price snapshotted at sale time — `invoice_items` only stores the
+  sale `rate`, not cost, so a cost-price change shifts this report
+  retroactively for past periods. Storing a `cost_price_snapshot` on
+  `invoice_items` is the fix if this matters for the client; flagged rather
+  than silently assumed away.
+- **The report engine is per-report endpoints, not one fully generic
+  filter/order-by engine** (section 10 describes route/brand/employee/
+  customer/payment-status/order-by filters uniformly across every report) —
+  each report here takes the filters that make sense for it (mostly date
+  range), which covers the named report catalog without the extra generic-engine
+  machinery. Extending any one report with more filters is additive, not a
+  rewrite.
+- **Roles themselves are still read-only** (`GET /api/roles` only) — creating
+  new roles or editing which permissions a role grants by default isn't
+  built; only per-employee overrides on top of the existing 5 seeded roles.
 
 ## Default Super Admin login (seeded — change immediately)
 

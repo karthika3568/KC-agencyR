@@ -13,7 +13,9 @@ import { Returns } from './pages/Returns.jsx';
 import { Collections } from './pages/Collections.jsx';
 import { CashHandover } from './pages/CashHandover.jsx';
 import { Expenses } from './pages/Expenses.jsx';
-import { StubPage } from './pages/StubPage.jsx';
+import { Reports } from './pages/Reports.jsx';
+import { StaffPermissions } from './pages/StaffPermissions.jsx';
+import { Settings } from './pages/Settings.jsx';
 
 function Protected({ children }) {
   return (
@@ -37,8 +39,9 @@ export default function App() {
       <Route path="/collections" element={<Protected><Collections /></Protected>} />
       <Route path="/cash-handover" element={<Protected><CashHandover /></Protected>} />
       <Route path="/expenses" element={<Protected><Expenses /></Protected>} />
-      <Route path="/reports" element={<Protected><StubPage title="Reports" /></Protected>} />
-      <Route path="/staff" element={<Protected><StubPage title="Staff & Permissions" /></Protected>} />
+      <Route path="/reports" element={<Protected><Reports /></Protected>} />
+      <Route path="/staff" element={<Protected><StaffPermissions /></Protected>} />
+      <Route path="/settings" element={<Protected><Settings /></Protected>} />
       <Route path="/print/invoice/:id" element={<ProtectedRoute><InvoicePrint /></ProtectedRoute>} />
     </Routes>
   );

@@ -10,8 +10,11 @@ use App\Controllers\BranchScopedCrudController;
 use App\Controllers\CashHandoverController;
 use App\Controllers\CollectionController;
 use App\Controllers\CrudController;
+use App\Controllers\DashboardController;
 use App\Controllers\InvoiceController;
 use App\Controllers\ItemController;
+use App\Controllers\ReportsController;
+use App\Controllers\SettingsController;
 use App\Controllers\PurchaseController;
 use App\Controllers\PurchaseRequestController;
 use App\Controllers\PurchaseReturnController;
@@ -190,6 +193,20 @@ $router->get('/api/stock-hub/low-stock', fn () => $stockHub->lowStock());
 
 $users = new UserController($pdo);
 $router->get('/api/users', fn () => $users->index());
+$router->post('/api/users', fn () => $users->store());
+$router->get('/api/users/{id}', fn ($id) => $users->show($id));
+$router->put('/api/users/{id}', fn ($id) => $users->update($id));
+$router->get('/api/users/{id}/permissions', fn ($id) => $users->permissions($id));
+$router->put('/api/users/{id}/permissions', fn ($id) => $users->setPermissions($id));
+
+$router->get('/api/roles', function () use ($pdo) {
+    JwtAuthMiddleware::authenticate();
+    Response::json($pdo->query('SELECT id, name FROM roles ORDER BY name')->fetchAll());
+});
+$router->get('/api/permissions', function () use ($pdo) {
+    JwtAuthMiddleware::authenticate();
+    Response::json($pdo->query('SELECT id, module, code, label, description FROM permissions ORDER BY module, code')->fetchAll());
+});
 
 // ---------------------------------------------------------------
 // Post-sale: returns, collections, cash handover, expenses (Phase 5)
@@ -247,6 +264,29 @@ $otherIncome = new BranchScopedCrudController(
 $router->get('/api/other-income', fn () => $otherIncome->index());
 $router->post('/api/other-income', fn () => $otherIncome->store());
 $router->delete('/api/other-income/{id}', fn ($id) => $otherIncome->destroy($id));
+
+// ---------------------------------------------------------------
+// Dashboard, Reports, Settings (Phase 6)
+// ---------------------------------------------------------------
+$dashboard = new DashboardController($pdo);
+$router->get('/api/dashboard/summary', fn () => $dashboard->summary());
+
+$reports = new ReportsController($pdo);
+$router->get('/api/reports/gst-register', fn () => $reports->gstRegister());
+$router->get('/api/reports/non-gst-register', fn () => $reports->nonGstRegister());
+$router->get('/api/reports/purchase-register', fn () => $reports->purchaseRegister());
+$router->get('/api/reports/item-wise-sales', fn () => $reports->itemWiseSales());
+$router->get('/api/reports/credit-outstanding', fn () => $reports->creditOutstanding());
+$router->get('/api/reports/expense-income', fn () => $reports->expenseIncome());
+$router->get('/api/reports/profit', fn () => $reports->profitReport());
+
+$settings = new SettingsController($pdo);
+$router->get('/api/settings/branch', fn () => $settings->branchProfile());
+$router->put('/api/settings/branch', fn () => $settings->updateBranchProfile());
+$router->get('/api/settings/print', fn () => $settings->printSettings());
+$router->put('/api/settings/print', fn () => $settings->updatePrintSettings());
+$router->get('/api/settings/sequences', fn () => $settings->sequences());
+$router->put('/api/settings/sequences/{id}', fn ($id) => $settings->updateSequence($id));
 
 try {
     $router->dispatch($method, $uri);
