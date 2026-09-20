@@ -6,6 +6,8 @@ const MENU_ITEMS = [
   { to: '/pos', label: 'POS', perm: 'pos.access' },
   { to: '/catalog', label: 'Catalog', perm: 'catalog.manage_items' },
   { to: '/parties', label: 'Parties', perm: 'parties.manage_customers' },
+  { to: '/purchasing', label: 'Purchasing', perm: 'purchases.create_grn' },
+  { to: '/inventory', label: 'Inventory', perm: 'inventory.view_stock' },
   { to: '/reports', label: 'Reports', perm: 'reports.view_all' },
   { to: '/staff', label: 'Staff & Permissions', perm: 'staff.manage_permissions' },
 ];

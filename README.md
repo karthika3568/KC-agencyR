@@ -1,4 +1,4 @@
-# POS / Distributor Billing System — Phase 1 + 2 + 3
+# POS / Distributor Billing System — Phase 1 + 2 + 3 + 4
 
 Multi-branch, role-based POS + distributor billing system.
 
@@ -13,8 +13,13 @@ Multi-branch, role-based POS + distributor billing system.
   invoice-completion transaction, thermal (80mm) + A4 print templates, and a
   WhatsApp share link.
 
-Purchasing, returns, cash handover, and reports still don't exist — they
-land in later phases.
+- **Phase 4**: Purchasing & inventory ops — purchase indents, GRN (goods
+  received) with atomic stock increase + supplier ledger, supplier payments
+  with FIFO/manual allocation across unpaid GRNs, stock adjustments, van/
+  salesman stock issue + day-end return, and a combined Stock Hub view.
+
+Sales returns, cash handover/reconciliation, expenses, and reports still
+don't exist — they land in later phases.
 
 ## Stack
 
@@ -38,6 +43,7 @@ land in later phases.
    4. `backend/database/seed_phase2.sql`
    5. `backend/database/schema_phase3.sql`
    6. `backend/database/seed_phase3.sql`
+   7. `backend/database/schema_phase4.sql`
 
 Or from the command line:
 
@@ -48,6 +54,7 @@ mysql -u root -p pos_system < backend/database/schema_phase2.sql
 mysql -u root -p pos_system < backend/database/seed_phase2.sql
 mysql -u root -p pos_system < backend/database/schema_phase3.sql
 mysql -u root -p pos_system < backend/database/seed_phase3.sql
+mysql -u root -p pos_system < backend/database/schema_phase4.sql
 ```
 
 ## 2. Backend setup
@@ -164,6 +171,58 @@ Open `http://localhost:5173` and log in.
   conditions, thermal/A4 default) aren't built yet — that's Phase 6 Settings.
   The print templates use the `branches` fields from Phase 1 and a
   placeholder terms block.
+
+## Phase 4 — what's new
+
+- **Purchase Indents** (`/purchasing` → Purchase Indents): raise a request to
+  a supplier (`orders.create_purchase_indent`), no stock effect until it's
+  converted to a GRN.
+- **GRN / Purchases** (`/purchasing` → GRN): `purchases.create_grn` records
+  goods received — atomically inserts the GRN + line items, increases stock,
+  and (if not fully paid up front) posts the shortfall to
+  `supplier_ledger_transactions`. If it came from an indent, the indent flips
+  to `converted_to_grn`. Cost columns (grand total, paid, pending) are hidden
+  from anyone without `purchases.view_purchase_cost`. `purchases.delete_grn`
+  never hard-deletes — it flips `status='cancelled'` and reverses both the
+  stock movement and the ledger entry in one transaction (verified: deleting
+  a GRN with a since-partially-paid balance drove the supplier's running
+  balance back to exactly zero).
+- **Supplier Payments** (`/purchasing` → Supplier Payments):
+  `purchases.settle_supplier_payment` records a payment and allocates it
+  FIFO (oldest unpaid GRN first) across that supplier's outstanding GRNs —
+  the UI shows a live per-GRN "this pay / remaining" preview as the amount is
+  typed, mirroring the server's own allocation. The API also accepts an
+  explicit `allocations` array for a manual split instead of FIFO.
+- **Stock Adjustment** (`/inventory` → Stock Adjustment):
+  `inventory.stock_adjustment` records a damage/spoilage/count-correction/
+  other addition or deduction, gated and audited like every other stock
+  change.
+- **Van / Salesman Stock** (`/inventory` → Van / Salesman Stock):
+  `inventory.issue_van_stock` moves quantity from the branch's floor stock to
+  a specific employee's own `stock_ledger` row (`owner_type='employee'`), and
+  a day-end return reverses it — both legs logged so the two owners' ledgers
+  always net to zero across the pair of movements.
+- **Stock Hub** (`/inventory` → Stock Hub): one combined table across every
+  owner (branch floor + each salesman's van), plus a low-stock banner for
+  anything at or under its `min_stock_threshold`.
+
+### Assumptions / simplifications in Phase 4
+
+- **No separate "warehouse" entity.** The schema's `owner_type` enum still
+  has `warehouse` reserved for a future central-warehouse model, but this
+  MVP has one stock pool per branch — GRN receipts increase `owner_type=
+  'branch'`, the same pool Phase 3's POS sale deducts from. Introducing a
+  distinct warehouse-vs-branch-floor split is a schema-compatible follow-up,
+  not a breaking change.
+- **GRN/indent/issue/return numbers use a simple per-row auto-increment code**
+  (`GRN00001`, `PI00001`, `ISS00001`, `RTN00001`), not the atomic per-branch
+  sequence built for tax invoices in Phase 3 — GRNs aren't a legal filing
+  document the way a sales invoice is, so the concurrency guarantee matters
+  less here. Revisit if the client's auditor disagrees.
+- **A minimal read-only `/api/users` endpoint** was added so the "issue van
+  stock to this salesman" dropdown has names to show — full Staff Accounts
+  management (create/edit logins, the permission-toggle screen) is still
+  Phase 6, untouched here.
 
 ## Default Super Admin login (seeded — change immediately)
 

@@ -10,6 +10,13 @@ use App\Controllers\BranchScopedCrudController;
 use App\Controllers\CrudController;
 use App\Controllers\InvoiceController;
 use App\Controllers\ItemController;
+use App\Controllers\PurchaseController;
+use App\Controllers\PurchaseRequestController;
+use App\Controllers\StockAdjustmentController;
+use App\Controllers\StockHubController;
+use App\Controllers\SupplierPaymentController;
+use App\Controllers\UserController;
+use App\Controllers\VanStockController;
 use App\Helpers\Response;
 use App\Helpers\Router;
 use App\Middleware\CorsMiddleware;
@@ -143,6 +150,42 @@ $router->put('/api/invoices/{id}', fn ($id) => $invoiceController->update($id));
 $router->delete('/api/invoices/{id}', fn ($id) => $invoiceController->destroy($id));
 $router->post('/api/invoices/{id}/complete', fn ($id) => $invoiceController->complete($id));
 $router->get('/api/invoices/{id}/print', fn ($id) => $invoiceController->print($id));
+
+// ---------------------------------------------------------------
+// Purchasing & Inventory Ops (Phase 4)
+// ---------------------------------------------------------------
+$purchaseRequests = new PurchaseRequestController($pdo);
+$router->get('/api/purchase-requests', fn () => $purchaseRequests->index());
+$router->post('/api/purchase-requests', fn () => $purchaseRequests->store());
+$router->get('/api/purchase-requests/{id}', fn ($id) => $purchaseRequests->show($id));
+$router->post('/api/purchase-requests/{id}/cancel', fn ($id) => $purchaseRequests->cancel($id));
+
+$purchases = new PurchaseController($pdo);
+$router->get('/api/purchases', fn () => $purchases->index());
+$router->post('/api/purchases', fn () => $purchases->store());
+$router->get('/api/purchases/{id}', fn ($id) => $purchases->show($id));
+$router->delete('/api/purchases/{id}', fn ($id) => $purchases->destroy($id));
+
+$supplierPayments = new SupplierPaymentController($pdo);
+$router->get('/api/supplier-payments', fn () => $supplierPayments->index());
+$router->post('/api/supplier-payments', fn () => $supplierPayments->store());
+$router->get('/api/suppliers/{id}/unpaid-grns', fn ($id) => $supplierPayments->unpaidGrns($id));
+
+$stockAdjustments = new StockAdjustmentController($pdo);
+$router->get('/api/stock-adjustments', fn () => $stockAdjustments->index());
+$router->post('/api/stock-adjustments', fn () => $stockAdjustments->store());
+
+$vanStock = new VanStockController($pdo);
+$router->post('/api/van-stock/issue', fn () => $vanStock->issue());
+$router->post('/api/van-stock/return', fn () => $vanStock->returnStock());
+$router->get('/api/van-stock/{employeeId}', fn ($employeeId) => $vanStock->pending($employeeId));
+
+$stockHub = new StockHubController($pdo);
+$router->get('/api/stock-hub', fn () => $stockHub->index());
+$router->get('/api/stock-hub/low-stock', fn () => $stockHub->lowStock());
+
+$users = new UserController($pdo);
+$router->get('/api/users', fn () => $users->index());
 
 try {
     $router->dispatch($method, $uri);
