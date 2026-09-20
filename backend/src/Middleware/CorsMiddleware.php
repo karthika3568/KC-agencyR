@@ -12,8 +12,14 @@ class CorsMiddleware
         $allowedOrigins = $config['cors']['origins'];
         $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 
-        if (in_array($origin, $allowedOrigins, true)) {
+        // Vite picks the next free port (5173, 5174, 5175, ...) when the
+        // default is already in use, so allow any localhost/127.0.0.1 origin
+        // in dev rather than needing .env updated every time that happens.
+        $isLocalDevOrigin = (bool) preg_match('#^https?://(localhost|127\.0\.0\.1)(:\d+)?$#', $origin);
+
+        if ($isLocalDevOrigin || in_array($origin, $allowedOrigins, true)) {
             header('Access-Control-Allow-Origin: ' . $origin);
+            header('Vary: Origin');
         }
 
         header('Access-Control-Allow-Credentials: true');
