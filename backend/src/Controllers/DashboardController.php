@@ -102,6 +102,17 @@ class DashboardController
             ['b' => $branchId]
         );
 
+        // Unresolved cash-handover shortages never fade quietly off a list —
+        // surface them straight on the dashboard until someone re-verifies (section 4.16 / spec item 31).
+        $stmt = $this->pdo->prepare(
+            "SELECT handover_no, employee_id, u.name AS employee_name, submitted_amount, verified_amount, discrepancy, handover_date
+             FROM cash_handovers ch JOIN users u ON u.id = ch.employee_id
+             WHERE ch.branch_id = :b AND ch.status = 'discrepancy_flagged'
+             ORDER BY ch.handover_date DESC"
+        );
+        $stmt->execute(['b' => $branchId]);
+        $discrepancies = $stmt->fetchAll();
+
         Response::json([
             'today_sales_revenue' => round($todaySales, 2),
             'month_sales_total' => round($monthSales, 2),
@@ -114,6 +125,7 @@ class DashboardController
             'operating_expenses_today' => round($operatingExpensesToday, 2),
             'extra_income_today' => round($extraIncomeToday, 2),
             'low_stock_count' => $lowStockCount,
+            'unresolved_handover_discrepancies' => $discrepancies,
         ]);
     }
 }

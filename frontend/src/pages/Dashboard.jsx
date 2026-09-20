@@ -38,6 +38,26 @@ export function Dashboard() {
         <p className="text-gray-400">You don't have access to the financial summary.</p>
       )}
 
+      {canViewFinancials && summary && summary.unresolved_handover_discrepancies?.length > 0 && (
+        <div className="mb-4 rounded-lg border border-red-300 bg-red-50 p-4">
+          <div className="font-semibold text-red-800">
+            ⚠ {summary.unresolved_handover_discrepancies.length} unresolved cash handover discrepanc
+            {summary.unresolved_handover_discrepancies.length === 1 ? 'y' : 'ies'}
+          </div>
+          <ul className="mt-2 space-y-1 text-sm text-red-700">
+            {summary.unresolved_handover_discrepancies.map((d) => (
+              <li key={d.handover_no}>
+                {d.handover_no} — {d.employee_name}: submitted Rs. {d.submitted_amount}, verified Rs. {d.verified_amount}
+                {' '}(short by Rs. {Math.abs(Number(d.discrepancy)).toFixed(2)}) on {d.handover_date}
+              </li>
+            ))}
+          </ul>
+          <a href="/cash-handover" className="mt-2 inline-block text-sm font-medium text-red-800 underline">
+            Go to Cash Handover →
+          </a>
+        </div>
+      )}
+
       {canViewFinancials && summary && (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           {CARDS.map((c) => (

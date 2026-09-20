@@ -1,8 +1,50 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    VitePWA({
+      registerType: 'autoUpdate',
+      includeAssets: ['icon-192.png', 'icon-512.png'],
+      devOptions: {
+        enabled: true, // generate + register the SW under `npm run dev` too, not just build
+        type: 'module',
+      },
+      manifest: {
+        name: 'POS / Distributor Billing System',
+        short_name: 'POS System',
+        description: 'Multi-branch, role-based POS + distributor billing system',
+        start_url: '/',
+        scope: '/',
+        display: 'standalone',
+        orientation: 'any',
+        background_color: '#ffffff',
+        theme_color: '#1d4ed8',
+        icons: [
+          { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'maskable' },
+          { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
+      },
+      workbox: {
+        // App-shell + static-asset caching only. POS billing is NOT cached
+        // offline-first — invoice numbering, stock, and payments all need a
+        // live server round-trip, so every /api/* call bypasses the SW
+        // (NetworkOnly) rather than risking a stale/queued write. True
+        // offline billing is a deliberate non-goal for now — see README.
+        navigateFallbackDenylist: [/^\/api\//],
+        runtimeCaching: [
+          {
+            urlPattern: /\/api\/.*/,
+            handler: 'NetworkOnly',
+          },
+        ],
+      },
+    }),
+  ],
   server: {
     port: 5173,
   },

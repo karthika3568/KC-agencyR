@@ -1,4 +1,4 @@
-# POS / Distributor Billing System — Phase 1 + 2 + 3 + 4 + 5 + 6
+# POS / Distributor Billing System — Phase 1 + 2 + 3 + 4 + 5 + 6 + 7
 
 Multi-branch, role-based POS + distributor billing system.
 
@@ -31,8 +31,14 @@ Multi-branch, role-based POS + distributor billing system.
   Settings (Company Profile, Thermal Printer Setup, Invoice Sequence
   Prefixes).
 
-Only Phase 7 (PWA polish, real-device barcode/printer testing, load testing)
-remains.
+- **Phase 7**: Polish — a real installable PWA (manifest + Workbox service
+  worker via `vite-plugin-pwa`), a verified barcode-scanner-speed input path,
+  a load test against 5,000 seeded invoices (found and fixed a missing
+  composite index), and a dashboard alert for unresolved cash-handover
+  discrepancies. See the Phase 7 section below for what could and couldn't
+  be verified from this environment.
+
+All 7 phases of the spec are now built.
 
 ## Stack
 
@@ -60,6 +66,7 @@ remains.
    8. `backend/database/schema_phase5.sql`
    9. `backend/database/seed_phase5.sql`
    10. `backend/database/schema_phase6.sql`
+   11. `backend/database/schema_phase7.sql`
 
 Or from the command line:
 
@@ -74,6 +81,7 @@ mysql -u root -p pos_system < backend/database/schema_phase4.sql
 mysql -u root -p pos_system < backend/database/schema_phase5.sql
 mysql -u root -p pos_system < backend/database/seed_phase5.sql
 mysql -u root -p pos_system < backend/database/schema_phase6.sql
+mysql -u root -p pos_system < backend/database/schema_phase7.sql
 ```
 
 ## 2. Backend setup
@@ -356,6 +364,75 @@ Open `http://localhost:5173` and log in.
 - **Roles themselves are still read-only** (`GET /api/roles` only) — creating
   new roles or editing which permissions a role grants by default isn't
   built; only per-employee overrides on top of the existing 5 seeded roles.
+
+## Phase 7 — what's new, and what's honestly unverified
+
+- **PWA**: `vite-plugin-pwa` (Workbox) now generates a real service worker
+  and `manifest.webmanifest`, with 192px/512px icons (including `maskable`
+  variants) and `theme-color`/`apple-touch-icon` in `index.html`. `npm run
+  build` was run and objectively confirms the pipeline works — it emits
+  `dist/sw.js`, a `workbox-*.js` runtime chunk, and precaches 7 app-shell
+  entries. Per section 12's own instruction, **POS billing is NOT
+  offline-first** — every `/api/*` call is `NetworkOnly` in the Workbox
+  config (`vite.config.js`), so invoice numbering/stock/payments always hit
+  the live server; only the static app shell is cached for fast/offline
+  *loading*.
+  - **What I could not verify here**: live service-worker registration and
+    "Add to Home Screen" install-ability. This coding environment's own
+    embedded browser pane blocks *all* ServiceWorker registration as a
+    sandbox policy — confirmed by registering a trivial nonsense URL as a
+    control, which failed with the identical generic error as the real
+    service worker. This is a restriction of the review environment, not a
+    defect in the app. **Please verify installability yourself** in a real
+    Chrome/Edge desktop browser or an Android device — that was always the
+    spec's own instruction for this item ("installability testing on
+    Android tablet").
+- **Barcode scanner**: verified the actual input path handles scanner-speed
+  typing, not just human typing — simulated 8 characters at 2ms apart
+  (faster than any realistic keyboard, let alone a scanner sending a full
+  barcode over ~20-50ms) followed by Enter, and confirmed it correctly
+  exact-matched the item and added it to the cart. No debounce or race
+  condition. **Still needs a real physical scanner** to confirm HID
+  keyboard-wedge behavior end to end (this only proves the software side).
+- **Print testing**: thermal (80mm) and A4 templates were already visually
+  verified rendering real invoice data back in Phase 3. **A real thermal
+  printer and A4 printer still need physical testing** — paper width,
+  margins, and cut behavior can't be confirmed from a browser screenshot.
+  Confirm the exact printer make/model + connection type with the client
+  before building any native print-bridge (QZ Tray / RawBT), per the
+  spec's own open question.
+- **Load testing**: `backend/database/seed_load_test.php` bulk-inserts
+  N completed invoices directly via SQL (bypassing business logic — it's
+  purely for query-performance testing, tagged `invoice_no LIKE 'LOAD-%'`
+  for trivial cleanup: `DELETE FROM invoices WHERE invoice_no LIKE
+  'LOAD-%';`). Ran it at 5,000 invoices (~10,000 line items) and found the
+  `item-wise-sales` and `gst-register` reports were missing a composite
+  index — `invoices` only had `(branch_id, status)`, so a date-range filter
+  fell back to scanning every one of that branch's completed invoices one
+  at a time. Added `idx_invoices_branch_status_date (branch_id, status,
+  invoice_date)` — confirmed via `EXPLAIN` the query plan now uses it
+  correctly. Also added a 5,000-row safety cap to the three unbounded
+  list-style reports (GST/Non-GST/purchase registers, expense-income) so a
+  huge date range can't ship a multi-MB JSON payload — a real pagination UI
+  is the proper fix if that becomes routine at higher volumes.
+- **Dashboard discrepancy alert** (spec item 31): the Dashboard now shows a
+  red banner listing every `discrepancy_flagged` cash handover for the
+  branch, with a link straight to Cash Handover — verified against the
+  discrepancy created back in Phase 5 testing (`HND00001`, short by ₹5).
+
+### Correction to earlier phase notes
+
+Every earlier phase's README text says "MariaDB-safe SQL" / "targets
+XAMPP's bundled MariaDB." In practice, this dev machine has a second,
+unrelated **MySQL 9.4** Windows service already bound to port 3306 (noted
+back in Phase 1's setup), and that's what every phase has actually been
+running against and load-tested here — not XAMPP's bundled MariaDB. Nothing
+in the schema uses a MariaDB-only feature *except* the one syntax mistake
+caught during this phase (`ADD INDEX IF NOT EXISTS`, MariaDB-only — fixed to
+plain `ADD INDEX` in `schema_phase7.sql`, consistent with every other
+schema file's one-time-apply convention). If deploying to real MariaDB,
+this schema will work; if there's ever a genuine MariaDB-only feature
+introduced later, re-verify against both.
 
 ## Default Super Admin login (seeded — change immediately)
 

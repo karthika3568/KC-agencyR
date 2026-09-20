@@ -18,6 +18,15 @@ use PDO;
  */
 class ReportsController
 {
+    /**
+     * Safety cap on unbounded list-style reports (one row per invoice/GRN).
+     * Load-tested at 5,000 invoices/branch/month; a report with no LIMIT at
+     * 10x that volume would ship a multi-MB JSON payload to the browser for
+     * a single date range. Narrow the date range for anything past this —
+     * a real pagination UI is the proper fix if that becomes routine.
+     */
+    private const LIST_REPORT_ROW_CAP = 5000;
+
     public function __construct(private PDO $pdo)
     {
     }
@@ -58,7 +67,8 @@ class ReportsController
              FROM invoices i LEFT JOIN customers c ON c.id = i.customer_id
              WHERE i.branch_id = :b AND i.status = 'completed' AND i.bill_type = 'gst'
                AND i.invoice_date BETWEEN :from AND :to
-             ORDER BY i.invoice_date, i.id"
+             ORDER BY i.invoice_date, i.id
+             LIMIT " . self::LIST_REPORT_ROW_CAP
         );
         $stmt->execute(['b' => $this->resolveBranchId($claims), 'from' => $from, 'to' => $to]);
 
@@ -81,7 +91,8 @@ class ReportsController
              FROM invoices i LEFT JOIN customers c ON c.id = i.customer_id
              WHERE i.branch_id = :b AND i.status = 'completed' AND i.bill_type = 'non_gst'
                AND i.invoice_date BETWEEN :from AND :to
-             ORDER BY i.invoice_date, i.id"
+             ORDER BY i.invoice_date, i.id
+             LIMIT " . self::LIST_REPORT_ROW_CAP
         );
         $stmt->execute(['b' => $this->resolveBranchId($claims), 'from' => $from, 'to' => $to]);
 
@@ -102,7 +113,8 @@ class ReportsController
             "SELECT p.grn_no, p.purchase_date, s.name AS supplier_name, p.grand_total, p.paid_amount, p.pending_balance, p.status
              FROM purchases p JOIN suppliers s ON s.id = p.supplier_id
              WHERE p.branch_id = :b AND p.purchase_date BETWEEN :from AND :to
-             ORDER BY p.purchase_date, p.id"
+             ORDER BY p.purchase_date, p.id
+             LIMIT " . self::LIST_REPORT_ROW_CAP
         );
         $stmt->execute(['b' => $this->resolveBranchId($claims), 'from' => $from, 'to' => $to]);
         $rows = $stmt->fetchAll();
@@ -187,7 +199,8 @@ class ReportsController
              SELECT 'Income' AS type, oi.receipt_no AS ref_no, 'Other Income' AS category, oi.amount, oi.description, oi.income_date AS ref_date
              FROM other_income oi
              WHERE oi.branch_id = :b2 AND oi.income_date BETWEEN :from2 AND :to2
-             ORDER BY ref_date"
+             ORDER BY ref_date
+             LIMIT " . self::LIST_REPORT_ROW_CAP
         );
         $stmt->execute(['b' => $branchId, 'from' => $from, 'to' => $to, 'b2' => $branchId, 'from2' => $from, 'to2' => $to]);
 
