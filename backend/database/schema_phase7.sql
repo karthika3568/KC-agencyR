@@ -12,3 +12,18 @@
 -- =====================================================================
 
 ALTER TABLE invoices ADD INDEX idx_invoices_branch_status_date (branch_id, status, invoice_date);
+
+-- ---------------------------------------------------------------------
+-- Bug fix found after adding multi-branch support: invoice_no was
+-- globally UNIQUE, but each branch has its own independent INV-/EST-
+-- sequence starting at 000001 (section 4.19) — so a second branch's
+-- first invoice ("INV-2026-000001") collided with the first branch's.
+-- invoice_no must be unique per branch, not globally; the branch's own
+-- letterhead/GSTIN on the printed invoice is what actually disambiguates
+-- two branches sharing the same number. schema_phase3.sql now creates
+-- the composite constraint directly for a fresh install — this ALTER is
+-- only for a database that already ran the old schema_phase3.sql.
+-- ---------------------------------------------------------------------
+
+ALTER TABLE invoices DROP INDEX uq_invoices_invoice_no;
+ALTER TABLE invoices ADD UNIQUE KEY uq_invoices_branch_invoice_no (branch_id, invoice_no);

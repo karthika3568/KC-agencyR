@@ -93,7 +93,11 @@ CREATE TABLE IF NOT EXISTS invoices (
   ack_date DATE NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_invoices_invoice_no (invoice_no),
+  -- invoice_no is unique PER BRANCH, not globally: each branch has its own
+  -- independent INV-/EST- sequence starting at 000001 (section 4.19), so
+  -- "INV-2026-000001" legitimately exists once per branch, distinguished by
+  -- that branch's own letterhead/GSTIN on the printed invoice.
+  UNIQUE KEY uq_invoices_branch_invoice_no (branch_id, invoice_no),
   CONSTRAINT fk_invoices_branch FOREIGN KEY (branch_id) REFERENCES branches(id),
   CONSTRAINT fk_invoices_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL,
   CONSTRAINT fk_invoices_employee FOREIGN KEY (employee_id) REFERENCES users(id),
