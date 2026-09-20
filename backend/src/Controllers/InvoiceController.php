@@ -1,0 +1,252 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Controllers;
+
+use App\Helpers\NumberToWords;
+use App\Helpers\Response;
+use App\Middleware\JwtAuthMiddleware;
+use App\Middleware\PermissionMiddleware;
+use App\Models\InvoiceModel;
+use App\Services\CreditLedgerService;
+use PDO;
+
+class InvoiceController
+{
+    private InvoiceModel $invoices;
+
+    public function __construct(private PDO $pdo)
+    {
+        $this->invoices = new InvoiceModel($pdo);
+    }
+
+    private function resolveBranchId(array $claims): int
+    {
+        $canSwitch = in_array('branches.switch_context', (array) ($claims['permissions'] ?? []), true);
+        if ($canSwitch && isset($_GET['branch_id'])) {
+            return (int) $_GET['branch_id'];
+        }
+        if ($claims['branch_id'] === null) {
+            Response::error('Your account has no home branch assigned', 422);
+        }
+        return (int) $claims['branch_id'];
+    }
+
+    public function index(): void
+    {
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::require($claims, 'pos.access');
+        $branchId = $this->resolveBranchId($claims);
+        Response::json($this->invoices->all($branchId, $_GET['status'] ?? null));
+    }
+
+    public function show(string $id): void
+    {
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::require($claims, 'pos.access');
+        $invoice = $this->requireOwnedInvoice($claims, (int) $id);
+        Response::json($invoice);
+    }
+
+    public function store(): void
+    {
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::require($claims, 'pos.access');
+
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $branchId = $this->resolveBranchId($claims);
+        [$header, $lines, $error] = $this->prepareInvoice($claims, $branchId, $body);
+        if ($error) {
+            Response::error($error, 422);
+        }
+
+        $id = $this->invoices->createHeld($header, $lines);
+        Response::json($this->invoices->find($id), 201);
+    }
+
+    public function update(string $id): void
+    {
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::require($claims, 'pos.access');
+
+        $existing = $this->requireOwnedInvoice($claims, (int) $id);
+        if ($existing['status'] !== 'held') {
+            Response::error('Only a held bill can be edited', 422);
+        }
+
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        [$header, $lines, $error] = $this->prepareInvoice($claims, (int) $existing['branch_id'], $body);
+        if ($error) {
+            Response::error($error, 422);
+        }
+
+        $this->invoices->updateHeld((int) $id, $header, $lines);
+        Response::json($this->invoices->find((int) $id));
+    }
+
+    public function destroy(string $id): void
+    {
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::require($claims, 'pos.void_hold_bill');
+
+        $existing = $this->requireOwnedInvoice($claims, (int) $id);
+        if ($existing['status'] !== 'held') {
+            Response::error('Only a held bill can be discarded', 422);
+        }
+
+        $this->invoices->discardHeld((int) $id);
+        Response::json(['deleted' => true]);
+    }
+
+    public function complete(string $id): void
+    {
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::require($claims, 'pos.access');
+
+        $existing = $this->requireOwnedInvoice($claims, (int) $id);
+        if ($existing['status'] !== 'held') {
+            Response::error('Only a held bill can be completed', 422);
+        }
+
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $payments = $body['payments'] ?? [];
+
+        $hasCredit = array_reduce($payments, fn ($c, $p) => $c || ($p['payment_method'] ?? '') === 'credit', false);
+        $sumPayments = array_sum(array_column($payments, 'amount'));
+        $impliedCredit = ((float) $existing['grand_total']) - (float) $sumPayments > 0.009;
+
+        if (($hasCredit || $impliedCredit) && $existing['customer_id'] !== null) {
+            PermissionMiddleware::require($claims, 'credit.create_credit_sale');
+        }
+
+        try {
+            $result = $this->invoices->complete((int) $id, $payments, (int) $claims['sub']);
+        } catch (\RuntimeException $e) {
+            Response::error($e->getMessage(), 422);
+        }
+
+        Response::json($result);
+    }
+
+    /** GET /api/invoices/{id}/print — everything a print template needs, pre-computed. */
+    public function print(string $id): void
+    {
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::require($claims, 'pos.access');
+        $invoice = $this->requireOwnedInvoice($claims, (int) $id);
+
+        $stmt = $this->pdo->prepare('SELECT * FROM branches WHERE id = :id');
+        $stmt->execute(['id' => $invoice['branch_id']]);
+        $branch = $stmt->fetch();
+
+        $taxSlabs = [];
+        foreach ($invoice['items'] as $item) {
+            $pct = (float) $item['tax_percent'];
+            $taxSlabs[$pct] ??= ['gst_percent' => $pct, 'taxable' => 0, 'cgst' => 0, 'sgst' => 0, 'cess' => 0];
+            $taxSlabs[$pct]['taxable'] += (float) $item['line_total'];
+            $taxSlabs[$pct]['cgst'] += round((float) $item['tax_amount'] / 2, 2);
+            $taxSlabs[$pct]['sgst'] += (float) $item['tax_amount'] - round((float) $item['tax_amount'] / 2, 2);
+            $taxSlabs[$pct]['cess'] += (float) $item['cess_amount'];
+        }
+
+        $outstanding = $invoice['customer_id']
+            ? (new CreditLedgerService($this->pdo))->currentOutstanding((int) $invoice['customer_id'])
+            : null;
+
+        Response::json([
+            'invoice' => $invoice,
+            'branch' => $branch,
+            'tax_slabs' => array_values($taxSlabs),
+            'amount_in_words' => NumberToWords::convert((float) $invoice['grand_total']),
+            'customer_outstanding' => $outstanding,
+        ]);
+    }
+
+    // -------------------------------------------------------------
+
+    private function requireOwnedInvoice(array $claims, int $id): array
+    {
+        $invoice = $this->invoices->find($id);
+        if (!$invoice) {
+            Response::error('Not found', 404);
+        }
+
+        $canSwitch = in_array('branches.switch_context', (array) ($claims['permissions'] ?? []), true);
+        if (!$canSwitch && (int) $invoice['branch_id'] !== (int) $claims['branch_id']) {
+            Response::error('Not found', 404);
+        }
+
+        return $invoice;
+    }
+
+    /** @return array{0: array, 1: array, 2: ?string} */
+    private function prepareInvoice(array $claims, int $branchId, array $body): array
+    {
+        $billType = $body['bill_type'] ?? 'gst';
+        if (!in_array($billType, ['gst', 'non_gst'], true)) {
+            return [[], [], 'bill_type must be gst or non_gst'];
+        }
+        $requiredBillingPerm = $billType === 'gst' ? 'pos.gst_billing' : 'pos.non_gst_billing';
+        if (!in_array($requiredBillingPerm, (array) ($claims['permissions'] ?? []), true)) {
+            return [[], [], "Missing permission '{$requiredBillingPerm}'"];
+        }
+
+        $customerId = !empty($body['customer_id']) ? (int) $body['customer_id'] : null;
+        $invoiceFormat = 'local';
+        if ($customerId !== null) {
+            $stmt = $this->pdo->prepare('SELECT is_local_customer FROM customers WHERE id = :id AND branch_id = :branch_id');
+            $stmt->execute(['id' => $customerId, 'branch_id' => $branchId]);
+            $customer = $stmt->fetch();
+            if (!$customer) {
+                return [[], [], 'Customer not found in this branch'];
+            }
+            $invoiceFormat = $customer['is_local_customer'] ? 'local' : 'outstation';
+        }
+
+        $cartInput = $body['items'] ?? [];
+        if (empty($cartInput)) {
+            return [[], [], 'At least one item is required'];
+        }
+
+        $canEditPrice = in_array('pos.edit_price_at_sale', (array) ($claims['permissions'] ?? []), true);
+        $canDiscount = in_array('pos.apply_discount', (array) ($claims['permissions'] ?? []), true);
+
+        $lines = [];
+        foreach ($cartInput as $line) {
+            if (empty($line['item_id']) || empty($line['qty'])) {
+                return [[], [], 'Each cart line needs item_id and qty'];
+            }
+            $stmt = $this->pdo->prepare(
+                'SELECT i.*, tc.gst_percent, tc.cess_percent
+                 FROM items i LEFT JOIN tax_codes tc ON tc.id = i.tax_code_id
+                 WHERE i.id = :id'
+            );
+            $stmt->execute(['id' => (int) $line['item_id']]);
+            $item = $stmt->fetch();
+            if (!$item) {
+                return [[], [], "Item {$line['item_id']} not found"];
+            }
+
+            if (!$canEditPrice) {
+                unset($line['rate']);
+            }
+            if (!$canDiscount) {
+                unset($line['discount_percent'], $line['discount_amount']);
+            }
+
+            $lines[] = $this->invoices->priceLine($item, $line);
+        }
+
+        $header = [
+            'branch_id' => $branchId,
+            'customer_id' => $customerId,
+            'employee_id' => (int) $claims['sub'],
+            'bill_type' => $billType,
+            'invoice_format' => $invoiceFormat,
+            'vehicle_no' => $body['vehicle_no'] ?? null,
+        ];
+
+        return [$header, $lines, null];
+    }
+}

@@ -1,0 +1,67 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Services;
+
+use PDO;
+
+/**
+ * Append-only customer credit ledger (section 4.10 / rule 6). Never mutate a
+ * running balance column — current outstanding is always the latest
+ * balance_after row for that customer. Locks the customer row first so two
+ * concurrent transactions for the same customer can't compute the same
+ * "balance_before" and race.
+ */
+class CreditLedgerService
+{
+    public function __construct(private PDO $pdo)
+    {
+    }
+
+    public function currentOutstanding(int $customerId): float
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT balance_after FROM credit_transactions
+             WHERE customer_id = :customer_id ORDER BY id DESC LIMIT 1'
+        );
+        $stmt->execute(['customer_id' => $customerId]);
+        $row = $stmt->fetch();
+        return $row ? (float) $row['balance_after'] : 0.0;
+    }
+
+    public function record(
+        int $customerId,
+        string $type,
+        float $amount,
+        ?int $invoiceId,
+        ?string $notes,
+        ?int $createdBy
+    ): float {
+        // Serialize concurrent writers for this customer.
+        $this->pdo->prepare('SELECT id FROM customers WHERE id = :id FOR UPDATE')
+            ->execute(['id' => $customerId]);
+
+        $balanceBefore = $this->currentOutstanding($customerId);
+        $signedAmount = $type === 'payment_received' ? -abs($amount) : abs($amount);
+        $balanceAfter = round($balanceBefore + $signedAmount, 2);
+
+        $this->pdo->prepare(
+            'INSERT INTO credit_transactions
+                (customer_id, transaction_type, amount, invoice_id, balance_before, balance_after, notes, created_by)
+             VALUES
+                (:customer_id, :type, :amount, :invoice_id, :balance_before, :balance_after, :notes, :created_by)'
+        )->execute([
+            'customer_id' => $customerId,
+            'type' => $type,
+            'amount' => abs($amount),
+            'invoice_id' => $invoiceId,
+            'balance_before' => $balanceBefore,
+            'balance_after' => $balanceAfter,
+            'notes' => $notes,
+            'created_by' => $createdBy,
+        ]);
+
+        return $balanceAfter;
+    }
+}

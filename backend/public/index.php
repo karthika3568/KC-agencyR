@@ -8,6 +8,7 @@ require_once __DIR__ . '/../config/database.php';
 use App\Controllers\AuthController;
 use App\Controllers\BranchScopedCrudController;
 use App\Controllers\CrudController;
+use App\Controllers\InvoiceController;
 use App\Controllers\ItemController;
 use App\Helpers\Response;
 use App\Helpers\Router;
@@ -130,6 +131,18 @@ $router->get('/api/suppliers', fn () => $suppliers->index());
 $router->post('/api/suppliers', fn () => $suppliers->store());
 $router->put('/api/suppliers/{id}', fn ($id) => $suppliers->update($id));
 $router->delete('/api/suppliers/{id}', fn ($id) => $suppliers->destroy($id));
+
+// ---------------------------------------------------------------
+// Invoices / POS billing (Phase 3)
+// ---------------------------------------------------------------
+$invoiceController = new InvoiceController($pdo);
+$router->get('/api/invoices', fn () => $invoiceController->index());
+$router->post('/api/invoices', fn () => $invoiceController->store());
+$router->get('/api/invoices/{id}', fn ($id) => $invoiceController->show($id));
+$router->put('/api/invoices/{id}', fn ($id) => $invoiceController->update($id));
+$router->delete('/api/invoices/{id}', fn ($id) => $invoiceController->destroy($id));
+$router->post('/api/invoices/{id}/complete', fn ($id) => $invoiceController->complete($id));
+$router->get('/api/invoices/{id}/print', fn ($id) => $invoiceController->print($id));
 
 try {
     $router->dispatch($method, $uri);

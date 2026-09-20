@@ -23,7 +23,7 @@ class ItemModel
     private const LIST_SELECT = "
         SELECT i.*, c.name AS category_name, b.name AS brand_name, pl.name AS product_line_name,
                bu.short_code AS base_unit_code, su.short_code AS secondary_unit_code,
-               tc.code AS tax_code, tc.gst_percent
+               tc.code AS tax_code, tc.gst_percent, tc.cess_percent
         FROM items i
         LEFT JOIN categories c ON c.id = i.category_id
         LEFT JOIN brands b ON b.id = i.brand_id

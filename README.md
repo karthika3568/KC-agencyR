@@ -1,4 +1,4 @@
-# POS / Distributor Billing System — Phase 1 + 2
+# POS / Distributor Billing System — Phase 1 + 2 + 3
 
 Multi-branch, role-based POS + distributor billing system.
 
@@ -8,8 +8,12 @@ Multi-branch, role-based POS + distributor billing system.
 - **Phase 2**: Catalog (categories, brands, product lines, tax codes, stock
   units, items with unit conversions, Excel import/export) and Parties
   (routes, cities, customers, suppliers — branch-scoped).
+- **Phase 3**: Core billing — stock ledger + audit trail, the POS screen
+  (GST/Non-GST, cart, discount, split payment, hold/resume), the atomic
+  invoice-completion transaction, thermal (80mm) + A4 print templates, and a
+  WhatsApp share link.
 
-Billing, stock movements, purchasing, and reports still don't exist — they
+Purchasing, returns, cash handover, and reports still don't exist — they
 land in later phases.
 
 ## Stack
@@ -32,6 +36,8 @@ land in later phases.
    2. `backend/database/seed.sql`
    3. `backend/database/schema_phase2.sql`
    4. `backend/database/seed_phase2.sql`
+   5. `backend/database/schema_phase3.sql`
+   6. `backend/database/seed_phase3.sql`
 
 Or from the command line:
 
@@ -40,6 +46,8 @@ mysql -u root -p pos_system < backend/database/schema.sql
 mysql -u root -p pos_system < backend/database/seed.sql
 mysql -u root -p pos_system < backend/database/schema_phase2.sql
 mysql -u root -p pos_system < backend/database/seed_phase2.sql
+mysql -u root -p pos_system < backend/database/schema_phase3.sql
+mysql -u root -p pos_system < backend/database/seed_phase3.sql
 ```
 
 ## 2. Backend setup
@@ -100,6 +108,62 @@ Open `http://localhost:5173` and log in.
   `CrudController`/`BranchScopedCrudController` for the ~10 lookup-style
   tables, and a dedicated `ItemModel`/`ItemController` for the richer
   items+unit-conversions+Excel flow.
+
+## Phase 3 — what's new
+
+- **Stock ledger** (`stock_ledger` + `stock_movements`): `StockLedgerService`
+  is the *only* code path allowed to change `quantity_on_hand` — every call
+  writes both the running balance and a full audit row in the same
+  transaction. Nothing in Phase 3 populates stock upward yet (no purchasing
+  module exists until Phase 4), so a sale can push a branch's quantity
+  negative — that's expected for now, not a bug, and will self-correct once
+  GRN/purchases land.
+- **POS screen** (`/pos`): GST/Non-GST toggle, customer picker (walk-in or a
+  branch customer), barcode-ready search (type or scan + Enter — a scanner is
+  just a fast typist), per-line qty/free-qty/discount/rate, live-computed bill
+  summary, Hold Bill / Complete & Print, Resume Held Bills with Discard.
+  Per-line discount is gated behind `pos.apply_discount`, rate override behind
+  `pos.edit_price_at_sale`, exactly as declared in the Phase 1 permission
+  registry.
+- **Invoice completion** (`InvoiceModel::complete`): one atomic transaction —
+  assigns the invoice number (`InvoiceNumberService`, locked per branch+series
+  with `SELECT ... FOR UPDATE`, only at completion, never at hold time, so a
+  discarded held bill never burns a number), deducts stock for every line,
+  inserts `invoice_payments`, and — if the payment doesn't fully cover the
+  total and a customer is attached — records the shortfall as `sale_credit` in
+  the append-only `credit_transactions` ledger via `CreditLedgerService`.
+  Held bills (`status='held'`) never touch any of this, per amendment 4.8a.
+- **Print + WhatsApp**: `/print/invoice/:id?format=thermal|a4` is a standalone
+  route (no sidebar chrome) that fetches a pre-computed print payload — tax
+  breakdown by GST slab, amount-in-words (`NumberToWords`, Indian
+  lakhs/crores), customer outstanding — and renders it via `window.print()`
+  with dedicated 80mm-thermal and A4 CSS. WhatsApp share is the MVP `wa.me`
+  deep link with a prefilled text summary (no PDF attachment — see
+  assumptions below).
+
+### Assumptions / deliberate simplifications in Phase 3
+
+- **IGST/interstate billing is not implemented.** Every sale computes
+  CGST+SGST only (an even split of the item's GST%); the spec itself lists
+  interstate billing as an open question to confirm with the client, so this
+  mirrors that. Adding it later means: a `state` column on `customers`, and a
+  branch-in-customer-state check in `InvoiceModel::computeTotals`.
+- **No PDF generation (`dompdf`) yet.** WhatsApp share sends a text summary
+  via `wa.me`, not a PDF link — `window.print()` (browser print dialog covers
+  saving as PDF manually) is what the spec says to ship first; a downloadable
+  PDF endpoint is a follow-up, not a Phase 3 blocker.
+- **No stock-availability check blocks a sale.** Since purchasing (Phase 4)
+  doesn't exist yet, there's no legitimate way stock could be positive yet
+  either — blocking oversell now would make the POS screen unusable for
+  testing. Revisit once GRN exists.
+- **Camera/photo OCR scan-to-cart (spec section 8.1–8.4) was not built.** It
+  needs a Tesseract OCR binary + another Composer package and is explicitly
+  scoped as "once the base cart is stable" — the barcode/type-ahead add-to-cart
+  flow is fully functional without it. Flag if you want it added now.
+- **Branch print settings** (bank details, UPI QR, custom terms &
+  conditions, thermal/A4 default) aren't built yet — that's Phase 6 Settings.
+  The print templates use the `branches` fields from Phase 1 and a
+  placeholder terms block.
 
 ## Default Super Admin login (seeded — change immediately)
 
