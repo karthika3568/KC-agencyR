@@ -1,0 +1,112 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Controllers;
+
+use App\Helpers\Response;
+use App\Middleware\JwtAuthMiddleware;
+use App\Middleware\PermissionMiddleware;
+use App\Models\SimpleCrudModel;
+use PDO;
+
+/**
+ * CRUD for entities that always belong to exactly one branch (routes,
+ * suppliers, customers — section 3.2/4.2 of the spec). A user without
+ * branches.switch_context is hard-locked to their own home branch on every
+ * read and write; ?branch_id= from the query string is ignored for them so
+ * they can never see or write another branch's rows just by editing the URL.
+ */
+class BranchScopedCrudController
+{
+    public function __construct(
+        private PDO $pdo,
+        private string $table,
+        private array $columns,
+        private string $managePermission,
+        private string $orderBy = 'id'
+    ) {
+    }
+
+    private function model(): SimpleCrudModel
+    {
+        return new SimpleCrudModel($this->pdo, $this->table, $this->columns, $this->orderBy);
+    }
+
+    private function resolveBranchId(array $claims): int
+    {
+        $homeBranch = $claims['branch_id'] ?? null;
+        $canSwitch = in_array('branches.switch_context', (array) ($claims['permissions'] ?? []), true);
+
+        if ($canSwitch && isset($_GET['branch_id'])) {
+            return (int) $_GET['branch_id'];
+        }
+
+        if ($homeBranch === null) {
+            Response::error('Your account has no home branch assigned', 422);
+        }
+
+        return (int) $homeBranch;
+    }
+
+    public function index(): void
+    {
+        $claims = JwtAuthMiddleware::authenticate();
+        $branchId = $this->resolveBranchId($claims);
+        Response::json($this->model()->all(['branch_id' => $branchId]));
+    }
+
+    public function show(string $id): void
+    {
+        $claims = JwtAuthMiddleware::authenticate();
+        $row = $this->findScoped($claims, (int) $id);
+        Response::json($row);
+    }
+
+    public function store(): void
+    {
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::require($claims, $this->managePermission);
+
+        $data = json_decode(file_get_contents('php://input'), true) ?? [];
+        $data['branch_id'] = $this->resolveBranchId($claims);
+
+        $id = $this->model()->create($data);
+        Response::json($this->model()->find($id), 201);
+    }
+
+    public function update(string $id): void
+    {
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::require($claims, $this->managePermission);
+
+        $row = $this->findScoped($claims, (int) $id);
+        $data = json_decode(file_get_contents('php://input'), true) ?? [];
+        unset($data['branch_id']); // branch is fixed at creation, never reassigned via update
+
+        $this->model()->update((int) $row['id'], $data);
+        Response::json($this->model()->find((int) $row['id']));
+    }
+
+    public function destroy(string $id): void
+    {
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::require($claims, $this->managePermission);
+
+        $row = $this->findScoped($claims, (int) $id);
+        $this->model()->delete((int) $row['id']);
+        Response::json(['deleted' => true]);
+    }
+
+    private function findScoped(array $claims, int $id): array
+    {
+        $branchId = $this->resolveBranchId($claims);
+        $row = $this->model()->find($id);
+
+        if (!$row || (int) $row['branch_id'] !== $branchId) {
+            Response::error('Not found', 404);
+        }
+
+        return $row;
+    }
+}

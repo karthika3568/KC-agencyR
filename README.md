@@ -1,10 +1,16 @@
-# POS / Distributor Billing System — Phase 1 (Foundation)
+# POS / Distributor Billing System — Phase 1 + 2
 
-Multi-branch, role-based POS + distributor billing system. This is **Phase 1
-only**: authentication, the permission registry, and a frontend shell whose
-sidebar/menus render according to the logged-in user's effective permissions.
-No catalog, billing, stock, or reports tables/screens exist yet — they land in
-later phases.
+Multi-branch, role-based POS + distributor billing system.
+
+- **Phase 1**: authentication, the permission registry, and a frontend shell
+  whose sidebar/menus render according to the logged-in user's effective
+  permissions.
+- **Phase 2**: Catalog (categories, brands, product lines, tax codes, stock
+  units, items with unit conversions, Excel import/export) and Parties
+  (routes, cities, customers, suppliers — branch-scoped).
+
+Billing, stock movements, purchasing, and reports still don't exist — they
+land in later phases.
 
 ## Stack
 
@@ -24,12 +30,16 @@ later phases.
 2. Import, **in this exact order**:
    1. `backend/database/schema.sql`
    2. `backend/database/seed.sql`
+   3. `backend/database/schema_phase2.sql`
+   4. `backend/database/seed_phase2.sql`
 
 Or from the command line:
 
 ```bash
 mysql -u root -p pos_system < backend/database/schema.sql
 mysql -u root -p pos_system < backend/database/seed.sql
+mysql -u root -p pos_system < backend/database/schema_phase2.sql
+mysql -u root -p pos_system < backend/database/seed_phase2.sql
 ```
 
 ## 2. Backend setup
@@ -65,6 +75,31 @@ npm run dev
 ```
 
 Open `http://localhost:5173` and log in.
+
+## Phase 2 — what's new
+
+- **Catalog** (`/catalog`): Items (with category/brand/product line/tax/unit
+  dropdowns and per-item alternate-unit conversions), Categories, Brands,
+  Product Lines, Tax Codes, Stock Units. List/view is open to any logged-in
+  user; create/update/delete requires `catalog.manage_items` — enforced
+  server-side by `PermissionMiddleware`, same as Phase 1.
+- **Items Excel import/export** (still under `/catalog` → Items tab):
+  "Download Template" gives a blank `.xlsx` with the expected headers,
+  "Preview" validates every row (unknown category/unit/tax-code, duplicate
+  item_code, missing item_name) without writing anything, and "Commit
+  Import" then inserts only the rows that passed validation — invalid rows
+  are reported back with their row number and specific error, never silently
+  dropped or partially inserted.
+- **Parties** (`/parties`): Customers, Suppliers, Routes, Cities. Routes,
+  Customers, and Suppliers are **branch-scoped** — a user without
+  `branches.switch_context` is hard-locked to their own home branch on every
+  read and write (the `?branch_id=` query param is ignored for them), so
+  editing the URL can't leak another branch's parties.
+- New backend pieces: a small regex `Router` (`backend/src/Helpers/Router.php`)
+  replacing the Phase 1 `switch` statement, a generic `SimpleCrudModel` +
+  `CrudController`/`BranchScopedCrudController` for the ~10 lookup-style
+  tables, and a dedicated `ItemModel`/`ItemController` for the richer
+  items+unit-conversions+Excel flow.
 
 ## Default Super Admin login (seeded — change immediately)
 

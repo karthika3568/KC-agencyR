@@ -3,6 +3,8 @@ import { ProtectedRoute } from './components/ProtectedRoute.jsx';
 import { AppShell } from './components/AppShell.jsx';
 import { Login } from './pages/Login.jsx';
 import { Dashboard } from './pages/Dashboard.jsx';
+import { Catalog } from './pages/Catalog.jsx';
+import { Parties } from './pages/Parties.jsx';
 import { StubPage } from './pages/StubPage.jsx';
 
 function Protected({ children }) {
@@ -19,7 +21,8 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/" element={<Protected><Dashboard /></Protected>} />
       <Route path="/pos" element={<Protected><StubPage title="POS" /></Protected>} />
-      <Route path="/catalog" element={<Protected><StubPage title="Catalog" /></Protected>} />
+      <Route path="/catalog" element={<Protected><Catalog /></Protected>} />
+      <Route path="/parties" element={<Protected><Parties /></Protected>} />
       <Route path="/reports" element={<Protected><StubPage title="Reports" /></Protected>} />
       <Route path="/staff" element={<Protected><StubPage title="Staff & Permissions" /></Protected>} />
     </Routes>
