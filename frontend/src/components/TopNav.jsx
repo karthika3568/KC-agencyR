@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   LayoutDashboard, ShoppingCart, Package, Users, Truck, Warehouse, RotateCcw,
   Wallet, Banknote, Receipt, BarChart3, ShieldCheck, Settings as SettingsIcon,
-  Building2, LogOut, ChevronDown, MapPin,
+  Building2, LogOut, ChevronDown, MapPin, FileText,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth.jsx';
 import { usePermission } from '../hooks/usePermission';
@@ -19,6 +19,7 @@ const NAV_ITEMS = [
   { to: '/purchasing', label: 'Purchasing', perm: 'purchases.create_grn', icon: Truck },
   { to: '/inventory', label: 'Inventory', perm: 'inventory.view_stock', icon: Warehouse },
   { to: '/returns', label: 'Returns', perm: 'returns.sales_return', icon: RotateCcw },
+  { to: '/invoices', label: 'Invoices', perm: 'pos.access', icon: FileText },
   { to: '/collections', label: 'Collections', perm: 'collections.field_collection_entry', icon: Wallet },
   { to: '/cash-handover', label: 'Cash Handover', perm: 'handover.submit_cash_handover', icon: Banknote },
   { to: '/expenses', label: 'Expenses', perm: 'expenses.manage', icon: Receipt },

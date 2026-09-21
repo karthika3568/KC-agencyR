@@ -11,6 +11,7 @@ import { Purchasing } from './pages/Purchasing.jsx';
 import { Inventory } from './pages/Inventory.jsx';
 import { Returns } from './pages/Returns.jsx';
 import { Collections } from './pages/Collections.jsx';
+import { InvoiceManagement } from './pages/InvoiceManagement.jsx';
 import { CashHandover } from './pages/CashHandover.jsx';
 import { Expenses } from './pages/Expenses.jsx';
 import { Reports } from './pages/Reports.jsx';
@@ -37,6 +38,7 @@ export default function App() {
       <Route path="/purchasing" element={<Protected><Purchasing /></Protected>} />
       <Route path="/inventory" element={<Protected><Inventory /></Protected>} />
       <Route path="/returns" element={<Protected><Returns /></Protected>} />
+      <Route path="/invoices" element={<Protected><InvoiceManagement /></Protected>} />
       <Route path="/collections" element={<Protected><Collections /></Protected>} />
       <Route path="/cash-handover" element={<Protected><CashHandover /></Protected>} />
       <Route path="/expenses" element={<Protected><Expenses /></Protected>} />

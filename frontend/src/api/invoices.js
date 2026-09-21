@@ -8,4 +8,5 @@ export const invoicesApi = {
   discard: async (id) => (await apiClient.delete(`/invoices/${id}`)).data,
   complete: async (id, payments) => (await apiClient.post(`/invoices/${id}/complete`, { payments })).data,
   print: async (id) => (await apiClient.get(`/invoices/${id}/print`)).data,
+  cancel: async (id, reason) => (await apiClient.post(`/invoices/${id}/cancel`, { reason })).data,
 };

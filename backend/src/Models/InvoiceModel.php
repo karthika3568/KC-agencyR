@@ -52,10 +52,12 @@ class InvoiceModel
     public function find(int $id): ?array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT i.*, c.ledger_name AS customer_name, c.phone AS customer_phone, u.name AS employee_name
+            'SELECT i.*, c.ledger_name AS customer_name, c.phone AS customer_phone, u.name AS employee_name,
+                    cu.name AS cancelled_by_name
              FROM invoices i
              LEFT JOIN customers c ON c.id = i.customer_id
              JOIN users u ON u.id = i.employee_id
+             LEFT JOIN users cu ON cu.id = i.cancelled_by
              WHERE i.id = :id'
         );
         $stmt->execute(['id' => $id]);
@@ -283,6 +285,85 @@ class InvoiceModel
                 'outstanding' => $customerOutstandingAfter,
                 'id' => $id,
             ]);
+
+            $this->pdo->commit();
+            return $this->find($id);
+        } catch (\Throwable $e) {
+            $this->pdo->rollBack();
+            throw $e;
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // Cancel — reverses stock + credit atomically, never a hard delete
+    // (the user's own decision: cancel + rebill only, no recalculating
+    // in-place edit of a completed invoice).
+    // -----------------------------------------------------------------
+
+    public function cancel(int $id, int $actorId, ?string $reason): array
+    {
+        $this->pdo->beginTransaction();
+        try {
+            $stmt = $this->pdo->prepare('SELECT * FROM invoices WHERE id = :id FOR UPDATE');
+            $stmt->execute(['id' => $id]);
+            $invoice = $stmt->fetch();
+
+            if (!$invoice) {
+                throw new \RuntimeException('Invoice not found');
+            }
+            if ($invoice['status'] !== 'completed') {
+                throw new \RuntimeException('Only a completed invoice can be cancelled');
+            }
+
+            $stmt = $this->pdo->prepare(
+                "SELECT id FROM sales_returns WHERE invoice_id = :id AND status <> 'rejected' LIMIT 1"
+            );
+            $stmt->execute(['id' => $id]);
+            if ($stmt->fetch()) {
+                throw new \RuntimeException('Cannot cancel — this invoice already has a sales return against it');
+            }
+
+            $stmt = $this->pdo->prepare('SELECT * FROM invoice_items WHERE invoice_id = :id');
+            $stmt->execute(['id' => $id]);
+            $items = $stmt->fetchAll();
+
+            $stockService = new StockLedgerService($this->pdo);
+            foreach ($items as $item) {
+                $qtyTotal = (float) $item['qty'] + (float) $item['free_qty'];
+                $stockService->applyMovement(
+                    (int) $item['item_id'],
+                    'branch',
+                    (int) $invoice['branch_id'],
+                    $qtyTotal,
+                    'sale_return',
+                    'invoices',
+                    $id,
+                    'invoice_cancelled',
+                    $reason,
+                    $actorId
+                );
+            }
+
+            // Only reverse whatever is still outstanding on this invoice —
+            // any part already collected via a customer payment has already
+            // reduced the ledger balance through that collection's own entry.
+            $outstanding = (float) $invoice['grand_total'] - (float) $invoice['paid_amount'];
+            if ($outstanding > 0.009 && $invoice['customer_id'] !== null) {
+                (new CreditLedgerService($this->pdo))->record(
+                    (int) $invoice['customer_id'],
+                    'credit_reversal',
+                    $outstanding,
+                    $id,
+                    'Invoice ' . $invoice['invoice_no'] . ' cancelled' . ($reason ? ": {$reason}" : ''),
+                    $actorId
+                );
+            }
+
+            $this->pdo->prepare(
+                "UPDATE invoices SET status = 'cancelled', payment_status = 'cancelled',
+                    cancelled_by = :by, cancelled_at = NOW(), cancel_reason = :reason
+                 WHERE id = :id"
+            )->execute(['by' => $actorId, 'reason' => $reason, 'id' => $id]);
 
             $this->pdo->commit();
             return $this->find($id);

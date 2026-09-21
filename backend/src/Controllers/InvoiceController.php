@@ -129,6 +129,23 @@ class InvoiceController
         Response::json($result);
     }
 
+    public function cancel(string $id): void
+    {
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::require($claims, 'pos.cancel_completed_invoice');
+
+        $this->requireOwnedInvoice($claims, (int) $id);
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+
+        try {
+            $result = $this->invoices->cancel((int) $id, (int) $claims['sub'], $body['reason'] ?? null);
+        } catch (\RuntimeException $e) {
+            Response::error($e->getMessage(), 422);
+        }
+
+        Response::json($result);
+    }
+
     /** GET /api/invoices/{id}/print — everything a print template needs, pre-computed. */
     public function print(string $id): void
     {

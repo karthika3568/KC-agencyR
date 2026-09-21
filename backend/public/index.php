@@ -178,6 +178,7 @@ $router->get('/api/invoices/{id}', fn ($id) => $invoiceController->show($id));
 $router->put('/api/invoices/{id}', fn ($id) => $invoiceController->update($id));
 $router->delete('/api/invoices/{id}', fn ($id) => $invoiceController->destroy($id));
 $router->post('/api/invoices/{id}/complete', fn ($id) => $invoiceController->complete($id));
+$router->post('/api/invoices/{id}/cancel', fn ($id) => $invoiceController->cancel($id));
 $router->get('/api/invoices/{id}/print', fn ($id) => $invoiceController->print($id));
 
 // ---------------------------------------------------------------
