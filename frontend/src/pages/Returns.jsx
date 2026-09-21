@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { X } from 'lucide-react';
 import { itemsApi } from '../api/catalog';
 import { customersApi, suppliersApi } from '../api/parties';
 import { invoicesApi } from '../api/invoices';
@@ -22,7 +23,7 @@ function ReturnLineEditor({ lines, setLines, items }) {
           </select>
           <input type="number" step="any" placeholder="Qty" value={line.qty} onChange={(e) => updateLine(idx, { qty: e.target.value })} className="input w-20" />
           <input type="number" step="any" placeholder="Rate" value={line.rate} onChange={(e) => updateLine(idx, { rate: e.target.value })} className="input w-24" />
-          <button onClick={() => removeLine(idx)} className="text-xs text-red-600">&times;</button>
+          <button onClick={() => removeLine(idx)} className="text-red-600"><X size={14} /></button>
         </div>
       ))}
       <button onClick={addLine} className="self-start text-xs font-medium text-gold hover:underline">+ Add line</button>

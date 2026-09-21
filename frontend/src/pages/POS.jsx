@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Search, ScanBarcode, Plus, UserPlus, Grid2x2, List, Minus, Trash2, Clock, Barcode } from 'lucide-react';
+import { Search, ScanBarcode, Plus, UserPlus, Grid2x2, List, Minus, Trash2, Clock, Barcode, X } from 'lucide-react';
 import { itemsApi, stockUnitsApi, categoriesApi } from '../api/catalog';
 import { customersApi } from '../api/parties';
 import { invoicesApi } from '../api/invoices';
@@ -570,8 +570,8 @@ export function POS() {
                         }
                         className="input w-24"
                       />
-                      <button onClick={() => setPayments((prev) => prev.filter((_, i) => i !== idx))} className="text-xs text-danger">
-                        &times;
+                      <button onClick={() => setPayments((prev) => prev.filter((_, i) => i !== idx))} className="text-danger">
+                        <X size={14} />
                       </button>
                     </div>
                   ))}

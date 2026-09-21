@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { X } from 'lucide-react';
 import { itemsApi } from '../api/catalog';
 import { suppliersApi } from '../api/parties';
 import { purchaseRequestsApi, purchasesApi, supplierPaymentsApi } from '../api/purchasing';
@@ -27,7 +28,7 @@ function ItemLineEditor({ lines, setLines, items, showTax }) {
           {showTax && (
             <input type="number" step="any" placeholder="Free qty" value={line.free_qty} onChange={(e) => updateLine(idx, { free_qty: e.target.value })} className="input w-24" />
           )}
-          <button onClick={() => removeLine(idx)} className="text-xs text-red-600">&times;</button>
+          <button onClick={() => removeLine(idx)} className="text-red-600"><X size={14} /></button>
         </div>
       ))}
       <button onClick={addLine} className="self-start text-xs font-medium text-gold hover:underline">+ Add line</button>

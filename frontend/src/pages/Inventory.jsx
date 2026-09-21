@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { X } from 'lucide-react';
 import { itemsApi } from '../api/catalog';
 import { usersApi } from '../api/users';
 import { stockAdjustmentsApi, stockHubApi, vanStockApi } from '../api/purchasing';
@@ -224,7 +225,7 @@ function VanStockPanel({ canManage }) {
                   {items.map((i) => <option key={i.id} value={i.id}>{i.item_name}</option>)}
                 </select>
                 <input type="number" step="any" value={line.qty} onChange={(e) => updateLine(idx, { qty: e.target.value })} className="input w-24" />
-                <button onClick={() => removeLine(idx)} className="text-xs text-red-600">&times;</button>
+                <button onClick={() => removeLine(idx)} className="text-red-600"><X size={14} /></button>
               </div>
             ))}
             <button onClick={addLine} className="self-start text-xs font-medium text-gold hover:underline">+ Add line</button>
