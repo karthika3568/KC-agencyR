@@ -212,7 +212,7 @@ class ItemController
             Response::error('Only JPG, PNG or WEBP images are allowed', 422);
         }
 
-        $tesseractPath = trim((string) (@shell_exec('where tesseract 2>NUL') ?: @shell_exec('command -v tesseract 2>/dev/null')));
+        $tesseractPath = $this->findTesseractBinary();
         if ($tesseractPath === '') {
             Response::json([
                 'engine_available' => false,
@@ -223,9 +223,8 @@ class ItemController
             return;
         }
 
-        $firstLine = strtok($tesseractPath, "\r\n");
         $outputBase = sys_get_temp_dir() . '/ocr_' . bin2hex(random_bytes(6));
-        $cmd = escapeshellarg($firstLine) . ' ' . escapeshellarg($file['tmp_name']) . ' ' . escapeshellarg($outputBase) . ' 2>&1';
+        $cmd = escapeshellarg($tesseractPath) . ' ' . escapeshellarg($file['tmp_name']) . ' ' . escapeshellarg($outputBase) . ' 2>&1';
         exec($cmd);
         $textFile = $outputBase . '.txt';
         $text = is_file($textFile) ? (string) file_get_contents($textFile) : '';
@@ -265,6 +264,32 @@ class ItemController
             'extracted_text' => trim($text),
             'matches' => array_slice(array_map(fn ($s) => $s['item'], $scored), 0, 5),
         ]);
+    }
+
+    /**
+     * Locates the tesseract binary. `where`/`which` only see PATH, but a
+     * Windows install commonly isn't on PATH at all (the installer doesn't
+     * always add it, and even when it does, Apache/PHP's own process
+     * environment may not pick up a later PATH change without a restart) —
+     * so fall back to the well-known default install directories.
+     */
+    private function findTesseractBinary(): string
+    {
+        $fromPath = trim((string) (@shell_exec('where tesseract 2>NUL') ?: @shell_exec('command -v tesseract 2>/dev/null') ?: ''));
+        if ($fromPath !== '') {
+            return strtok($fromPath, "\r\n");
+        }
+
+        foreach ([
+            'C:\\Program Files\\Tesseract-OCR\\tesseract.exe',
+            'C:\\Program Files (x86)\\Tesseract-OCR\\tesseract.exe',
+        ] as $candidate) {
+            if (is_file($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return '';
     }
 
     private function validate(array $body): array
