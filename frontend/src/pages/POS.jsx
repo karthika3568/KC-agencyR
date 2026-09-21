@@ -52,6 +52,7 @@ export function POS() {
   const [payments, setPayments] = useState([{ payment_method: 'cash', amount: 0, reference_no: '' }]);
   const [message, setMessage] = useState('');
   const [printingInvoiceId, setPrintingInvoiceId] = useState(null);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [activeCategory, setActiveCategory] = useState('all');
   const [viewMode, setViewMode] = useState('grid');
   const searchInputRef = useRef(null);
@@ -103,6 +104,19 @@ export function POS() {
       setPayments((prev) => [{ ...prev[0], amount: totals.grandTotal }]);
     }
   }, [totals.grandTotal, splitMode]);
+
+  // Section: keyboard shortcuts — Ctrl+S opens Payment instead of the
+  // browser's Save dialog, so a cashier never has to touch the mouse.
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (cart.length > 0) setShowPaymentModal(true);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [cart.length]);
 
   const addItem = (item) => {
     setCart((prev) => {
@@ -182,6 +196,7 @@ export function POS() {
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['invoices', 'held'] });
+      setShowPaymentModal(false);
       setPrintingInvoiceId(result.id);
       resetBill();
       setMessage(`Invoice ${result.invoice_no} completed.`);
@@ -527,78 +542,15 @@ export function POS() {
               <span className="text-xl font-bold text-ink">Rs. {totals.grandTotal.toFixed(2)}</span>
             </div>
 
-            <div className="mt-3 border-t border-border-soft pt-3">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-sm font-semibold text-ink">Payment</span>
-                <label className="flex items-center gap-1 text-xs text-ink-muted">
-                  <input type="checkbox" checked={splitMode} onChange={(e) => setSplitMode(e.target.checked)} />
-                  Split Payment
-                </label>
-              </div>
-
-              {!splitMode ? (
-                <div className="flex flex-wrap gap-2">
-                  {PAYMENT_METHODS.map((m) => (
-                    <button
-                      key={m}
-                      onClick={() => setPayments([{ payment_method: m, amount: totals.grandTotal, reference_no: '' }])}
-                      className={`rounded-full px-2.5 py-1 text-xs font-medium capitalize ${
-                        payments[0]?.payment_method === m ? 'bg-gold text-white' : 'border border-border-soft bg-white text-ink-muted'
-                      }`}
-                    >
-                      {m}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  {payments.map((p, idx) => (
-                    <div key={idx} className="flex gap-1">
-                      <select
-                        value={p.payment_method}
-                        onChange={(e) =>
-                          setPayments((prev) => prev.map((row, i) => (i === idx ? { ...row, payment_method: e.target.value } : row)))
-                        }
-                        className="input w-24"
-                      >
-                        {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
-                      </select>
-                      <input
-                        type="number"
-                        step="any"
-                        value={p.amount}
-                        onChange={(e) =>
-                          setPayments((prev) => prev.map((row, i) => (i === idx ? { ...row, amount: e.target.value } : row)))
-                        }
-                        className="input w-24"
-                      />
-                      <button onClick={() => setPayments((prev) => prev.filter((_, i) => i !== idx))} className="text-danger">
-                        <X size={14} />
-                      </button>
-                    </div>
-                  ))}
-                  <button
-                    onClick={() => setPayments((prev) => [...prev, { payment_method: 'cash', amount: 0, reference_no: '' }])}
-                    className="self-start text-xs font-medium text-gold hover:underline"
-                  >
-                    + Add payment line
-                  </button>
-                </div>
-              )}
-
-              <div className={`mt-2 text-xs ${remaining > 0.009 ? 'text-warning' : 'text-ink-muted'}`}>
-                {remaining > 0.009 ? `Rs. ${remaining.toFixed(2)} will go on customer credit` : 'Fully covered'}
-              </div>
-            </div>
-
             <Button
               variant="primary"
               size="lg"
               className="mt-4 w-full"
-              onClick={() => completeMutation.mutate()}
-              disabled={cart.length === 0 || completeMutation.isPending}
+              onClick={() => setShowPaymentModal(true)}
+              disabled={cart.length === 0}
+              shortcut="Ctrl+S"
             >
-              Pay Now
+              Proceed to Payment
             </Button>
             <div className="mt-2 grid grid-cols-2 gap-2">
               <Button variant="secondary" onClick={() => saveMutation.mutate()} disabled={cart.length === 0 || saveMutation.isPending}>
@@ -608,12 +560,92 @@ export function POS() {
                 Clear
               </Button>
             </div>
-            {completeMutation.isError && (
-              <p className="mt-2 text-sm text-danger">{completeMutation.error?.response?.data?.error || 'Failed to complete'}</p>
-            )}
           </Card>
         </div>
       </div>
+
+      {showPaymentModal && (
+        <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/30 p-4">
+          <div className="w-[420px] card p-5">
+            <div className="mb-3 flex items-center justify-between">
+              <span className="text-lg font-semibold text-ink">Payment</span>
+              <span className="text-xl font-bold text-ink">Rs. {totals.grandTotal.toFixed(2)}</span>
+            </div>
+
+            <label className="mb-2 flex items-center gap-1 text-xs text-ink-muted">
+              <input type="checkbox" checked={splitMode} onChange={(e) => setSplitMode(e.target.checked)} />
+              Split Payment
+            </label>
+
+            {!splitMode ? (
+              <div className="flex flex-wrap gap-2">
+                {PAYMENT_METHODS.map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setPayments([{ payment_method: m, amount: totals.grandTotal, reference_no: '' }])}
+                    className={`rounded-full px-3 py-1.5 text-sm font-medium capitalize ${
+                      payments[0]?.payment_method === m ? 'bg-gold text-white' : 'border border-border-soft bg-white text-ink-muted'
+                    }`}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {payments.map((p, idx) => (
+                  <div key={idx} className="flex gap-1">
+                    <select
+                      value={p.payment_method}
+                      onChange={(e) =>
+                        setPayments((prev) => prev.map((row, i) => (i === idx ? { ...row, payment_method: e.target.value } : row)))
+                      }
+                      className="input w-28"
+                    >
+                      {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                    <input
+                      type="number"
+                      step="any"
+                      value={p.amount}
+                      onChange={(e) =>
+                        setPayments((prev) => prev.map((row, i) => (i === idx ? { ...row, amount: e.target.value } : row)))
+                      }
+                      className="input flex-1"
+                    />
+                    <button onClick={() => setPayments((prev) => prev.filter((_, i) => i !== idx))} className="text-danger">
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  onClick={() => setPayments((prev) => [...prev, { payment_method: 'cash', amount: 0, reference_no: '' }])}
+                  className="self-start text-xs font-medium text-gold hover:underline"
+                >
+                  + Add payment line
+                </button>
+              </div>
+            )}
+
+            <div className={`mt-3 text-sm ${remaining > 0.009 ? 'text-warning' : 'text-ink-muted'}`}>
+              {remaining > 0.009 ? `Rs. ${remaining.toFixed(2)} will go on customer credit` : 'Fully covered'}
+            </div>
+
+            {completeMutation.isError && (
+              <p className="mt-2 text-sm text-danger">{completeMutation.error?.response?.data?.error || 'Failed to complete'}</p>
+            )}
+
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="secondary" onClick={() => setShowPaymentModal(false)} disabled={completeMutation.isPending}>
+                Back
+              </Button>
+              <Button onClick={() => completeMutation.mutate()} disabled={completeMutation.isPending}>
+                Pay Now
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {printingInvoiceId && <PrintPreviewModal invoiceId={printingInvoiceId} onClose={() => setPrintingInvoiceId(null)} />}
     </div>
