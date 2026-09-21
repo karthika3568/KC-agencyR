@@ -8,6 +8,7 @@ use App\Helpers\Response;
 use App\Middleware\JwtAuthMiddleware;
 use App\Middleware\PermissionMiddleware;
 use App\Models\ItemModel;
+use App\Services\StockLedgerService;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 
@@ -75,6 +76,21 @@ class ItemController
         }
 
         $id = $this->items->create($body, $body['unit_conversions'] ?? [], $body['branch_ids'] ?? null);
+
+        // Opening stock — same movement type as an item created before this
+        // system existed but already carrying some quantity. Applied once,
+        // at creation only, to every branch this item ended up mapped to.
+        $openingStock = (float) ($body['opening_stock'] ?? 0);
+        if ($openingStock > 0.009) {
+            $stock = new StockLedgerService($this->pdo);
+            foreach ($this->items->branchIdsFor($id) as $branchId) {
+                $stock->applyMovement(
+                    $id, 'branch', $branchId, $openingStock, 'opening_stock',
+                    'items', $id, null, 'Opening stock at item creation', (int) $claims['sub']
+                );
+            }
+        }
+
         Response::json($this->items->find($id), 201);
     }
 

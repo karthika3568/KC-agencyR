@@ -151,7 +151,19 @@ $customers = new BranchScopedCrudController(
     $pdo, 'customers',
     ['branch_id', 'city_id', 'route_id', 'ledger_name', 'print_name', 'phone', 'gstin', 'address',
      'credit_limit', 'opening_balance', 'is_local_customer', 'status'],
-    'parties.manage_customers'
+    'parties.manage_customers',
+    onCreated: function ($id, $saved, $claims) use ($pdo) {
+        // opening_balance is just a number on the row until it's actually
+        // posted to the ledger — without this, "previous amount" never
+        // shows up as real outstanding credit anywhere (section: opening
+        // balance must behave like a real balance, not a decorative field).
+        $amount = (float) ($saved['opening_balance'] ?? 0);
+        if ($amount > 0.009) {
+            (new \App\Services\CreditLedgerService($pdo))->record(
+                $id, 'sale_credit', $amount, null, 'Opening balance', (int) $claims['sub']
+            );
+        }
+    }
 );
 $router->get('/api/customers', fn () => $customers->index());
 $router->post('/api/customers', fn () => $customers->store());
@@ -161,7 +173,15 @@ $router->delete('/api/customers/{id}', fn ($id) => $customers->destroy($id));
 $suppliers = new BranchScopedCrudController(
     $pdo, 'suppliers',
     ['branch_id', 'name', 'phone', 'address', 'gstin', 'opening_balance', 'status'],
-    'parties.manage_suppliers'
+    'parties.manage_suppliers',
+    onCreated: function ($id, $saved, $claims) use ($pdo) {
+        $amount = (float) ($saved['opening_balance'] ?? 0);
+        if ($amount > 0.009) {
+            (new \App\Services\SupplierLedgerService($pdo))->record(
+                $id, 'purchase_credit', $amount, null, null, 'Opening balance', (int) $claims['sub']
+            );
+        }
+    }
 );
 $router->get('/api/suppliers', fn () => $suppliers->index());
 $router->post('/api/suppliers', fn () => $suppliers->store());

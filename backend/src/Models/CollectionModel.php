@@ -83,11 +83,15 @@ class CollectionModel
         try {
             $unpaid = $this->unpaidInvoicesForCustomer($customerId);
             $byId = array_column($unpaid, null, 'id');
+            $ledger = new CreditLedgerService($this->pdo);
 
             // Section 30: a collection must never exceed the customer's total
             // pending credit — reject up front rather than silently
-            // truncating the allocation to whatever fits.
-            $totalOutstanding = round(array_sum(array_column($unpaid, 'balance_due')), 2);
+            // truncating the allocation to whatever fits. The ledger's
+            // running balance is the true total (it also includes an
+            // opening balance that isn't tied to any invoice), not just
+            // what's left unpaid across actual invoices.
+            $totalOutstanding = $ledger->currentOutstanding($customerId);
             if ($amount > $totalOutstanding + 0.009) {
                 throw new \RuntimeException(sprintf(
                     'Payment amount (%.2f) exceeds this customer\'s total pending credit of %.2f',
@@ -118,9 +122,13 @@ class CollectionModel
                 }
             }
 
+            // $allocatedTotal only covers the part tied to a specific
+            // invoice — the rest (e.g. paying down an opening balance with
+            // no invoice to attach to) is still real money collected, so
+            // the collection/ledger amount is $amount itself.
             $allocatedTotal = round(array_sum($allocations), 2);
-            if ($allocatedTotal <= 0) {
-                throw new \RuntimeException('Nothing to allocate — customer has no outstanding invoices matching this collection');
+            if ($amount <= 0.009) {
+                throw new \RuntimeException('Nothing to allocate — customer has no outstanding balance matching this collection');
             }
 
             $stmt = $this->pdo->prepare(
@@ -128,7 +136,7 @@ class CollectionModel
                  VALUES (:customer_id, :branch_id, :amount, :payment_method, :collected_by, :route_id)'
             );
             $stmt->execute([
-                'customer_id' => $customerId, 'branch_id' => $branchId, 'amount' => $allocatedTotal,
+                'customer_id' => $customerId, 'branch_id' => $branchId, 'amount' => $amount,
                 'payment_method' => $paymentMethod, 'collected_by' => $collectedBy, 'route_id' => $routeId,
             ]);
             $collectionId = (int) $this->pdo->lastInsertId();
@@ -153,17 +161,17 @@ class CollectionModel
                 $updateStmt->execute(['amount' => $allocated, 'amount2' => $allocated, 'id' => $invoiceId]);
             }
 
-            (new CreditLedgerService($this->pdo))->record(
+            $ledger->record(
                 $customerId,
                 'payment_received',
-                $allocatedTotal,
+                $amount,
                 null,
                 "Collection " . CodeGenerator::fromId('REC', $collectionId),
                 $collectedBy
             );
 
             $this->pdo->commit();
-            return ['collection_id' => $collectionId, 'allocated_total' => $allocatedTotal, 'allocations' => $allocations];
+            return ['collection_id' => $collectionId, 'allocated_total' => $amount, 'allocations' => $allocations];
         } catch (\Throwable $e) {
             $this->pdo->rollBack();
             throw $e;

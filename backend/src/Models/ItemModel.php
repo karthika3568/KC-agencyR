@@ -114,8 +114,18 @@ class ItemModel
      * when omitted so a plain create (e.g. via import) doesn't silently
      * create an item nobody can sell anywhere.
      */
+    /** Blank string isn't "no barcode" to a UNIQUE index the way NULL is — every blank would collide. */
+    private function normalizeBarcode(array $data): array
+    {
+        if (array_key_exists('barcode', $data) && trim((string) $data['barcode']) === '') {
+            $data['barcode'] = null;
+        }
+        return $data;
+    }
+
     public function create(array $data, array $unitConversions = [], ?array $branchIds = null): int
     {
+        $data = $this->normalizeBarcode($data);
         $this->pdo->beginTransaction();
         try {
             $columns = array_intersect_key($data, array_flip(self::WRITABLE_COLUMNS));
@@ -145,6 +155,7 @@ class ItemModel
 
     public function update(int $id, array $data, ?array $unitConversions = null, ?array $branchIds = null): void
     {
+        $data = $this->normalizeBarcode($data);
         $this->pdo->beginTransaction();
         try {
             $columns = array_intersect_key($data, array_flip(self::WRITABLE_COLUMNS));

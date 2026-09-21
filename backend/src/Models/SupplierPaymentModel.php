@@ -49,10 +49,13 @@ class SupplierPaymentModel
             $purchases = new PurchaseModel($this->pdo);
             $unpaid = $purchases->unpaidForSupplier($supplierId);
             $byId = array_column($unpaid, null, 'id');
+            $ledger = new SupplierLedgerService($this->pdo);
 
-            // Section 30: same rule applies to supplier payments — never
-            // allow paying more than what's actually outstanding.
-            $totalOutstanding = round(array_sum(array_column($unpaid, 'pending_balance')), 2);
+            // The ledger's running balance is the true total payable — it
+            // also includes an opening balance or any adjustment that isn't
+            // tied to a specific GRN, which summing unpaid GRNs alone would
+            // miss entirely.
+            $totalOutstanding = $ledger->currentPayable($supplierId);
             if ($amount > $totalOutstanding + 0.009) {
                 throw new \RuntimeException(sprintf(
                     'Payment amount (%.2f) exceeds this supplier\'s total pending balance of %.2f',
@@ -83,9 +86,14 @@ class SupplierPaymentModel
                 }
             }
 
+            // $allocatedTotal only covers the part of this payment tied to a
+            // specific GRN — the rest (e.g. paying down an opening balance,
+            // which has no purchase row to attach to) still counts as real
+            // money paid, so the payment/ledger amount is $amount itself,
+            // never just what happened to land on a GRN.
             $allocatedTotal = round(array_sum($allocations), 2);
-            if ($allocatedTotal <= 0) {
-                throw new \RuntimeException('Nothing to allocate — supplier has no outstanding GRNs matching this payment');
+            if ($amount <= 0.009) {
+                throw new \RuntimeException('Nothing to allocate — supplier has no outstanding balance matching this payment');
             }
 
             $stmt = $this->pdo->prepare(
@@ -95,7 +103,7 @@ class SupplierPaymentModel
             $stmt->execute([
                 'supplier_id' => $supplierId,
                 'branch_id' => $branchId,
-                'amount' => $allocatedTotal,
+                'amount' => $amount,
                 'payment_mode' => $paymentMode,
                 'reference_no' => $referenceNo,
                 'notes' => $notes,
@@ -121,10 +129,10 @@ class SupplierPaymentModel
                 $updateStmt->execute(['amount' => $allocated, 'id' => $purchaseId]);
             }
 
-            (new SupplierLedgerService($this->pdo))->record(
+            $ledger->record(
                 $supplierId,
                 'payment_made',
-                $allocatedTotal,
+                $amount,
                 null,
                 $paymentId,
                 "Payment " . CodeGenerator::fromId('PAY', $paymentId),
@@ -132,7 +140,7 @@ class SupplierPaymentModel
             );
 
             $this->pdo->commit();
-            return ['payment_id' => $paymentId, 'allocated_total' => $allocatedTotal, 'allocations' => $allocations];
+            return ['payment_id' => $paymentId, 'allocated_total' => $amount, 'allocations' => $allocations];
         } catch (\Throwable $e) {
             $this->pdo->rollBack();
             throw $e;

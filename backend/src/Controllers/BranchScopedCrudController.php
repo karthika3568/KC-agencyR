@@ -34,7 +34,9 @@ class BranchScopedCrudController
         private string $orderBy = 'id',
         private ?string $codePrefix = null,
         private string $codeColumn = 'code',
-        private array $autoDefaults = []
+        private array $autoDefaults = [],
+        /** fn(int $id, array $savedRow, array $claims): void — fired once, right after create commits. */
+        private $onCreated = null
     ) {
     }
 
@@ -92,7 +94,13 @@ class BranchScopedCrudController
             $this->model()->update($id, [$this->codeColumn => CodeGenerator::fromId($this->codePrefix, $id)]);
         }
 
-        Response::json($this->model()->find($id), 201);
+        $saved = $this->model()->find($id);
+
+        if ($this->onCreated !== null) {
+            ($this->onCreated)($id, $saved, $claims);
+        }
+
+        Response::json($saved, 201);
     }
 
     public function update(string $id): void

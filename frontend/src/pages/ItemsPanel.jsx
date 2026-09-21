@@ -10,7 +10,7 @@ const emptyForm = {
   item_name: '', category_id: '', brand_id: '', product_line_id: '', supplier_id: '',
   hsn_code: '', barcode: '', base_unit_id: '', secondary_unit_id: '', tax_code_id: '',
   purchase_price: '', cost_price: '', wholesale_price: '', retail_price: '', mrp: '', min_stock_threshold: '',
-  is_active: true,
+  is_active: true, opening_stock: '',
 };
 
 function toNullableInt(v) {
@@ -156,6 +156,11 @@ function ItemFormModal({ item, onClose }) {
       branch_ids: selectedBranches,
       unit_conversions: unitConversions,
     };
+    if (!isEdit) {
+      payload.opening_stock = Number(form.opening_stock || 0);
+    } else {
+      delete payload.opening_stock;
+    }
 
     try {
       let savedId = item?.id;
@@ -242,6 +247,11 @@ function ItemFormModal({ item, onClose }) {
           <Field label="Retail price"><input type="number" step="any" value={form.retail_price} onChange={(e) => update('retail_price', e.target.value)} className="input" /></Field>
           <Field label="MRP"><input type="number" step="any" value={form.mrp} onChange={(e) => update('mrp', e.target.value)} className="input" /></Field>
           <Field label="Min stock threshold"><input type="number" step="any" value={form.min_stock_threshold} onChange={(e) => update('min_stock_threshold', e.target.value)} className="input" /></Field>
+          {!isEdit && (
+            <Field label="Opening stock (per branch below)">
+              <input type="number" step="any" min="0" value={form.opening_stock} onChange={(e) => update('opening_stock', e.target.value)} className="input" />
+            </Field>
+          )}
           <Field label="Active?">
             <select value={form.is_active ? '1' : '0'} onChange={(e) => update('is_active', e.target.value === '1')} className="input">
               <option value="1">Active</option>
