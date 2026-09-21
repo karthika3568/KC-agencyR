@@ -129,6 +129,36 @@ class InvoiceController
         Response::json($result);
     }
 
+    /** PUT /api/invoices/{id}/edit — in-place edit of a COMPLETED invoice (distinct from update(), which is held-bill only). */
+    public function editCompleted(string $id): void
+    {
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::require($claims, 'pos.edit_completed_invoice');
+
+        $existing = $this->requireOwnedInvoice($claims, (int) $id);
+        if ($existing['status'] !== 'completed') {
+            Response::error('Only a completed invoice can be edited this way', 422);
+        }
+
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        // bill_type (GST vs Non-GST) is immutable once an invoice number has
+        // been assigned under that series — never take it from the request.
+        $body['bill_type'] = $existing['bill_type'];
+
+        [$header, $lines, $error] = $this->prepareInvoice($claims, (int) $existing['branch_id'], $body);
+        if ($error) {
+            Response::error($error, 422);
+        }
+
+        try {
+            $result = $this->invoices->editCompleted((int) $id, $header, $lines, (int) $claims['sub']);
+        } catch (\RuntimeException $e) {
+            Response::error($e->getMessage(), 422);
+        }
+
+        Response::json($result);
+    }
+
     public function cancel(string $id): void
     {
         $claims = JwtAuthMiddleware::authenticate();

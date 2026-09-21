@@ -32,6 +32,7 @@ INSERT INTO permissions (module, code, label, description) VALUES
 ('pos', 'pos.non_gst_billing', 'Create Non-GST / estimate bills', 'Use the Non-GST / estimate billing mode'),
 ('pos', 'pos.camera_scan_items', 'Camera scan-to-cart', 'Use the camera/photo OCR item scanner'),
 ('pos', 'pos.cancel_completed_invoice', 'Cancel a completed invoice', 'Void a completed bill, reversing its stock and credit effects'),
+('pos', 'pos.edit_completed_invoice', 'Edit a completed invoice', 'Change items/qty/rate/discount on a completed bill, with stock and credit corrected automatically'),
 ('orders', 'orders.create_prebooking', 'Create pre-booking orders', 'Create customer pre-booking/sales orders'),
 ('orders', 'orders.create_purchase_indent', 'Create purchase indents', 'Raise a purchase request/indent to a supplier'),
 ('returns', 'returns.sales_return', 'Process sales returns', 'Create a sales return against/without an invoice'),

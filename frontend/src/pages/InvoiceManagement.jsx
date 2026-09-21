@@ -1,7 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Eye, Printer, Ban, Search } from 'lucide-react';
+import { Eye, Printer, Ban, Search, Pencil, Trash2 } from 'lucide-react';
 import { invoicesApi } from '../api/invoices';
+import { itemsApi } from '../api/catalog';
+import { customersApi } from '../api/parties';
+import { priceLine, computeCartTotals } from '../utils/pricing';
 import { Card } from '../components/Card.jsx';
 import { Badge } from '../components/Badge.jsx';
 import { Button } from '../components/Button.jsx';
@@ -24,6 +27,7 @@ function ViewModal({ id, onClose }) {
         </div>
         <div className="mb-3 text-xs text-ink-muted">
           {data.customer_name || 'Walk-in'} · {data.invoice_date} · Billed by {data.employee_name}
+          {data.edited_at && <span> · Last edited {data.edited_at}</span>}
         </div>
         <table className="mb-3 w-full text-xs">
           <thead>
@@ -82,13 +86,252 @@ function CancelModal({ invoice, onClose, onConfirm, error }) {
   );
 }
 
+function EditModal({ id, onClose }) {
+  const queryClient = useQueryClient();
+  const canDiscount = usePermission('pos.apply_discount');
+  const canEditPrice = usePermission('pos.edit_price_at_sale');
+
+  const invoiceQuery = useQuery({ queryKey: ['invoice', id], queryFn: () => invoicesApi.get(id) });
+  const itemsQuery = useQuery({ queryKey: ['items', ''], queryFn: () => itemsApi.list('') });
+  const customersQuery = useQuery({ queryKey: ['customers'], queryFn: customersApi.list });
+
+  const [customerId, setCustomerId] = useState('');
+  const [lines, setLines] = useState(null); // null until invoice loads
+  const [error, setError] = useState('');
+  const [confirming, setConfirming] = useState(false);
+  const [success, setSuccess] = useState(false);
+
+  useEffect(() => {
+    if (invoiceQuery.data && lines === null) {
+      const inv = invoiceQuery.data;
+      setCustomerId(inv.customer_id ?? '');
+      setLines(
+        inv.items.map((it) => ({
+          key: `${it.id}-${Math.random()}`,
+          item: {
+            id: it.item_id,
+            item_name: it.item_name_snapshot,
+            retail_price: it.rate,
+            gst_percent: it.tax_percent,
+            cess_percent: 0,
+            base_unit_id: it.unit_id,
+          },
+          qty: Number(it.qty),
+          free_qty: Number(it.free_qty),
+          discount_percent: Number(it.discount_percent),
+          discount_amount: Number(it.discount_amount) > 0 ? Number(it.discount_amount) : '',
+          discount_mode: Number(it.discount_amount) > 0 && Number(it.discount_percent) === 0 ? 'amount' : 'percent',
+          unit_id: it.unit_id,
+          rate: Number(it.rate),
+        }))
+      );
+    }
+  }, [invoiceQuery.data, lines]);
+
+  const items = itemsQuery.data || [];
+  const customers = customersQuery.data || [];
+  const invoice = invoiceQuery.data;
+
+  const pricedLines = useMemo(
+    () =>
+      (lines || []).map((line) => ({
+        ...line,
+        priced: priceLine(line.item, line.discount_mode === 'amount' ? { ...line, discount_percent: 0 } : { ...line, discount_amount: '' }),
+      })),
+    [lines]
+  );
+  const totals = useMemo(() => computeCartTotals(pricedLines.map((l) => l.priced)), [pricedLines]);
+
+  const updateLine = (key, patch) => setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
+  const removeLine = (key) => setLines((prev) => prev.filter((l) => l.key !== key));
+  const addLine = (itemId) => {
+    const item = items.find((i) => i.id === Number(itemId));
+    if (!item) return;
+    setLines((prev) => [
+      ...prev,
+      {
+        key: `new-${item.id}-${Date.now()}`,
+        item,
+        qty: 1,
+        free_qty: 0,
+        discount_percent: 0,
+        discount_amount: '',
+        discount_mode: 'percent',
+        unit_id: item.base_unit_id,
+        rate: item.retail_price,
+      },
+    ]);
+  };
+
+  const editMutation = useMutation({
+    mutationFn: () =>
+      invoicesApi.editCompleted(id, {
+        customer_id: customerId ? Number(customerId) : null,
+        items: (lines || []).map((l) => ({
+          item_id: l.item.id,
+          qty: Number(l.qty),
+          free_qty: Number(l.free_qty || 0),
+          unit_id: l.unit_id,
+          ...(canDiscount
+            ? l.discount_mode === 'amount'
+              ? { discount_amount: Number(l.discount_amount || 0) }
+              : { discount_percent: Number(l.discount_percent || 0) }
+            : {}),
+          ...(canEditPrice ? { rate: Number(l.rate) } : {}),
+        })),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['invoice', id] });
+      setSuccess(true);
+      setConfirming(false);
+    },
+    onError: (err) => {
+      setError(err?.response?.data?.error || 'Failed to update invoice');
+      setConfirming(false);
+    },
+  });
+
+  if (!invoice || lines === null) {
+    return (
+      <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/30 p-4">
+        <div className="card p-6 text-sm text-ink-muted">Loading invoice…</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/30 p-4">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto card p-5">
+        <div className="mb-1 flex items-center justify-between">
+          <div className="text-lg font-semibold text-ink">Edit {invoice.invoice_no}</div>
+          <Badge variant="warning">Original total: Rs. {invoice.grand_total}</Badge>
+        </div>
+        <p className="mb-3 text-xs text-ink-muted">
+          Stock for the old items is reversed and stock for the new items is applied automatically. Payments already
+          collected (Rs. {invoice.paid_amount}) are never altered — only the remaining balance and the customer's
+          credit are adjusted by the difference.
+        </p>
+
+        {success ? (
+          <div className="rounded-lg bg-success-bg px-4 py-3 text-sm font-medium text-success">
+            Invoice updated successfully.
+          </div>
+        ) : (
+          <>
+            <div className="mb-3">
+              <label className="mb-1 block text-xs font-medium text-ink-muted">Customer</label>
+              <select value={customerId} onChange={(e) => setCustomerId(e.target.value)} className="input w-64">
+                <option value="">Walk-in Customer</option>
+                {customers.map((c) => (
+                  <option key={c.id} value={c.id}>{c.ledger_name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="mb-3 flex flex-col gap-2">
+              {pricedLines.map((line) => (
+                <div key={line.key} className="rounded-lg border border-border-soft p-2">
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span className="text-sm font-semibold text-ink">{line.item.item_name}</span>
+                    <button onClick={() => removeLine(line.key)} className="text-ink-muted hover:text-danger">
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3 text-sm">
+                    <label className="flex items-center gap-1">
+                      Qty
+                      <input
+                        type="number" min="0" step="any" value={line.qty}
+                        onChange={(e) => updateLine(line.key, { qty: e.target.value })}
+                        className="w-16 rounded border border-border-soft px-1 py-0.5 text-center"
+                      />
+                    </label>
+                    <label className="flex items-center gap-1">
+                      Rate
+                      <input
+                        type="number" step="any" disabled={!canEditPrice} value={line.rate}
+                        onChange={(e) => updateLine(line.key, { rate: e.target.value })}
+                        className="w-20 rounded border border-border-soft px-1 py-0.5 text-right disabled:bg-page"
+                      />
+                    </label>
+                    {canDiscount && (
+                      <label className="flex items-center gap-1">
+                        Disc
+                        <div className="flex overflow-hidden rounded border border-border-soft">
+                          <button type="button" onClick={() => updateLine(line.key, { discount_mode: 'percent' })} className={`px-1.5 py-0.5 text-xs font-medium ${line.discount_mode !== 'amount' ? 'bg-gold text-white' : 'bg-white text-ink-muted'}`}>%</button>
+                          <button type="button" onClick={() => updateLine(line.key, { discount_mode: 'amount' })} className={`px-1.5 py-0.5 text-xs font-medium ${line.discount_mode === 'amount' ? 'bg-gold text-white' : 'bg-white text-ink-muted'}`}>Rs.</button>
+                        </div>
+                        {line.discount_mode === 'amount' ? (
+                          <input type="number" min="0" step="any" value={line.discount_amount} onChange={(e) => updateLine(line.key, { discount_amount: e.target.value })} className="w-16 rounded border border-border-soft px-1 py-0.5" />
+                        ) : (
+                          <input type="number" min="0" step="any" value={line.discount_percent} onChange={(e) => updateLine(line.key, { discount_percent: e.target.value })} className="w-14 rounded border border-border-soft px-1 py-0.5" />
+                        )}
+                      </label>
+                    )}
+                    <span className="ml-auto font-semibold text-ink">Rs. {line.priced.line_total.toFixed(2)}</span>
+                  </div>
+                </div>
+              ))}
+              {lines.length === 0 && <p className="py-4 text-center text-sm text-ink-muted">No items — add at least one below.</p>}
+            </div>
+
+            <div className="mb-3 flex items-center gap-2">
+              <select onChange={(e) => { if (e.target.value) { addLine(e.target.value); e.target.value = ''; } }} className="input flex-1" defaultValue="">
+                <option value="" disabled>+ Add an item…</option>
+                {items.map((i) => <option key={i.id} value={i.id}>{i.item_name}</option>)}
+              </select>
+            </div>
+
+            <div className="mb-3 rounded-lg bg-page p-3 text-sm">
+              <div className="flex justify-between text-ink-muted"><span>Subtotal</span><span>{totals.subtotal.toFixed(2)}</span></div>
+              <div className="flex justify-between text-ink-muted"><span>GST</span><span>{(totals.cgst + totals.sgst + totals.cessAmount).toFixed(2)}</span></div>
+              <div className="flex justify-between text-ink-muted"><span>Discount</span><span>{totals.discountAmount.toFixed(2)}</span></div>
+              <div className="mt-1 flex justify-between border-t border-border-soft pt-1 font-bold text-ink"><span>New Total</span><span>Rs. {totals.grandTotal.toFixed(2)}</span></div>
+            </div>
+
+            {error && <p className="mb-2 text-sm text-danger">{error}</p>}
+
+            {confirming ? (
+              <div className="rounded-lg bg-warning-bg px-3 py-3 text-sm text-warning">
+                <p className="mb-2 font-medium">Are you sure you want to update this invoice?</p>
+                <p className="mb-3 text-xs">
+                  Total changes from Rs. {invoice.grand_total} to Rs. {totals.grandTotal.toFixed(2)}. Stock and the customer's
+                  credit balance will be adjusted accordingly.
+                </p>
+                <div className="flex justify-end gap-2">
+                  <Button variant="secondary" size="sm" onClick={() => setConfirming(false)} disabled={editMutation.isPending}>Back</Button>
+                  <Button size="sm" onClick={() => editMutation.mutate()} disabled={editMutation.isPending}>Yes, Update Invoice</Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex justify-end gap-2">
+                <Button variant="secondary" onClick={onClose}>Cancel</Button>
+                <Button onClick={() => { setError(''); setConfirming(true); }} disabled={lines.length === 0}>Save Changes</Button>
+              </div>
+            )}
+          </>
+        )}
+
+        {success && (
+          <div className="mt-4 flex justify-end">
+            <Button onClick={onClose}>Close</Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function InvoiceManagement() {
   const canCancel = usePermission('pos.cancel_completed_invoice');
+  const canEdit = usePermission('pos.edit_completed_invoice');
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState('');
   const [search, setSearch] = useState('');
   const [viewingId, setViewingId] = useState(null);
   const [printingId, setPrintingId] = useState(null);
+  const [editingId, setEditingId] = useState(null);
   const [cancelling, setCancelling] = useState(null);
   const [cancelError, setCancelError] = useState('');
 
@@ -117,7 +360,7 @@ export function InvoiceManagement() {
   return (
     <div>
       <h1 className="mb-1 text-2xl font-bold text-ink">Invoice Management</h1>
-      <p className="mb-4 text-sm text-ink-muted">Search, view, print and cancel invoices.</p>
+      <p className="mb-4 text-sm text-ink-muted">Search, view, print, edit and cancel invoices.</p>
 
       <Card
         title="Invoices"
@@ -156,7 +399,7 @@ export function InvoiceManagement() {
                 <td className="px-4 py-2 text-ink-muted">{inv.invoice_date}</td>
                 <td className="px-4 py-2">{inv.grand_total}</td>
                 <td className="px-4 py-2"><Badge variant={STATUS_VARIANT[inv.payment_status] || 'neutral'}>{inv.payment_status || '-'}</Badge></td>
-                <td className="px-4 py-2 capitalize">{inv.status}</td>
+                <td className="px-4 py-2 capitalize">{inv.status}{inv.edited_at ? ' (edited)' : ''}</td>
                 <td className="px-4 py-2">
                   <div className="flex justify-end gap-2">
                     <button title="View" onClick={() => setViewingId(inv.id)} className="text-ink-muted hover:text-ink">
@@ -165,6 +408,11 @@ export function InvoiceManagement() {
                     <button title="Print" onClick={() => setPrintingId(inv.id)} className="text-ink-muted hover:text-ink">
                       <Printer size={16} />
                     </button>
+                    {canEdit && inv.status === 'completed' && (
+                      <button title="Edit" onClick={() => setEditingId(inv.id)} className="text-ink-muted hover:text-gold">
+                        <Pencil size={16} />
+                      </button>
+                    )}
                     {canCancel && inv.status === 'completed' && (
                       <button title="Cancel" onClick={() => { setCancelling(inv); setCancelError(''); }} className="text-danger hover:text-red-700">
                         <Ban size={16} />
@@ -181,6 +429,7 @@ export function InvoiceManagement() {
 
       {viewingId && <ViewModal id={viewingId} onClose={() => setViewingId(null)} />}
       {printingId && <PrintPreviewModal invoiceId={printingId} onClose={() => setPrintingId(null)} />}
+      {editingId && <EditModal id={editingId} onClose={() => setEditingId(null)} />}
       {cancelling && (
         <CancelModal
           invoice={cancelling}

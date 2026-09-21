@@ -9,4 +9,5 @@ export const invoicesApi = {
   complete: async (id, payments) => (await apiClient.post(`/invoices/${id}/complete`, { payments })).data,
   print: async (id) => (await apiClient.get(`/invoices/${id}/print`)).data,
   cancel: async (id, reason) => (await apiClient.post(`/invoices/${id}/cancel`, { reason })).data,
+  editCompleted: async (id, data) => (await apiClient.put(`/invoices/${id}/edit`, data)).data,
 };

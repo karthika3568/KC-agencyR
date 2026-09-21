@@ -295,9 +295,129 @@ class InvoiceModel
     }
 
     // -----------------------------------------------------------------
-    // Cancel — reverses stock + credit atomically, never a hard delete
-    // (the user's own decision: cancel + rebill only, no recalculating
-    // in-place edit of a completed invoice).
+    // Edit a completed invoice — reverses the old stock effect, applies the
+    // new one, and adjusts only the DELTA on the customer's credit ledger.
+    // Never touches invoice_payments (real money already received is never
+    // rewritten) and never reassigns invoice_no. Blocked once a sales
+    // return exists against this invoice, same as cancel, because the
+    // return already reversed part of the original lines.
+    // -----------------------------------------------------------------
+
+    public function editCompleted(int $id, array $header, array $cartLines, int $actorId): array
+    {
+        $this->pdo->beginTransaction();
+        try {
+            $stmt = $this->pdo->prepare('SELECT * FROM invoices WHERE id = :id FOR UPDATE');
+            $stmt->execute(['id' => $id]);
+            $invoice = $stmt->fetch();
+
+            if (!$invoice) {
+                throw new \RuntimeException('Invoice not found');
+            }
+            if ($invoice['status'] !== 'completed') {
+                throw new \RuntimeException('Only a completed invoice can be edited');
+            }
+
+            $stmt = $this->pdo->prepare(
+                "SELECT id FROM sales_returns WHERE invoice_id = :id AND status <> 'rejected' LIMIT 1"
+            );
+            $stmt->execute(['id' => $id]);
+            if ($stmt->fetch()) {
+                throw new \RuntimeException('Cannot edit — this invoice already has a sales return against it. Use a fresh sales return instead.');
+            }
+
+            if (empty($cartLines)) {
+                throw new \RuntimeException('Cannot edit to an empty bill — cancel it instead');
+            }
+
+            $stmt = $this->pdo->prepare('SELECT * FROM invoice_items WHERE invoice_id = :id');
+            $stmt->execute(['id' => $id]);
+            $oldItems = $stmt->fetchAll();
+
+            $stockService = new StockLedgerService($this->pdo);
+
+            // Reverse the original stock effect of every original line...
+            foreach ($oldItems as $item) {
+                $qtyTotal = (float) $item['qty'] + (float) $item['free_qty'];
+                $stockService->applyMovement(
+                    (int) $item['item_id'], 'branch', (int) $invoice['branch_id'], $qtyTotal,
+                    'sale_return', 'invoices', $id, 'invoice_edited', null, $actorId
+                );
+            }
+
+            $this->pdo->prepare('DELETE FROM invoice_items WHERE invoice_id = :id')->execute(['id' => $id]);
+
+            $totals = $this->computeTotals($cartLines);
+            $this->insertLineItems($id, $cartLines);
+
+            // ...then apply the new one. Never netted against the reversal
+            // above — two separate audited movements, same as cancel+rebill
+            // would produce, just against the same invoice row.
+            foreach ($cartLines as $line) {
+                $qtyTotal = (float) $line['qty'] + (float) $line['free_qty'];
+                $stockService->applyMovement(
+                    (int) $line['item_id'], 'branch', (int) $invoice['branch_id'], -$qtyTotal,
+                    'sale', 'invoices', $id, null, null, $actorId
+                );
+            }
+
+            $paidAmount = (float) $invoice['paid_amount'];
+            $oldUnpaid = max(0.0, round((float) $invoice['grand_total'] - $paidAmount, 2));
+            $newUnpaid = max(0.0, round($totals['grand_total'] - $paidAmount, 2));
+            $delta = round($newUnpaid - $oldUnpaid, 2);
+
+            if ($newUnpaid > 0.009 && $invoice['customer_id'] === null) {
+                throw new \RuntimeException('Cannot leave a walk-in invoice partially unpaid — attach a customer, or reduce the total to match what was already paid');
+            }
+
+            $customerOutstandingAfter = $invoice['customer_outstanding_after'];
+            if (abs($delta) > 0.009 && $invoice['customer_id'] !== null) {
+                $credit = new CreditLedgerService($this->pdo);
+                $customerOutstandingAfter = $credit->record(
+                    (int) $invoice['customer_id'],
+                    $delta > 0 ? 'sale_credit' : 'credit_reversal',
+                    abs($delta),
+                    $id,
+                    'Invoice ' . $invoice['invoice_no'] . ' edited',
+                    $actorId
+                );
+            }
+
+            $paymentStatus = 'paid';
+            if ($newUnpaid > 0.009) {
+                $paymentStatus = $paidAmount > 0.009 ? 'partial' : 'credit';
+            }
+
+            $stmt = $this->pdo->prepare(
+                'UPDATE invoices SET
+                    customer_id = :customer_id, vehicle_no = :vehicle_no,
+                    subtotal = :subtotal, discount_amount = :discount_amount, taxable_value = :taxable_value,
+                    cgst_amount = :cgst_amount, sgst_amount = :sgst_amount, igst_amount = :igst_amount,
+                    cess_amount = :cess_amount, round_off = :round_off, grand_total = :grand_total,
+                    payment_status = :payment_status, customer_outstanding_after = :outstanding,
+                    edited_at = NOW(), edited_by = :edited_by
+                 WHERE id = :id'
+            );
+            $stmt->execute([
+                'id' => $id,
+                'customer_id' => $header['customer_id'] ?? $invoice['customer_id'],
+                'vehicle_no' => $header['vehicle_no'] ?? $invoice['vehicle_no'],
+                'payment_status' => $paymentStatus,
+                'outstanding' => $customerOutstandingAfter,
+                'edited_by' => $actorId,
+                ...$totals,
+            ]);
+
+            $this->pdo->commit();
+            return $this->find($id);
+        } catch (\Throwable $e) {
+            $this->pdo->rollBack();
+            throw $e;
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // Cancel — reverses stock + credit atomically, never a hard delete.
     // -----------------------------------------------------------------
 
     public function cancel(int $id, int $actorId, ?string $reason): array
