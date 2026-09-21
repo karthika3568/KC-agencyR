@@ -187,6 +187,86 @@ class ItemController
         Response::json($this->items->find((int) $id));
     }
 
+    /**
+     * POST /api/items/image-search — best-effort "find this product from a
+     * photo": runs OCR on the uploaded image (if the server actually has an
+     * OCR engine installed) and text-matches the extracted words against
+     * item_name/item_code/barcode. This is deliberately NOT visual object
+     * recognition (no such model is available in this stack) — it reads
+     * printed text on the pack/label. When no OCR engine is present we say
+     * so plainly rather than pretending a match was attempted.
+     */
+    public function imageSearch(): void
+    {
+        $claims = JwtAuthMiddleware::authenticate();
+
+        if (empty($_FILES['image']['tmp_name'])) {
+            Response::error('No file uploaded (expected multipart field "image")', 422);
+        }
+        $file = $_FILES['image'];
+        if ($file['size'] > self::MAX_IMAGE_BYTES) {
+            Response::error('Image must be under 3 MB', 422);
+        }
+        $mime = mime_content_type($file['tmp_name']);
+        if (!isset(self::ALLOWED_IMAGE_TYPES[$mime])) {
+            Response::error('Only JPG, PNG or WEBP images are allowed', 422);
+        }
+
+        $tesseractPath = trim((string) (@shell_exec('where tesseract 2>NUL') ?: @shell_exec('command -v tesseract 2>/dev/null')));
+        if ($tesseractPath === '') {
+            Response::json([
+                'engine_available' => false,
+                'message' => 'No OCR engine is installed on this server, so a photo cannot be matched to a product automatically yet. Please search by name, code, or barcode instead.',
+                'extracted_text' => '',
+                'matches' => [],
+            ]);
+            return;
+        }
+
+        $firstLine = strtok($tesseractPath, "\r\n");
+        $outputBase = sys_get_temp_dir() . '/ocr_' . bin2hex(random_bytes(6));
+        $cmd = escapeshellarg($firstLine) . ' ' . escapeshellarg($file['tmp_name']) . ' ' . escapeshellarg($outputBase) . ' 2>&1';
+        exec($cmd);
+        $textFile = $outputBase . '.txt';
+        $text = is_file($textFile) ? (string) file_get_contents($textFile) : '';
+        if (is_file($textFile)) {
+            @unlink($textFile);
+        }
+
+        $words = array_unique(array_filter(
+            preg_split('/[^A-Za-z0-9]+/', $text, -1, PREG_SPLIT_NO_EMPTY) ?: [],
+            fn ($w) => strlen($w) >= 3
+        ));
+
+        if (empty($words)) {
+            Response::json(['engine_available' => true, 'extracted_text' => trim($text), 'matches' => []]);
+            return;
+        }
+
+        $branchId = $this->resolveBranchId($claims);
+        $candidates = $this->items->all(null, $branchId);
+        $scored = [];
+        foreach ($candidates as $item) {
+            $haystack = strtolower($item['item_name'] . ' ' . ($item['item_code'] ?? '') . ' ' . ($item['barcode'] ?? ''));
+            $score = 0;
+            foreach ($words as $w) {
+                if (str_contains($haystack, strtolower($w))) {
+                    $score++;
+                }
+            }
+            if ($score > 0) {
+                $scored[] = ['item' => $item, 'score' => $score];
+            }
+        }
+        usort($scored, fn ($a, $b) => $b['score'] <=> $a['score']);
+
+        Response::json([
+            'engine_available' => true,
+            'extracted_text' => trim($text),
+            'matches' => array_slice(array_map(fn ($s) => $s['item'], $scored), 0, 5),
+        ]);
+    }
+
     private function validate(array $body): array
     {
         $errors = [];

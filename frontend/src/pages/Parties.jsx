@@ -10,8 +10,9 @@ function useEntity(key, api) {
   const query = useQuery({ queryKey: [key], queryFn: api.list });
   const invalidate = () => queryClient.invalidateQueries({ queryKey: [key] });
   const create = useMutation({ mutationFn: api.create, onSuccess: invalidate });
+  const update = useMutation({ mutationFn: ({ id, data }) => api.update(id, data), onSuccess: invalidate });
   const remove = useMutation({ mutationFn: api.remove, onSuccess: invalidate });
-  return { rows: query.data || [], create, remove };
+  return { rows: query.data || [], create, update, remove };
 }
 
 function RoutesPanel({ canManage }) {
@@ -121,7 +122,10 @@ function CustomersPanel({ canManage }) {
 }
 
 function SuppliersPanel({ canManage }) {
-  const { rows, create, remove } = useEntity('suppliers', suppliersApi);
+  const { rows, create, update, remove } = useEntity('suppliers', suppliersApi);
+  const balancesQuery = useQuery({ queryKey: ['suppliers', 'balances'], queryFn: suppliersApi.balances });
+  const balanceById = new Map((balancesQuery.data || []).map((b) => [b.id, b]));
+
   return (
     <EntityTable
       title="Suppliers"
@@ -136,11 +140,30 @@ function SuppliersPanel({ canManage }) {
         { key: 'name', label: 'Name' },
         { key: 'phone', label: 'Phone' },
         { key: 'gstin', label: 'GSTIN' },
-        { key: 'opening_balance', label: 'Opening balance' },
+        { key: 'opening_balance', label: 'Opening Balance', render: (r) => `Rs. ${Number(r.opening_balance).toFixed(2)}` },
+        {
+          key: 'total_purchases',
+          label: 'Payable (Purchases)',
+          render: (r) => `Rs. ${Number(balanceById.get(r.id)?.total_purchases ?? 0).toFixed(2)}`,
+        },
+        {
+          key: 'total_paid',
+          label: 'Paid',
+          render: (r) => `Rs. ${Number(balanceById.get(r.id)?.total_paid ?? 0).toFixed(2)}`,
+        },
+        {
+          key: 'current_outstanding',
+          label: 'Current Outstanding',
+          render: (r) => {
+            const val = Number(balanceById.get(r.id)?.current_outstanding ?? 0);
+            return <span className={val > 0.009 ? 'font-semibold text-danger' : 'font-semibold text-success'}>Rs. {val.toFixed(2)}</span>;
+          },
+        },
         { key: 'status', label: 'Status' },
       ]}
       rows={rows}
       onCreate={(data) => create.mutateAsync({ ...data, opening_balance: Number(data.opening_balance || 0) })}
+      onUpdate={(id, data) => update.mutateAsync({ id, data: { ...data, opening_balance: Number(data.opening_balance || 0) } })}
       onDelete={(id) => remove.mutateAsync(id)}
     />
   );

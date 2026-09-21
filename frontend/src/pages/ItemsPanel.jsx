@@ -5,6 +5,7 @@ import { categoriesApi, brandsApi, productLinesApi, taxCodesApi, stockUnitsApi, 
 import { suppliersApi } from '../api/parties';
 import { branchesApi } from '../api/branches';
 import { Button } from '../components/Button.jsx';
+import { resolveImageUrl } from '../utils/media';
 
 const emptyForm = {
   item_name: '', category_id: '', brand_id: '', product_line_id: '', supplier_id: '',
@@ -48,7 +49,7 @@ function ItemFormModal({ item, onClose }) {
   });
   const [error, setError] = useState('');
   const [imageFile, setImageFile] = useState(null);
-  const [imagePreview, setImagePreview] = useState(item?.image ? `/${item.image}` : null);
+  const [imagePreview, setImagePreview] = useState(item?.image ? resolveImageUrl(item.image) : null);
   const fileInputRef = useRef(null);
 
   const categoriesQuery = useQuery({ queryKey: ['categories'], queryFn: categoriesApi.list });
@@ -424,7 +425,15 @@ export function ItemsPanel({ canManage }) {
               <tr key={item.id} className="border-b border-border-soft">
                 <td className="px-4 py-2">
                   <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded bg-page">
-                    {item.image ? <img src={`/${item.image}`} alt="" className="h-full w-full object-cover" /> : <ImageIcon size={16} className="text-ink-muted" />}
+                    {item.image ? (
+                      <img
+                        src={resolveImageUrl(item.image)}
+                        alt=""
+                        className="h-full w-full object-cover"
+                        onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextSibling.style.display = 'flex'; }}
+                      />
+                    ) : null}
+                    <ImageIcon size={16} className="text-ink-muted" style={{ display: item.image ? 'none' : 'flex' }} />
                   </div>
                 </td>
                 <td className="px-4 py-2 text-ink-muted">{item.item_code}</td>

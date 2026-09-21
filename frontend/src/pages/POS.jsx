@@ -1,19 +1,41 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Search, ScanBarcode, Plus, UserPlus, Grid2x2, List, Minus, Trash2, Clock, Barcode, X } from 'lucide-react';
+import { Search, ScanBarcode, Plus, UserPlus, Grid2x2, List, Minus, Trash2, Clock, Barcode, Image as ImageIcon, Camera, PackageX } from 'lucide-react';
 import { itemsApi, stockUnitsApi, categoriesApi } from '../api/catalog';
 import { customersApi } from '../api/parties';
 import { invoicesApi } from '../api/invoices';
 import { stockHubApi } from '../api/purchasing';
 import { usePermission } from '../hooks/usePermission';
 import { priceLine, computeCartTotals } from '../utils/pricing';
+import { resolveImageUrl } from '../utils/media';
 import { Badge } from '../components/Badge.jsx';
 import { Card } from '../components/Card.jsx';
 import { Button } from '../components/Button.jsx';
 import { PrintPreviewModal } from '../components/PrintPreviewModal.jsx';
+import { ImageSearchModal } from '../components/ImageSearchModal.jsx';
 
-const PAYMENT_METHODS = ['cash', 'upi', 'card', 'credit', 'other'];
+const PAYMENT_METHODS = [
+  { key: 'cash', label: 'Cash' },
+  { key: 'upi', label: 'UPI' },
+  { key: 'card', label: 'Card' },
+  { key: 'credit', label: 'Credit' },
+  { key: 'other', label: 'Other' },
+];
+
+function ProductThumb({ item, size = 'h-20', className = '' }) {
+  const url = item.image ? resolveImageUrl(item.image) : null;
+  const [broken, setBroken] = useState(false);
+  return (
+    <div className={`flex ${size} items-center justify-center overflow-hidden rounded-lg bg-page ${className}`}>
+      {url && !broken ? (
+        <img src={url} alt="" className="h-full w-full object-cover" onError={() => setBroken(true)} />
+      ) : (
+        <ImageIcon size={22} className="text-ink-muted/50" />
+      )}
+    </div>
+  );
+}
 
 function newLine(item) {
   return {
@@ -22,6 +44,8 @@ function newLine(item) {
     qty: 1,
     free_qty: 0,
     discount_percent: 0,
+    discount_amount: '',
+    discount_mode: 'percent',
     unit_id: item.base_unit_id,
     rate: item.retail_price,
   };
@@ -55,6 +79,7 @@ export function POS() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [activeCategory, setActiveCategory] = useState('all');
   const [viewMode, setViewMode] = useState('grid');
+  const [showImageSearch, setShowImageSearch] = useState(false);
   const searchInputRef = useRef(null);
 
   const itemsQuery = useQuery({ queryKey: ['items', ''], queryFn: () => itemsApi.list('') });
@@ -93,7 +118,14 @@ export function POS() {
     return items.filter((i) => i.category_id === activeCategory);
   }, [items, activeCategory]);
 
-  const pricedLines = useMemo(() => cart.map((line) => ({ ...line, priced: priceLine(line.item, line) })), [cart]);
+  const pricedLines = useMemo(
+    () =>
+      cart.map((line) => ({
+        ...line,
+        priced: priceLine(line.item, line.discount_mode === 'amount' ? { ...line, discount_percent: 0 } : { ...line, discount_amount: '' }),
+      })),
+    [cart]
+  );
   const totals = useMemo(() => computeCartTotals(pricedLines.map((l) => l.priced)), [pricedLines]);
   const uniformTaxPercent = pricedLines.length > 0 && pricedLines.every((l) => l.priced.tax_percent === pricedLines[0].priced.tax_percent)
     ? pricedLines[0].priced.tax_percent
@@ -170,7 +202,11 @@ export function POS() {
       qty: Number(l.qty),
       free_qty: Number(l.free_qty || 0),
       unit_id: l.unit_id,
-      ...(canDiscount ? { discount_percent: Number(l.discount_percent || 0) } : {}),
+      ...(canDiscount
+        ? l.discount_mode === 'amount'
+          ? { discount_amount: Number(l.discount_amount || 0) }
+          : { discount_percent: Number(l.discount_percent || 0) }
+        : {}),
       ...(canEditPrice ? { rate: Number(l.rate) } : {}),
     })),
   });
@@ -341,6 +377,13 @@ export function POS() {
               >
                 <ScanBarcode size={16} />
               </button>
+              <button
+                onClick={() => setShowImageSearch(true)}
+                title="Find an item from a photo"
+                className="flex h-9 w-9 items-center justify-center rounded-lg border border-border-soft bg-white text-ink-muted hover:bg-page"
+              >
+                <Camera size={16} />
+              </button>
               <input
                 placeholder="Vehicle no (optional)"
                 value={vehicleNo}
@@ -387,24 +430,34 @@ export function POS() {
 
           {viewMode === 'grid' ? (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-              {gridItems.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => addItem(item)}
-                  className="card flex flex-col p-3 text-left transition-shadow hover:shadow-md"
-                >
-                  <div className="mb-2 flex h-20 items-center justify-center rounded-lg bg-page text-2xl font-bold text-gold">
-                    {item.item_name.slice(0, 1).toUpperCase()}
-                  </div>
-                  <div className="truncate font-semibold text-ink">{item.item_name}</div>
-                  <div className="mb-1 font-bold text-ink">Rs. {item.retail_price}</div>
-                  <div className="mb-1">{taxBadge(item)}</div>
-                  <div className="flex items-center justify-between text-xs text-ink-muted">
-                    <span>{canViewStock ? `Stock: ${stockByItemId[item.id] ?? 0}` : item.item_code}</span>
-                    {item.barcode && <Barcode size={14} />}
-                  </div>
-                </button>
-              ))}
+              {gridItems.map((item) => {
+                const stock = stockByItemId[item.id] ?? 0;
+                const outOfStock = canViewStock && stock <= 0;
+                const lowStock = canViewStock && stock > 0 && stock <= Number(item.min_stock_threshold || 0);
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => addItem(item)}
+                    className="card group relative flex flex-col p-3 text-left transition-all hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 active:shadow-sm"
+                  >
+                    <ProductThumb item={item} size="h-20" className="mb-2" />
+                    {outOfStock && (
+                      <span className="absolute right-2 top-2 rounded-full bg-danger px-2 py-0.5 text-[10px] font-semibold text-white">Out of stock</span>
+                    )}
+                    {!outOfStock && lowStock && (
+                      <span className="absolute right-2 top-2 rounded-full bg-warning px-2 py-0.5 text-[10px] font-semibold text-white">Low stock</span>
+                    )}
+                    <div className="truncate text-sm font-semibold text-ink">{item.item_name}</div>
+                    <div className="mb-1 font-bold text-ink">Rs. {item.retail_price}</div>
+                    <div className="mb-1">{taxBadge(item)}</div>
+                    <div className="flex items-center justify-between text-xs text-ink-muted">
+                      <span>{canViewStock ? `Stock: ${stock}` : item.item_code}</span>
+                      {item.barcode && <Barcode size={14} />}
+                    </div>
+                    <div className="pointer-events-none absolute inset-0 rounded-xl border-2 border-gold opacity-0 transition-opacity group-active:opacity-100" />
+                  </button>
+                );
+              })}
               {gridItems.length === 0 && (
                 <div className="col-span-full py-10 text-center text-ink-muted">No products in this category.</div>
               )}
@@ -414,6 +467,7 @@ export function POS() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border-soft text-left text-xs uppercase text-ink-muted">
+                    <th className="px-4 py-2"></th>
                     <th className="px-4 py-2">Item</th>
                     <th className="px-4 py-2">Price</th>
                     <th className="px-4 py-2">Tax</th>
@@ -424,6 +478,7 @@ export function POS() {
                 <tbody>
                   {gridItems.map((item) => (
                     <tr key={item.id} className="border-b border-border-soft last:border-0">
+                      <td className="px-4 py-2"><ProductThumb item={item} size="h-9 w-9" /></td>
                       <td className="px-4 py-2 font-medium text-ink">{item.item_name}</td>
                       <td className="px-4 py-2">Rs. {item.retail_price}</td>
                       <td className="px-4 py-2">{taxBadge(item)}</td>
@@ -436,7 +491,7 @@ export function POS() {
                     </tr>
                   ))}
                   {gridItems.length === 0 && (
-                    <tr><td colSpan={5} className="px-4 py-8 text-center text-ink-muted">No products in this category.</td></tr>
+                    <tr><td colSpan={6} className="px-4 py-8 text-center text-ink-muted">No products in this category.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -458,77 +513,105 @@ export function POS() {
               </div>
             </div>
 
-            <div className="mb-3 max-h-80 overflow-y-auto">
+            <div className="mb-3 flex max-h-80 flex-col gap-2 overflow-y-auto">
               {pricedLines.map((line) => (
-                <div key={line.key} className="border-b border-border-soft py-2.5">
-                  <div className="mb-1 flex items-start justify-between gap-2">
-                    <div>
-                      <div className="font-medium text-ink">{line.item.item_name}</div>
-                      <div className="mt-0.5">{taxBadge(line.item)}</div>
-                      {Number(line.free_qty) > 0 && (
-                        <Badge variant="warning" className="mt-1">Free Qty: {line.free_qty}</Badge>
-                      )}
-                    </div>
-                    <button onClick={() => removeLine(line.key)} className="text-danger hover:text-red-700">
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <button onClick={() => bumpQty(line, -1)} className="flex h-6 w-6 items-center justify-center rounded border border-border-soft text-ink-muted hover:bg-page">
-                        <Minus size={12} />
+                <div key={line.key} className="flex gap-2 rounded-lg border border-border-soft p-2">
+                  <ProductThumb item={line.item} size="h-12 w-12" />
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1 flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-ink">{line.item.item_name}</div>
+                        <div className="mt-0.5 flex items-center gap-1">
+                          {taxBadge(line.item)}
+                          {Number(line.free_qty) > 0 && <Badge variant="warning">Free: {line.free_qty}</Badge>}
+                        </div>
+                      </div>
+                      <button onClick={() => removeLine(line.key)} className="shrink-0 text-ink-muted hover:text-danger">
+                        <Trash2 size={15} />
                       </button>
-                      <input
-                        type="number"
-                        min="0"
-                        step="any"
-                        value={line.qty}
-                        onChange={(e) => updateLine(line.key, { qty: e.target.value })}
-                        className="w-12 rounded border border-border-soft px-1 py-0.5 text-center text-sm"
-                      />
-                      <button onClick={() => bumpQty(line, 1)} className="flex h-6 w-6 items-center justify-center rounded border border-border-soft text-ink-muted hover:bg-page">
-                        <Plus size={12} />
-                      </button>
-                      <span className="text-xs text-ink-muted">{units.find((u) => u.id === line.unit_id)?.short_code || ''}</span>
                     </div>
-                    <div className="flex items-center gap-3 text-sm">
-                      <input
-                        type="number"
-                        step="any"
-                        disabled={!canEditPrice}
-                        value={line.rate}
-                        title="Rate"
-                        onChange={(e) => updateLine(line.key, { rate: e.target.value })}
-                        className="w-16 rounded border border-border-soft px-1 py-0.5 text-right disabled:bg-page"
-                      />
-                      <span className="w-16 text-right font-semibold text-ink">Rs. {line.priced.line_total.toFixed(2)}</span>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => bumpQty(line, -1)} className="flex h-6 w-6 items-center justify-center rounded border border-border-soft text-ink-muted hover:bg-page">
+                          <Minus size={12} />
+                        </button>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={line.qty}
+                          onChange={(e) => updateLine(line.key, { qty: e.target.value })}
+                          className="w-11 rounded border border-border-soft px-1 py-0.5 text-center text-sm"
+                        />
+                        <button onClick={() => bumpQty(line, 1)} className="flex h-6 w-6 items-center justify-center rounded border border-border-soft text-ink-muted hover:bg-page">
+                          <Plus size={12} />
+                        </button>
+                        <span className="text-xs text-ink-muted">{units.find((u) => u.id === line.unit_id)?.short_code || ''}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm">
+                        <input
+                          type="number"
+                          step="any"
+                          disabled={!canEditPrice}
+                          value={line.rate}
+                          title="Rate"
+                          onChange={(e) => updateLine(line.key, { rate: e.target.value })}
+                          className="w-14 rounded border border-border-soft px-1 py-0.5 text-right disabled:bg-page"
+                        />
+                        <span className="w-16 text-right font-semibold text-ink">Rs. {line.priced.line_total.toFixed(2)}</span>
+                      </div>
                     </div>
+                    {canDiscount && (
+                      <div className="mt-1.5 flex items-center gap-1.5 text-xs text-ink-muted">
+                        <span>Discount</span>
+                        <div className="flex overflow-hidden rounded border border-border-soft">
+                          <button
+                            type="button"
+                            onClick={() => updateLine(line.key, { discount_mode: 'percent' })}
+                            className={`px-1.5 py-0.5 font-medium ${line.discount_mode !== 'amount' ? 'bg-gold text-white' : 'bg-white text-ink-muted'}`}
+                          >
+                            %
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => updateLine(line.key, { discount_mode: 'amount' })}
+                            className={`px-1.5 py-0.5 font-medium ${line.discount_mode === 'amount' ? 'bg-gold text-white' : 'bg-white text-ink-muted'}`}
+                          >
+                            Rs.
+                          </button>
+                        </div>
+                        {line.discount_mode === 'amount' ? (
+                          <input
+                            type="number" min="0" step="any" value={line.discount_amount}
+                            onChange={(e) => updateLine(line.key, { discount_amount: e.target.value })}
+                            className="w-16 rounded border border-border-soft px-1 py-0.5"
+                          />
+                        ) : (
+                          <input
+                            type="number" min="0" step="any" value={line.discount_percent}
+                            onChange={(e) => updateLine(line.key, { discount_percent: e.target.value })}
+                            className="w-14 rounded border border-border-soft px-1 py-0.5"
+                          />
+                        )}
+                        <span className="ml-2">Free qty</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={line.free_qty}
+                          onChange={(e) => updateLine(line.key, { free_qty: e.target.value })}
+                          className="w-14 rounded border border-border-soft px-1 py-0.5"
+                        />
+                      </div>
+                    )}
                   </div>
-                  {canDiscount && (
-                    <div className="mt-1 flex items-center gap-1 text-xs text-ink-muted">
-                      Disc %
-                      <input
-                        type="number"
-                        step="any"
-                        value={line.discount_percent}
-                        onChange={(e) => updateLine(line.key, { discount_percent: e.target.value })}
-                        className="w-14 rounded border border-border-soft px-1 py-0.5"
-                      />
-                      <span>Free qty</span>
-                      <input
-                        type="number"
-                        min="0"
-                        step="any"
-                        value={line.free_qty}
-                        onChange={(e) => updateLine(line.key, { free_qty: e.target.value })}
-                        className="w-14 rounded border border-border-soft px-1 py-0.5"
-                      />
-                    </div>
-                  )}
                 </div>
               ))}
               {cart.length === 0 && (
-                <div className="py-10 text-center text-sm text-ink-muted">Cart is empty — scan or search an item, or tap a product.</div>
+                <div className="flex flex-col items-center gap-2 py-10 text-center text-sm text-ink-muted">
+                  <PackageX size={28} className="text-ink-muted/40" />
+                  Cart is empty — scan or search an item, or tap a product.
+                </div>
               )}
             </div>
 
@@ -565,89 +648,161 @@ export function POS() {
       </div>
 
       {showPaymentModal && (
-        <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/30 p-4">
-          <div className="w-[420px] card p-5">
-            <div className="mb-3 flex items-center justify-between">
-              <span className="text-lg font-semibold text-ink">Payment</span>
-              <span className="text-xl font-bold text-ink">Rs. {totals.grandTotal.toFixed(2)}</span>
-            </div>
-
-            <label className="mb-2 flex items-center gap-1 text-xs text-ink-muted">
-              <input type="checkbox" checked={splitMode} onChange={(e) => setSplitMode(e.target.checked)} />
-              Split Payment
-            </label>
-
-            {!splitMode ? (
-              <div className="flex flex-wrap gap-2">
-                {PAYMENT_METHODS.map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => setPayments([{ payment_method: m, amount: totals.grandTotal, reference_no: '' }])}
-                    className={`rounded-full px-3 py-1.5 text-sm font-medium capitalize ${
-                      payments[0]?.payment_method === m ? 'bg-gold text-white' : 'border border-border-soft bg-white text-ink-muted'
-                    }`}
-                  >
-                    {m}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {payments.map((p, idx) => (
-                  <div key={idx} className="flex gap-1">
-                    <select
-                      value={p.payment_method}
-                      onChange={(e) =>
-                        setPayments((prev) => prev.map((row, i) => (i === idx ? { ...row, payment_method: e.target.value } : row)))
-                      }
-                      className="input w-28"
-                    >
-                      {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
-                    </select>
-                    <input
-                      type="number"
-                      step="any"
-                      value={p.amount}
-                      onChange={(e) =>
-                        setPayments((prev) => prev.map((row, i) => (i === idx ? { ...row, amount: e.target.value } : row)))
-                      }
-                      className="input flex-1"
-                    />
-                    <button onClick={() => setPayments((prev) => prev.filter((_, i) => i !== idx))} className="text-danger">
-                      <X size={14} />
-                    </button>
-                  </div>
-                ))}
-                <button
-                  onClick={() => setPayments((prev) => [...prev, { payment_method: 'cash', amount: 0, reference_no: '' }])}
-                  className="self-start text-xs font-medium text-gold hover:underline"
-                >
-                  + Add payment line
-                </button>
-              </div>
-            )}
-
-            <div className={`mt-3 text-sm ${remaining > 0.009 ? 'text-warning' : 'text-ink-muted'}`}>
-              {remaining > 0.009 ? `Rs. ${remaining.toFixed(2)} will go on customer credit` : 'Fully covered'}
-            </div>
-
-            {completeMutation.isError && (
-              <p className="mt-2 text-sm text-danger">{completeMutation.error?.response?.data?.error || 'Failed to complete'}</p>
-            )}
-
-            <div className="mt-4 flex justify-end gap-2">
-              <Button variant="secondary" onClick={() => setShowPaymentModal(false)} disabled={completeMutation.isPending}>
-                Back
-              </Button>
-              <Button onClick={() => completeMutation.mutate()} disabled={completeMutation.isPending}>
-                Pay Now
-              </Button>
-            </div>
-          </div>
-        </div>
+        <PaymentModal
+          totals={totals}
+          customerName={customers.find((c) => String(c.id) === String(customerId))?.ledger_name}
+          itemCount={pricedLines.length}
+          splitMode={splitMode}
+          setSplitMode={setSplitMode}
+          payments={payments}
+          setPayments={setPayments}
+          hasCustomer={!!customerId}
+          onBack={() => setShowPaymentModal(false)}
+          onPay={() => completeMutation.mutate()}
+          isPending={completeMutation.isPending}
+          error={completeMutation.isError ? completeMutation.error?.response?.data?.error || 'Failed to complete' : null}
+        />
       )}
 
       {printingInvoiceId && <PrintPreviewModal invoiceId={printingInvoiceId} onClose={() => setPrintingInvoiceId(null)} />}
+      {showImageSearch && (
+        <ImageSearchModal
+          onClose={() => setShowImageSearch(false)}
+          onAdd={(item) => { addItem(item); setShowImageSearch(false); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function PaymentModal({ totals, customerName, itemCount, splitMode, setSplitMode, payments, setPayments, hasCustomer, onBack, onPay, isPending, error }) {
+  const grandTotal = totals.grandTotal;
+  const paymentsTotal = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const remaining = Math.round((grandTotal - paymentsTotal) * 100) / 100;
+
+  const toggleSplit = (next) => {
+    setSplitMode(next);
+    if (next) {
+      setPayments(PAYMENT_METHODS.map((m) => ({ payment_method: m.key, amount: m.key === 'cash' ? grandTotal : 0, reference_no: '' })));
+    } else {
+      setPayments([{ payment_method: 'cash', amount: grandTotal, reference_no: '' }]);
+    }
+  };
+
+  const getAmount = (key) => Number(payments.find((p) => p.payment_method === key)?.amount || 0);
+
+  const setSplitAmount = (key, raw) => {
+    let value = Number(raw);
+    if (Number.isNaN(value) || value < 0) value = 0;
+    setPayments((prev) => {
+      const othersTotal = prev.filter((p) => p.payment_method !== key).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+      const capped = Math.min(value, Math.max(0, grandTotal - othersTotal));
+      const exists = prev.some((p) => p.payment_method === key);
+      return exists
+        ? prev.map((p) => (p.payment_method === key ? { ...p, amount: capped } : p))
+        : [...prev, { payment_method: key, amount: capped, reference_no: '' }];
+    });
+  };
+
+  const singleMethod = payments[0]?.payment_method || 'cash';
+  const singleAmount = payments[0]?.amount ?? grandTotal;
+
+  const setSingleAmount = (raw) => {
+    let value = Number(raw);
+    if (Number.isNaN(value) || value < 0) value = 0;
+    if (value > grandTotal) value = grandTotal;
+    setPayments((prev) => [{ ...prev[0], amount: value }]);
+  };
+
+  const blockedNoCustomer = remaining > 0.009 && !hasCustomer;
+
+  return (
+    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/30 p-4">
+      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto card p-5">
+        <div className="mb-3">
+          <div className="text-lg font-semibold text-ink">Payment</div>
+          <div className="text-xs text-ink-muted">{customerName || 'Walk-in Customer'} · {itemCount} item(s)</div>
+        </div>
+
+        <div className="mb-4 rounded-lg bg-highlight px-3 py-3 text-center">
+          <div className="text-xs font-medium uppercase tracking-wide text-ink-muted">Total Payable</div>
+          <div className="text-2xl font-bold text-ink">Rs. {grandTotal.toFixed(2)}</div>
+        </div>
+
+        <div className="mb-3 flex overflow-hidden rounded-lg border border-border-soft bg-page p-1 text-sm">
+          <button onClick={() => toggleSplit(false)} className={`flex-1 rounded px-3 py-1.5 font-medium ${!splitMode ? 'bg-white shadow-sm text-ink' : 'text-ink-muted'}`}>
+            Single Payment
+          </button>
+          <button onClick={() => toggleSplit(true)} className={`flex-1 rounded px-3 py-1.5 font-medium ${splitMode ? 'bg-white shadow-sm text-ink' : 'text-ink-muted'}`}>
+            Split Payment
+          </button>
+        </div>
+
+        {!splitMode ? (
+          <>
+            <div className="mb-1 text-xs font-medium text-ink-muted">Payment Method</div>
+            <div className="mb-3 grid grid-cols-3 gap-2">
+              {PAYMENT_METHODS.map((m) => (
+                <button
+                  key={m.key}
+                  onClick={() => setPayments((prev) => [{ ...prev[0], payment_method: m.key }])}
+                  className={`rounded-lg border px-2 py-2.5 text-sm font-medium transition-colors ${
+                    singleMethod === m.key ? 'border-gold bg-gold/10 text-gold' : 'border-border-soft bg-white text-ink-muted hover:bg-page'
+                  }`}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+            <div className="mb-1 text-xs font-medium text-ink-muted">Amount</div>
+            <input
+              type="number"
+              min="0"
+              step="any"
+              value={singleAmount}
+              onChange={(e) => setSingleAmount(e.target.value)}
+              className="input mb-3 text-lg font-semibold"
+            />
+          </>
+        ) : (
+          <div className="mb-3 flex flex-col gap-2">
+            {PAYMENT_METHODS.map((m) => (
+              <div key={m.key} className="flex items-center justify-between gap-2">
+                <span className="w-14 text-sm font-medium text-ink">{m.label}</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={getAmount(m.key)}
+                  onChange={(e) => setSplitAmount(m.key, e.target.value)}
+                  className="input flex-1 text-right"
+                />
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="mb-1 flex justify-between text-sm text-ink-muted">
+          <span>Total Bill</span><span>Rs. {grandTotal.toFixed(2)}</span>
+        </div>
+        <div className="mb-1 flex justify-between text-sm text-ink-muted">
+          <span>Paid</span><span className="font-medium text-ink">Rs. {paymentsTotal.toFixed(2)}</span>
+        </div>
+        <div className={`mb-3 flex justify-between rounded-lg px-3 py-2 text-sm font-semibold ${remaining > 0.009 ? 'bg-warning-bg text-warning' : 'bg-success-bg text-success'}`}>
+          <span>{remaining > 0.009 ? 'Remaining (on credit)' : 'Fully Paid'}</span>
+          <span>Rs. {Math.max(remaining, 0).toFixed(2)}</span>
+        </div>
+
+        {blockedNoCustomer && (
+          <p className="mb-2 text-xs text-danger">Select a customer above to allow a partial/credit payment — a walk-in sale must be paid in full.</p>
+        )}
+        {error && <p className="mb-2 text-sm text-danger">{error}</p>}
+
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onBack} disabled={isPending}>Back</Button>
+          <Button onClick={onPay} disabled={isPending || blockedNoCustomer}>Pay Now</Button>
+        </div>
+      </div>
     </div>
   );
 }

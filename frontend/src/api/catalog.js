@@ -34,6 +34,12 @@ export const itemsApi = {
   },
   removeImage: async (id) => (await apiClient.delete(`/items/${id}/image`)).data,
 
+  async imageSearch(file) {
+    const form = new FormData();
+    form.append('image', file);
+    return (await apiClient.post('/items/image-search', form)).data;
+  },
+
   async downloadExport() {
     const res = await apiClient.get('/items/export', { responseType: 'blob' });
     downloadBlob(res.data, 'items_export.xlsx');

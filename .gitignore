@@ -1,6 +1,7 @@
 # Backend
 backend/vendor/
 backend/.env
+backend/public/uploads/
 
 # Frontend
 frontend/node_modules/

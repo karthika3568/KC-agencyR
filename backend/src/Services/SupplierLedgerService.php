@@ -64,4 +64,34 @@ class SupplierLedgerService
 
         return $balanceAfter;
     }
+
+    /**
+     * Per-supplier balance breakdown for a branch — opening balance, total
+     * purchases posted, total paid, and the current outstanding (the
+     * ledger's own running balance, never re-derived by summing here, so it
+     * can never drift from what record() actually wrote).
+     */
+    public function summaryForBranch(int $branchId): array
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT s.id, s.name, s.opening_balance, s.status,
+                    COALESCE((
+                        SELECT slt.balance_after FROM supplier_ledger_transactions slt
+                        WHERE slt.supplier_id = s.id ORDER BY slt.id DESC LIMIT 1
+                    ), 0) AS current_outstanding,
+                    COALESCE((
+                        SELECT SUM(slt.amount) FROM supplier_ledger_transactions slt
+                        WHERE slt.supplier_id = s.id AND slt.transaction_type = 'purchase_credit'
+                    ), 0) AS total_purchases,
+                    COALESCE((
+                        SELECT SUM(slt.amount) FROM supplier_ledger_transactions slt
+                        WHERE slt.supplier_id = s.id AND slt.transaction_type = 'payment_made'
+                    ), 0) AS total_paid
+             FROM suppliers s
+             WHERE s.branch_id = :branch_id
+             ORDER BY s.name"
+        );
+        $stmt->execute(['branch_id' => $branchId]);
+        return $stmt->fetchAll();
+    }
 }

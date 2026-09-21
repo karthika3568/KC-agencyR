@@ -130,6 +130,7 @@ $router->put('/api/items/{id}', fn ($id) => $itemController->update($id));
 $router->delete('/api/items/{id}', fn ($id) => $itemController->destroy($id));
 $router->post('/api/items/{id}/image', fn ($id) => $itemController->uploadImage($id));
 $router->delete('/api/items/{id}/image', fn ($id) => $itemController->removeImage($id));
+$router->post('/api/items/image-search', fn () => $itemController->imageSearch());
 
 // ---------------------------------------------------------------
 // Parties — branch-scoped (section 4.2)
@@ -187,6 +188,15 @@ $router->get('/api/suppliers', fn () => $suppliers->index());
 $router->post('/api/suppliers', fn () => $suppliers->store());
 $router->put('/api/suppliers/{id}', fn ($id) => $suppliers->update($id));
 $router->delete('/api/suppliers/{id}', fn ($id) => $suppliers->destroy($id));
+
+// Opening balance / payable / paid / outstanding breakdown per supplier —
+// the ledger's own running balance, never re-derived client-side.
+$router->get('/api/suppliers/balances', function () use ($pdo) {
+    $claims = \App\Middleware\JwtAuthMiddleware::authenticate();
+    $canSwitch = in_array('branches.switch_context', (array) ($claims['permissions'] ?? []), true);
+    $branchId = ($canSwitch && isset($_GET['branch_id'])) ? (int) $_GET['branch_id'] : (int) ($claims['branch_id'] ?? 0);
+    \App\Helpers\Response::json((new \App\Services\SupplierLedgerService($pdo))->summaryForBranch($branchId));
+});
 
 // ---------------------------------------------------------------
 // Invoices / POS billing (Phase 3)
