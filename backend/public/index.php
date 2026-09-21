@@ -67,6 +67,25 @@ $router->get('/api/categories', fn () => $categories->index());
 $router->post('/api/categories', fn () => $categories->store());
 $router->put('/api/categories/{id}', fn ($id) => $categories->update($id));
 $router->delete('/api/categories/{id}', fn ($id) => $categories->destroy($id));
+$router->get('/api/categories/{id}/brands', function ($id) use ($pdo) {
+    JwtAuthMiddleware::authenticate();
+    $stmt = $pdo->prepare('SELECT brand_id FROM category_brands WHERE category_id = :id');
+    $stmt->execute(['id' => $id]);
+    Response::json(['category_id' => (int) $id, 'brand_ids' => array_map('intval', array_column($stmt->fetchAll(), 'brand_id'))]);
+});
+$router->put('/api/categories/{id}/brands', function ($id) use ($pdo) {
+    $claims = JwtAuthMiddleware::authenticate();
+    PermissionMiddleware::require($claims, 'catalog.manage_items');
+    $body = json_decode(file_get_contents('php://input'), true) ?? [];
+    $pdo->beginTransaction();
+    $pdo->prepare('DELETE FROM category_brands WHERE category_id = :id')->execute(['id' => $id]);
+    $stmt = $pdo->prepare('INSERT INTO category_brands (category_id, brand_id) VALUES (:c, :b)');
+    foreach (array_unique(array_map('intval', $body['brand_ids'] ?? [])) as $brandId) {
+        $stmt->execute(['c' => $id, 'b' => $brandId]);
+    }
+    $pdo->commit();
+    Response::json(['category_id' => (int) $id, 'brand_ids' => $body['brand_ids'] ?? []]);
+});
 
 $brands = new CrudController($pdo, 'brands', ['name', 'code'], 'catalog.manage_items', 'BRD');
 $router->get('/api/brands', fn () => $brands->index());
@@ -109,6 +128,8 @@ $router->post('/api/items', fn () => $itemController->store());
 $router->get('/api/items/{id}', fn ($id) => $itemController->show($id));
 $router->put('/api/items/{id}', fn ($id) => $itemController->update($id));
 $router->delete('/api/items/{id}', fn ($id) => $itemController->destroy($id));
+$router->post('/api/items/{id}/image', fn ($id) => $itemController->uploadImage($id));
+$router->delete('/api/items/{id}/image', fn ($id) => $itemController->removeImage($id));
 
 // ---------------------------------------------------------------
 // Parties — branch-scoped (section 4.2)

@@ -29,7 +29,7 @@ export function Login() {
     <div className="flex h-screen items-center justify-center bg-page">
       <form onSubmit={handleSubmit} className="card w-80 p-6">
         <div className="mb-6 flex flex-col items-center leading-none">
-          <span className="brand-wordmark text-2xl">POS System</span>
+          <span className="brand-wordmark text-2xl">AJ Agency</span>
           <span className="mt-1 text-[10px] font-medium uppercase tracking-widest text-ink-muted">
             Distributor Billing &amp; Inventory
           </span>

@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
-import { categoriesApi, brandsApi, productLinesApi, taxCodesApi, stockUnitsApi } from '../api/catalog';
+import { categoriesApi, brandsApi, productLinesApi, taxCodesApi, stockUnitsApi, categoryBrandsApi } from '../api/catalog';
 import { EntityTable } from '../components/EntityTable';
 import { Tabs } from '../components/Tabs';
+import { Button } from '../components/Button.jsx';
 import { usePermission } from '../hooks/usePermission';
 import { ItemsPanel } from './ItemsPanel.jsx';
 
@@ -11,13 +13,14 @@ function useEntity(key, api) {
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: [key] });
   const create = useMutation({ mutationFn: api.create, onSuccess: invalidate });
+  const update = useMutation({ mutationFn: ({ id, data }) => api.update(id, data), onSuccess: invalidate });
   const remove = useMutation({ mutationFn: api.remove, onSuccess: invalidate });
 
-  return { rows: query.data || [], isLoading: query.isLoading, create, remove };
+  return { rows: query.data || [], isLoading: query.isLoading, create, update, remove };
 }
 
 function CategoriesPanel({ canManage }) {
-  const { rows, create, remove } = useEntity('categories', categoriesApi);
+  const { rows, create, update, remove } = useEntity('categories', categoriesApi);
   return (
     <EntityTable
       title="Categories"
@@ -29,13 +32,14 @@ function CategoriesPanel({ canManage }) {
       ]}
       rows={rows}
       onCreate={(data) => create.mutateAsync(data)}
+      onUpdate={(id, data) => update.mutateAsync({ id, data })}
       onDelete={(id) => remove.mutateAsync(id)}
     />
   );
 }
 
 function BrandsPanel({ canManage }) {
-  const { rows, create, remove } = useEntity('brands', brandsApi);
+  const { rows, create, update, remove } = useEntity('brands', brandsApi);
   return (
     <EntityTable
       title="Brands"
@@ -47,13 +51,14 @@ function BrandsPanel({ canManage }) {
       ]}
       rows={rows}
       onCreate={(data) => create.mutateAsync(data)}
+      onUpdate={(id, data) => update.mutateAsync({ id, data })}
       onDelete={(id) => remove.mutateAsync(id)}
     />
   );
 }
 
 function ProductLinesPanel({ canManage }) {
-  const { rows, create, remove } = useEntity('product-lines', productLinesApi);
+  const { rows, create, update, remove } = useEntity('product-lines', productLinesApi);
   return (
     <EntityTable
       title="Product Lines (Profit Centers)"
@@ -65,13 +70,14 @@ function ProductLinesPanel({ canManage }) {
       ]}
       rows={rows}
       onCreate={(data) => create.mutateAsync(data)}
+      onUpdate={(id, data) => update.mutateAsync({ id, data })}
       onDelete={(id) => remove.mutateAsync(id)}
     />
   );
 }
 
 function TaxCodesPanel({ canManage }) {
-  const { rows, create, remove } = useEntity('tax-codes', taxCodesApi);
+  const { rows, create, update, remove } = useEntity('tax-codes', taxCodesApi);
   return (
     <EntityTable
       title="Tax Codes (GST slabs)"
@@ -95,13 +101,14 @@ function TaxCodesPanel({ canManage }) {
       ]}
       rows={rows}
       onCreate={(data) => create.mutateAsync(data)}
+      onUpdate={(id, data) => update.mutateAsync({ id, data })}
       onDelete={(id) => remove.mutateAsync(id)}
     />
   );
 }
 
 function StockUnitsPanel({ canManage }) {
-  const { rows, create, remove } = useEntity('stock-units', stockUnitsApi);
+  const { rows, create, update, remove } = useEntity('stock-units', stockUnitsApi);
   return (
     <EntityTable
       title="Stock Units"
@@ -127,8 +134,71 @@ function StockUnitsPanel({ canManage }) {
       ]}
       rows={rows}
       onCreate={(data) => create.mutateAsync({ ...data, is_decimal: Number(data.is_decimal) })}
+      onUpdate={(id, data) => update.mutateAsync({ id, data: { ...data, is_decimal: Number(data.is_decimal) } })}
       onDelete={(id) => remove.mutateAsync(id)}
     />
+  );
+}
+
+function CategoryBrandMappingPanel() {
+  const [categoryId, setCategoryId] = useState('');
+  const [selected, setSelected] = useState([]);
+  const [message, setMessage] = useState('');
+  const categoriesQuery = useQuery({ queryKey: ['categories'], queryFn: categoriesApi.list });
+  const brandsQuery = useQuery({ queryKey: ['brands'], queryFn: brandsApi.list });
+
+  const saveMutation = useMutation({
+    mutationFn: () => categoryBrandsApi.set(categoryId, selected),
+    onSuccess: () => {
+      setMessage('Saved.');
+      setTimeout(() => setMessage(''), 2000);
+    },
+  });
+
+  const categories = categoriesQuery.data || [];
+  const brands = brandsQuery.data || [];
+
+  const pickCategory = async (id) => {
+    setCategoryId(id);
+    if (id) {
+      const data = await categoryBrandsApi.get(id);
+      setSelected(data.brand_ids || []);
+    } else {
+      setSelected([]);
+    }
+  };
+
+  const toggle = (brandId) => {
+    setSelected((prev) => (prev.includes(brandId) ? prev.filter((b) => b !== brandId) : [...prev, brandId]));
+  };
+
+  return (
+    <div className="card p-4">
+      <div className="mb-3 font-semibold text-ink">Category → Brand Mapping</div>
+      <p className="mb-3 text-xs text-ink-muted">
+        Restrict which brands are valid under a category. A category with no brands checked has no restriction (any brand allowed).
+      </p>
+      <select value={categoryId} onChange={(e) => pickCategory(e.target.value)} className="input mb-3 w-64">
+        <option value="">Select category</option>
+        {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+      </select>
+
+      {categoryId && (
+        <>
+          <div className="mb-3 flex flex-wrap gap-3">
+            {brands.map((b) => (
+              <label key={b.id} className="flex items-center gap-1.5 text-sm">
+                <input type="checkbox" checked={selected.includes(b.id)} onChange={() => toggle(b.id)} />
+                {b.name}
+              </label>
+            ))}
+            {brands.length === 0 && <span className="text-sm text-ink-muted">No brands yet — add some in the Brands tab.</span>}
+          </div>
+          <Button size="sm" onClick={() => saveMutation.mutate()}>Save Mapping</Button>
+          {message && <span className="ml-3 text-sm text-success">{message}</span>}
+        </>
+      )}
+    </div>
   );
 }
 
@@ -143,6 +213,7 @@ export function Catalog() {
           { key: 'items', label: 'Items', content: <ItemsPanel canManage={canManage} /> },
           { key: 'categories', label: 'Categories', content: <CategoriesPanel canManage={canManage} /> },
           { key: 'brands', label: 'Brands', content: <BrandsPanel canManage={canManage} /> },
+          { key: 'category-brand', label: 'Category ↔ Brand', content: <CategoryBrandMappingPanel /> },
           { key: 'product-lines', label: 'Product Lines', content: <ProductLinesPanel canManage={canManage} /> },
           { key: 'units-tax', label: 'Units & Tax', content: (
             <div className="flex flex-col gap-4">

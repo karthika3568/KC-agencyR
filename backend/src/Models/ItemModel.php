@@ -11,7 +11,7 @@ class ItemModel
 {
     /** Columns a caller may write directly on the items row. */
     private const WRITABLE_COLUMNS = [
-        'item_name', 'category_id', 'brand_id', 'product_line_id', 'hsn_code', 'barcode',
+        'item_name', 'category_id', 'brand_id', 'product_line_id', 'supplier_id', 'hsn_code', 'barcode',
         'base_unit_id', 'secondary_unit_id', 'conversion_factor', 'purchase_price', 'cost_price',
         'wholesale_price', 'retail_price', 'mrp', 'min_stock_threshold', 'tax_code_id', 'image', 'is_active',
     ];
@@ -22,28 +22,48 @@ class ItemModel
 
     private const LIST_SELECT = "
         SELECT i.*, c.name AS category_name, b.name AS brand_name, pl.name AS product_line_name,
+               s.name AS supplier_name,
                bu.short_code AS base_unit_code, su.short_code AS secondary_unit_code,
                tc.code AS tax_code, tc.gst_percent, tc.cess_percent
         FROM items i
         LEFT JOIN categories c ON c.id = i.category_id
         LEFT JOIN brands b ON b.id = i.brand_id
         LEFT JOIN product_lines pl ON pl.id = i.product_line_id
+        LEFT JOIN suppliers s ON s.id = i.supplier_id
         LEFT JOIN stock_units bu ON bu.id = i.base_unit_id
         LEFT JOIN stock_units su ON su.id = i.secondary_unit_id
         LEFT JOIN tax_codes tc ON tc.id = i.tax_code_id
     ";
 
-    public function all(?string $search = null): array
+    /**
+     * @param int|null $branchId when given, only items mapped to that
+     * branch are returned — this is what makes item_branches a real
+     * availability filter rather than a decorative field (section 6).
+     */
+    public function all(?string $search = null, ?int $branchId = null): array
     {
         $sql = self::LIST_SELECT;
+        $joins = [];
+        $where = [];
         $params = [];
 
+        if ($branchId !== null) {
+            $joins[] = 'JOIN item_branches ib ON ib.item_id = i.id AND ib.branch_id = :branch_id';
+            $params['branch_id'] = $branchId;
+        }
         if ($search !== null && $search !== '') {
-            $sql .= ' WHERE i.item_name LIKE :search OR i.item_code LIKE :search OR i.barcode LIKE :search';
+            $where[] = '(i.item_name LIKE :search OR i.item_code LIKE :search OR i.barcode LIKE :search)';
             $params['search'] = "%$search%";
         }
 
+        if ($joins) {
+            $sql .= ' ' . implode(' ', $joins);
+        }
+        if ($where) {
+            $sql .= ' WHERE ' . implode(' AND ', $where);
+        }
         $sql .= ' ORDER BY i.item_name';
+
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
         return $stmt->fetchAll();
@@ -68,7 +88,16 @@ class ItemModel
         $stmt->execute(['item_id' => $id]);
         $item['unit_conversions'] = $stmt->fetchAll();
 
+        $item['branch_ids'] = $this->branchIdsFor($id);
+
         return $item;
+    }
+
+    public function branchIdsFor(int $itemId): array
+    {
+        $stmt = $this->pdo->prepare('SELECT branch_id FROM item_branches WHERE item_id = :item_id');
+        $stmt->execute(['item_id' => $itemId]);
+        return array_map('intval', array_column($stmt->fetchAll(), 'branch_id'));
     }
 
     public function findByCode(string $itemCode): ?array
@@ -79,10 +108,13 @@ class ItemModel
     }
 
     /**
-     * Creates an item + its optional unit conversions in one transaction,
-     * then assigns item_code from the new row's own id (ITM00001 style).
+     * Creates an item + its optional unit conversions + branch mapping in
+     * one transaction, then assigns item_code from the new row's own id
+     * (ITM00001 style). $branchIds defaults to "every existing branch"
+     * when omitted so a plain create (e.g. via import) doesn't silently
+     * create an item nobody can sell anywhere.
      */
-    public function create(array $data, array $unitConversions = []): int
+    public function create(array $data, array $unitConversions = [], ?array $branchIds = null): int
     {
         $this->pdo->beginTransaction();
         try {
@@ -101,6 +133,7 @@ class ItemModel
                 ->execute(['code' => CodeGenerator::fromId('ITM', $id), 'id' => $id]);
 
             $this->saveUnitConversions($id, $unitConversions);
+            $this->saveBranchMapping($id, $branchIds);
 
             $this->pdo->commit();
             return $id;
@@ -110,7 +143,7 @@ class ItemModel
         }
     }
 
-    public function update(int $id, array $data, ?array $unitConversions = null): void
+    public function update(int $id, array $data, ?array $unitConversions = null, ?array $branchIds = null): void
     {
         $this->pdo->beginTransaction();
         try {
@@ -125,6 +158,12 @@ class ItemModel
                 $this->pdo->prepare('DELETE FROM item_unit_conversions WHERE item_id = :item_id')
                     ->execute(['item_id' => $id]);
                 $this->saveUnitConversions($id, $unitConversions);
+            }
+
+            if ($branchIds !== null) {
+                $this->pdo->prepare('DELETE FROM item_branches WHERE item_id = :item_id')
+                    ->execute(['item_id' => $id]);
+                $this->saveBranchMapping($id, $branchIds);
             }
 
             $this->pdo->commit();
@@ -161,6 +200,24 @@ class ItemModel
                 'is_purchase_unit' => !empty($uc['is_purchase_unit']) ? 1 : 0,
                 'is_sale_unit' => !empty($uc['is_sale_unit']) ? 1 : 0,
             ]);
+        }
+    }
+
+    private function saveBranchMapping(int $itemId, ?array $branchIds): void
+    {
+        if ($branchIds === null) {
+            // No explicit selection — default to every existing branch so
+            // a plain create (import, quick-add) is sellable everywhere,
+            // matching pre-Phase-8 behavior, until someone narrows it.
+            $branchIds = array_column($this->pdo->query('SELECT id FROM branches')->fetchAll(), 'id');
+        }
+        if (empty($branchIds)) {
+            return;
+        }
+
+        $stmt = $this->pdo->prepare('INSERT IGNORE INTO item_branches (item_id, branch_id) VALUES (:item_id, :branch_id)');
+        foreach (array_unique(array_map('intval', $branchIds)) as $branchId) {
+            $stmt->execute(['item_id' => $itemId, 'branch_id' => $branchId]);
         }
     }
 }

@@ -50,6 +50,17 @@ class SupplierPaymentModel
             $unpaid = $purchases->unpaidForSupplier($supplierId);
             $byId = array_column($unpaid, null, 'id');
 
+            // Section 30: same rule applies to supplier payments — never
+            // allow paying more than what's actually outstanding.
+            $totalOutstanding = round(array_sum(array_column($unpaid, 'pending_balance')), 2);
+            if ($amount > $totalOutstanding + 0.009) {
+                throw new \RuntimeException(sprintf(
+                    'Payment amount (%.2f) exceeds this supplier\'s total pending balance of %.2f',
+                    $amount,
+                    $totalOutstanding
+                ));
+            }
+
             $allocations = [];
             if ($manualAllocations !== null) {
                 foreach ($manualAllocations as $a) {

@@ -13,8 +13,8 @@ export default defineConfig({
         type: 'module',
       },
       manifest: {
-        name: 'POS / Distributor Billing System',
-        short_name: 'POS System',
+        name: 'AJ Agency',
+        short_name: 'AJ Agency',
         description: 'Multi-branch, role-based POS + distributor billing system',
         start_url: '/',
         scope: '/',

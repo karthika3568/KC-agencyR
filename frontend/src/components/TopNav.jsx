@@ -95,7 +95,7 @@ export function TopNav() {
     <header className="bg-navbar px-4 py-2.5">
       <div className="flex items-center gap-4">
         <div className="flex shrink-0 flex-col leading-none">
-          <span className="brand-wordmark text-lg">POS System</span>
+          <span className="brand-wordmark text-lg">AJ Agency</span>
           <span className="text-[10px] font-medium uppercase tracking-widest text-ink-onnavy/50">
             Distributor Billing &amp; Inventory
           </span>

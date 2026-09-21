@@ -15,7 +15,7 @@ export function StatusFooter() {
 
   return (
     <footer className="flex items-center justify-between border-t border-border-soft bg-white px-4 py-2 text-xs text-ink-muted">
-      <span>POS System v1.0.0 &middot; Distributor Billing &amp; Inventory</span>
+      <span>AJ Agency v1.0.0 &middot; Distributor Billing &amp; Inventory</span>
       <span className="flex items-center gap-1.5">
         <span className="h-2 w-2 rounded-full bg-success" />
         Online

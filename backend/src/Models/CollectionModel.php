@@ -84,6 +84,18 @@ class CollectionModel
             $unpaid = $this->unpaidInvoicesForCustomer($customerId);
             $byId = array_column($unpaid, null, 'id');
 
+            // Section 30: a collection must never exceed the customer's total
+            // pending credit — reject up front rather than silently
+            // truncating the allocation to whatever fits.
+            $totalOutstanding = round(array_sum(array_column($unpaid, 'balance_due')), 2);
+            if ($amount > $totalOutstanding + 0.009) {
+                throw new \RuntimeException(sprintf(
+                    'Payment amount (%.2f) exceeds this customer\'s total pending credit of %.2f',
+                    $amount,
+                    $totalOutstanding
+                ));
+            }
+
             $allocations = [];
             if ($manualAllocations !== null) {
                 foreach ($manualAllocations as $a) {
