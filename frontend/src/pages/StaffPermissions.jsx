@@ -1,7 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Pencil } from 'lucide-react';
 import { staffApi, rolesApi } from '../api/admin';
+import { branchesApi } from '../api/branches';
 import { usePermission } from '../hooks/usePermission';
+import { Button } from '../components/Button.jsx';
 
 function CreateStaffForm() {
   const queryClient = useQueryClient();
@@ -47,6 +50,77 @@ function CreateStaffForm() {
       </button>
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
     </form>
+  );
+}
+
+function EditStaffModal({ user, onClose }) {
+  const queryClient = useQueryClient();
+  const [form, setForm] = useState({
+    name: user.name,
+    phone: user.phone || '',
+    role_id: user.role_id,
+    branch_id: user.branch_id ?? '',
+  });
+  const [error, setError] = useState('');
+
+  const rolesQuery = useQuery({ queryKey: ['roles'], queryFn: rolesApi.list });
+  const branchesQuery = useQuery({ queryKey: ['branches'], queryFn: branchesApi.list });
+  const updateMutation = useMutation({
+    mutationFn: (data) => staffApi.update(user.id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['staff'] });
+      onClose();
+    },
+  });
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError('');
+    try {
+      await updateMutation.mutateAsync({
+        name: form.name,
+        phone: form.phone || null,
+        role_id: Number(form.role_id),
+        branch_id: form.branch_id ? Number(form.branch_id) : null,
+      });
+    } catch (err) {
+      setError(err?.response?.data?.error || 'Failed to save');
+    }
+  };
+
+  const roles = rolesQuery.data || [];
+  const branches = branchesQuery.data || [];
+
+  return (
+    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/30">
+      <form onSubmit={submit} className="w-[420px] card p-5">
+        <div className="mb-3 text-lg font-semibold text-ink">Edit Staff — {user.name}</div>
+
+        <label className="mb-1 block text-xs font-medium text-ink-muted">Name</label>
+        <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input mb-3" />
+
+        <label className="mb-1 block text-xs font-medium text-ink-muted">Phone</label>
+        <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="input mb-3" />
+
+        <label className="mb-1 block text-xs font-medium text-ink-muted">Role</label>
+        <select required value={form.role_id} onChange={(e) => setForm({ ...form, role_id: e.target.value })} className="input mb-3">
+          {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+        </select>
+
+        <label className="mb-1 block text-xs font-medium text-ink-muted">Branch</label>
+        <select value={form.branch_id} onChange={(e) => setForm({ ...form, branch_id: e.target.value })} className="input mb-3">
+          <option value="">No home branch</option>
+          {branches.map((b) => <option key={b.id} value={b.id}>{b.branch_name}</option>)}
+        </select>
+
+        {error && <p className="mb-2 text-sm text-danger">{error}</p>}
+
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button type="submit">Save</Button>
+        </div>
+      </form>
+    </div>
   );
 }
 
@@ -135,6 +209,7 @@ export function StaffPermissions() {
   const canManageAccounts = usePermission('staff.manage_accounts');
   const canManagePermissions = usePermission('staff.manage_permissions');
   const [selected, setSelected] = useState(null);
+  const [editing, setEditing] = useState(null);
   const [statusEdits, setStatusEdits] = useState({});
 
   const queryClient = useQueryClient();
@@ -183,11 +258,18 @@ export function StaffPermissions() {
                   )}
                 </td>
                 <td className="px-4 py-2 text-right">
-                  {canManagePermissions && (
-                    <button onClick={() => setSelected(u)} className="text-xs font-medium text-gold hover:underline">
-                      Permissions
-                    </button>
-                  )}
+                  <div className="flex items-center justify-end gap-3">
+                    {canManageAccounts && (
+                      <button title="Edit" onClick={() => setEditing(u)} className="text-ink-muted hover:text-ink">
+                        <Pencil size={15} />
+                      </button>
+                    )}
+                    {canManagePermissions && (
+                      <button onClick={() => setSelected(u)} className="text-xs font-medium text-gold hover:underline">
+                        Permissions
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -197,6 +279,7 @@ export function StaffPermissions() {
       </div>
 
       {selected && <PermissionsPanel user={selected} onClose={() => setSelected(null)} />}
+      {editing && <EditStaffModal user={editing} onClose={() => setEditing(null)} />}
     </div>
   );
 }
