@@ -361,20 +361,51 @@ class InvoiceModel
                 );
             }
 
+            // The customer this invoice belongs to AFTER the edit — never the
+            // stale pre-edit value. array_key_exists (not ??) because the
+            // caller may deliberately set customer_id to null to convert a
+            // credit sale back to walk-in, which must not fall back to the
+            // old value.
+            $newCustomerId = array_key_exists('customer_id', $header) ? $header['customer_id'] : $invoice['customer_id'];
+
             $paidAmount = (float) $invoice['paid_amount'];
             $oldUnpaid = max(0.0, round((float) $invoice['grand_total'] - $paidAmount, 2));
             $newUnpaid = max(0.0, round($totals['grand_total'] - $paidAmount, 2));
             $delta = round($newUnpaid - $oldUnpaid, 2);
 
-            if ($newUnpaid > 0.009 && $invoice['customer_id'] === null) {
+            if ($newUnpaid > 0.009 && $newCustomerId === null) {
                 throw new \RuntimeException('Cannot leave a walk-in invoice partially unpaid — attach a customer, or reduce the total to match what was already paid');
             }
 
+            $oldCustomerId = $invoice['customer_id'] !== null ? (int) $invoice['customer_id'] : null;
+            $newCustomerIdInt = $newCustomerId !== null ? (int) $newCustomerId : null;
             $customerOutstandingAfter = $invoice['customer_outstanding_after'];
-            if (abs($delta) > 0.009 && $invoice['customer_id'] !== null) {
-                $credit = new CreditLedgerService($this->pdo);
+            $credit = new CreditLedgerService($this->pdo);
+
+            if ($oldCustomerId !== $newCustomerIdInt) {
+                // Reassigned to a different customer — a plain delta would
+                // apply to the new customer only, leaving the old
+                // customer's ledger permanently overstated. Fully reverse
+                // the old customer's original share, then fully apply the
+                // new unpaid amount to the new customer.
+                if ($oldCustomerId !== null && $oldUnpaid > 0.009) {
+                    $credit->record(
+                        $oldCustomerId, 'credit_reversal', $oldUnpaid, $id,
+                        'Invoice ' . $invoice['invoice_no'] . ' edited (reassigned)', $actorId
+                    );
+                }
+                $customerOutstandingAfter = null;
+                if ($newCustomerIdInt !== null && $newUnpaid > 0.009) {
+                    $customerOutstandingAfter = $credit->record(
+                        $newCustomerIdInt, 'sale_credit', $newUnpaid, $id,
+                        'Invoice ' . $invoice['invoice_no'] . ' edited (reassigned)', $actorId
+                    );
+                } elseif ($newCustomerIdInt !== null) {
+                    $customerOutstandingAfter = $credit->currentOutstanding($newCustomerIdInt);
+                }
+            } elseif (abs($delta) > 0.009 && $newCustomerIdInt !== null) {
                 $customerOutstandingAfter = $credit->record(
-                    (int) $invoice['customer_id'],
+                    $newCustomerIdInt,
                     $delta > 0 ? 'sale_credit' : 'credit_reversal',
                     abs($delta),
                     $id,
@@ -400,7 +431,7 @@ class InvoiceModel
             );
             $stmt->execute([
                 'id' => $id,
-                'customer_id' => $header['customer_id'] ?? $invoice['customer_id'],
+                'customer_id' => $newCustomerId,
                 'vehicle_no' => $header['vehicle_no'] ?? $invoice['vehicle_no'],
                 'payment_status' => $paymentStatus,
                 'outstanding' => $customerOutstandingAfter,
