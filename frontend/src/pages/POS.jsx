@@ -11,6 +11,7 @@ import { priceLine, computeCartTotals } from '../utils/pricing';
 import { Badge } from '../components/Badge.jsx';
 import { Card } from '../components/Card.jsx';
 import { Button } from '../components/Button.jsx';
+import { PrintPreviewModal } from '../components/PrintPreviewModal.jsx';
 
 const PAYMENT_METHODS = ['cash', 'upi', 'card', 'credit', 'other'];
 
@@ -50,6 +51,7 @@ export function POS() {
   const [splitMode, setSplitMode] = useState(false);
   const [payments, setPayments] = useState([{ payment_method: 'cash', amount: 0, reference_no: '' }]);
   const [message, setMessage] = useState('');
+  const [printingInvoiceId, setPrintingInvoiceId] = useState(null);
   const [activeCategory, setActiveCategory] = useState('all');
   const [viewMode, setViewMode] = useState('grid');
   const searchInputRef = useRef(null);
@@ -180,7 +182,7 @@ export function POS() {
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['invoices', 'held'] });
-      window.open(`/print/invoice/${result.id}?format=a4`, '_blank');
+      setPrintingInvoiceId(result.id);
       resetBill();
       setMessage(`Invoice ${result.invoice_no} completed.`);
       setTimeout(() => setMessage(''), 4000);
@@ -612,6 +614,8 @@ export function POS() {
           </Card>
         </div>
       </div>
+
+      {printingInvoiceId && <PrintPreviewModal invoiceId={printingInvoiceId} onClose={() => setPrintingInvoiceId(null)} />}
     </div>
   );
 }

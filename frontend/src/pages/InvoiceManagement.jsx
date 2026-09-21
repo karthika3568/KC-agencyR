@@ -5,6 +5,7 @@ import { invoicesApi } from '../api/invoices';
 import { Card } from '../components/Card.jsx';
 import { Badge } from '../components/Badge.jsx';
 import { Button } from '../components/Button.jsx';
+import { PrintPreviewModal } from '../components/PrintPreviewModal.jsx';
 import { usePermission } from '../hooks/usePermission';
 
 const STATUS_VARIANT = {
@@ -87,6 +88,7 @@ export function InvoiceManagement() {
   const [statusFilter, setStatusFilter] = useState('');
   const [search, setSearch] = useState('');
   const [viewingId, setViewingId] = useState(null);
+  const [printingId, setPrintingId] = useState(null);
   const [cancelling, setCancelling] = useState(null);
   const [cancelError, setCancelError] = useState('');
 
@@ -160,11 +162,7 @@ export function InvoiceManagement() {
                     <button title="View" onClick={() => setViewingId(inv.id)} className="text-ink-muted hover:text-ink">
                       <Eye size={16} />
                     </button>
-                    <button
-                      title="Print"
-                      onClick={() => window.open(`/print/invoice/${inv.id}?format=a4`, '_blank')}
-                      className="text-ink-muted hover:text-ink"
-                    >
+                    <button title="Print" onClick={() => setPrintingId(inv.id)} className="text-ink-muted hover:text-ink">
                       <Printer size={16} />
                     </button>
                     {canCancel && inv.status === 'completed' && (
@@ -182,6 +180,7 @@ export function InvoiceManagement() {
       </Card>
 
       {viewingId && <ViewModal id={viewingId} onClose={() => setViewingId(null)} />}
+      {printingId && <PrintPreviewModal invoiceId={printingId} onClose={() => setPrintingId(null)} />}
       {cancelling && (
         <CancelModal
           invoice={cancelling}

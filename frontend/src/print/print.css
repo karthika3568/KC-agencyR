@@ -42,6 +42,12 @@
   body {
     background: #fff;
   }
+  /* When the in-app Print Preview modal is open (rendered via portal
+     straight into <body>, alongside #root), printing must show only the
+     modal's invoice content, not the app shell underneath it. */
+  body.has-print-modal #root {
+    display: none !important;
+  }
 }
 
 @media print and (max-width: 80mm) {
