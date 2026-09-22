@@ -11,6 +11,7 @@ use App\Controllers\BranchScopedCrudController;
 use App\Controllers\CashHandoverController;
 use App\Controllers\CollectionController;
 use App\Controllers\CrudController;
+use App\Controllers\CustomerPrebookingController;
 use App\Controllers\DashboardController;
 use App\Controllers\InvoiceController;
 use App\Controllers\ItemController;
@@ -141,6 +142,29 @@ $router->post('/api/routes', fn () => $routes->store());
 $router->put('/api/routes/{id}', fn ($id) => $routes->update($id));
 $router->delete('/api/routes/{id}', fn ($id) => $routes->destroy($id));
 
+// Which suppliers serve a given route — used to filter the supplier
+// dropdown on a Purchase Request by Branch + Route (section: supplier
+// mapping). Same ad-hoc-pair-endpoint pattern as /categories/{id}/brands.
+$router->get('/api/routes/{id}/suppliers', function ($id) use ($pdo) {
+    JwtAuthMiddleware::authenticate();
+    $stmt = $pdo->prepare('SELECT supplier_id FROM supplier_routes WHERE route_id = :id');
+    $stmt->execute(['id' => $id]);
+    Response::json(['route_id' => (int) $id, 'supplier_ids' => array_map('intval', array_column($stmt->fetchAll(), 'supplier_id'))]);
+});
+$router->put('/api/routes/{id}/suppliers', function ($id) use ($pdo) {
+    $claims = JwtAuthMiddleware::authenticate();
+    PermissionMiddleware::require($claims, 'parties.manage_suppliers');
+    $body = json_decode(file_get_contents('php://input'), true) ?? [];
+    $pdo->beginTransaction();
+    $pdo->prepare('DELETE FROM supplier_routes WHERE route_id = :id')->execute(['id' => $id]);
+    $stmt = $pdo->prepare('INSERT INTO supplier_routes (route_id, supplier_id) VALUES (:r, :s)');
+    foreach (array_unique(array_map('intval', $body['supplier_ids'] ?? [])) as $supplierId) {
+        $stmt->execute(['r' => $id, 's' => $supplierId]);
+    }
+    $pdo->commit();
+    Response::json(['route_id' => (int) $id, 'supplier_ids' => $body['supplier_ids'] ?? []]);
+});
+
 // Cities hang off a route, not a branch directly — plain CrudController.
 $cities = new CrudController($pdo, 'cities', ['route_id', 'name'], 'parties.manage_customers');
 $router->get('/api/cities', fn () => $cities->index());
@@ -220,6 +244,20 @@ $router->get('/api/purchase-requests', fn () => $purchaseRequests->index());
 $router->post('/api/purchase-requests', fn () => $purchaseRequests->store());
 $router->get('/api/purchase-requests/{id}', fn ($id) => $purchaseRequests->show($id));
 $router->post('/api/purchase-requests/{id}/cancel', fn ($id) => $purchaseRequests->cancel($id));
+$router->post('/api/purchase-requests/{id}/approve', fn ($id) => $purchaseRequests->approve($id));
+
+// ---------------------------------------------------------------
+// Customer Pre-Booking (Order Management) — permanent request record,
+// distinct from a POS Hold Bill: no stock, payment, or invoice effect.
+// ---------------------------------------------------------------
+$customerPrebookings = new CustomerPrebookingController($pdo);
+$router->get('/api/customer-prebookings/export', fn () => $customerPrebookings->exportExcel());
+$router->get('/api/customer-prebookings', fn () => $customerPrebookings->index());
+$router->post('/api/customer-prebookings', fn () => $customerPrebookings->store());
+$router->get('/api/customer-prebookings/{id}', fn ($id) => $customerPrebookings->show($id));
+$router->put('/api/customer-prebookings/{id}', fn ($id) => $customerPrebookings->update($id));
+$router->put('/api/customer-prebookings/{id}/status', fn ($id) => $customerPrebookings->updateStatus($id));
+$router->post('/api/customer-prebookings/{id}/cancel', fn ($id) => $customerPrebookings->cancel($id));
 
 $purchases = new PurchaseController($pdo);
 $router->get('/api/purchases', fn () => $purchases->index());

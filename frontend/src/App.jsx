@@ -8,6 +8,7 @@ import { Parties } from './pages/Parties.jsx';
 import { POS } from './pages/POS.jsx';
 import { InvoicePrint } from './pages/InvoicePrint.jsx';
 import { Purchasing } from './pages/Purchasing.jsx';
+import { OrderManagement } from './pages/OrderManagement.jsx';
 import { Inventory } from './pages/Inventory.jsx';
 import { Returns } from './pages/Returns.jsx';
 import { Collections } from './pages/Collections.jsx';
@@ -36,6 +37,7 @@ export default function App() {
       <Route path="/catalog" element={<Protected><Catalog /></Protected>} />
       <Route path="/parties" element={<Protected><Parties /></Protected>} />
       <Route path="/purchasing" element={<Protected><Purchasing /></Protected>} />
+      <Route path="/orders" element={<Protected><OrderManagement /></Protected>} />
       <Route path="/inventory" element={<Protected><Inventory /></Protected>} />
       <Route path="/returns" element={<Protected><Returns /></Protected>} />
       <Route path="/invoices" element={<Protected><InvoiceManagement /></Protected>} />

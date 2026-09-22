@@ -5,6 +5,32 @@ export const purchaseRequestsApi = {
   get: async (id) => (await apiClient.get(`/purchase-requests/${id}`)).data,
   create: async (data) => (await apiClient.post('/purchase-requests', data)).data,
   cancel: async (id) => (await apiClient.post(`/purchase-requests/${id}/cancel`)).data,
+  approve: async (id) => (await apiClient.post(`/purchase-requests/${id}/approve`)).data,
+};
+
+export const routeSuppliersApi = {
+  get: async (routeId) => (await apiClient.get(`/routes/${routeId}/suppliers`)).data,
+  set: async (routeId, supplierIds) => (await apiClient.put(`/routes/${routeId}/suppliers`, { supplier_ids: supplierIds })).data,
+};
+
+export const customerPrebookingsApi = {
+  list: async () => (await apiClient.get('/customer-prebookings')).data,
+  get: async (id) => (await apiClient.get(`/customer-prebookings/${id}`)).data,
+  create: async (data) => (await apiClient.post('/customer-prebookings', data)).data,
+  update: async (id, data) => (await apiClient.put(`/customer-prebookings/${id}`, data)).data,
+  setStatus: async (id, status) => (await apiClient.put(`/customer-prebookings/${id}/status`, { status })).data,
+  cancel: async (id) => (await apiClient.post(`/customer-prebookings/${id}/cancel`)).data,
+  async downloadExport() {
+    const res = await apiClient.get('/customer-prebookings/export', { responseType: 'blob' });
+    const url = URL.createObjectURL(res.data);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'customer_prebookings.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
 };
 
 export const purchasesApi = {

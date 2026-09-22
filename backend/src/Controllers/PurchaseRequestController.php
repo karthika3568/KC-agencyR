@@ -57,6 +57,7 @@ class PurchaseRequestController
         $header = [
             'supplier_id' => (int) $body['supplier_id'],
             'branch_id' => $this->resolveBranchId($claims),
+            'route_id' => !empty($body['route_id']) ? (int) $body['route_id'] : null,
             'notes' => $body['notes'] ?? null,
             'created_by' => (int) $claims['sub'],
         ];
@@ -68,7 +69,25 @@ class PurchaseRequestController
     {
         $claims = JwtAuthMiddleware::authenticate();
         PermissionMiddleware::require($claims, 'orders.create_purchase_indent');
-        $this->model->cancel((int) $id);
+        try {
+            $this->model->cancel((int) $id);
+        } catch (\RuntimeException $e) {
+            Response::error($e->getMessage(), 422);
+        }
         Response::json($this->model->find((int) $id));
+    }
+
+    /** Admin agrees the request is ready to be purchased — required before a GRN can reference it. */
+    public function approve(string $id): void
+    {
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::require($claims, 'orders.approve_purchase_request');
+
+        try {
+            $result = $this->model->approve((int) $id, (int) $claims['sub']);
+        } catch (\RuntimeException $e) {
+            Response::error($e->getMessage(), 422);
+        }
+        Response::json($result);
     }
 }

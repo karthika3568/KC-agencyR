@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { routesApi, citiesApi, customersApi, suppliersApi } from '../api/parties';
+import { routeSuppliersApi } from '../api/purchasing';
 import { EntityTable } from '../components/EntityTable';
 import { Tabs } from '../components/Tabs';
+import { Button } from '../components/Button.jsx';
 import { usePermission } from '../hooks/usePermission';
 
 function useEntity(key, api) {
@@ -18,15 +20,18 @@ function useEntity(key, api) {
 function RoutesPanel({ canManage }) {
   const { rows, create, remove } = useEntity('routes', routesApi);
   return (
-    <EntityTable
-      title="Routes"
-      canManage={canManage}
-      fields={[{ name: 'name', label: 'Route name', required: true }]}
-      columns={[{ key: 'name', label: 'Name' }]}
-      rows={rows}
-      onCreate={(data) => create.mutateAsync(data)}
-      onDelete={(id) => remove.mutateAsync(id)}
-    />
+    <div className="flex flex-col gap-4">
+      <EntityTable
+        title="Routes"
+        canManage={canManage}
+        fields={[{ name: 'name', label: 'Route name', required: true }]}
+        columns={[{ key: 'name', label: 'Name' }]}
+        rows={rows}
+        onCreate={(data) => create.mutateAsync(data)}
+        onDelete={(id) => remove.mutateAsync(id)}
+      />
+      <RouteSupplierMappingPanel canManage={canManage} />
+    </div>
   );
 }
 
@@ -166,6 +171,68 @@ function SuppliersPanel({ canManage }) {
       onUpdate={(id, data) => update.mutateAsync({ id, data: { ...data, opening_balance: Number(data.opening_balance || 0) } })}
       onDelete={(id) => remove.mutateAsync(id)}
     />
+  );
+}
+
+function RouteSupplierMappingPanel({ canManage }) {
+  const [routeId, setRouteId] = useState('');
+  const [selected, setSelected] = useState([]);
+  const [message, setMessage] = useState('');
+  const routesQuery = useQuery({ queryKey: ['routes'], queryFn: routesApi.list });
+  const suppliersQuery = useQuery({ queryKey: ['suppliers'], queryFn: suppliersApi.list });
+
+  const saveMutation = useMutation({
+    mutationFn: () => routeSuppliersApi.set(routeId, selected),
+    onSuccess: () => {
+      setMessage('Saved.');
+      setTimeout(() => setMessage(''), 2000);
+    },
+  });
+
+  const routes = routesQuery.data || [];
+  const suppliers = suppliersQuery.data || [];
+
+  const pickRoute = async (id) => {
+    setRouteId(id);
+    if (id) {
+      const data = await routeSuppliersApi.get(id);
+      setSelected(data.supplier_ids || []);
+    } else {
+      setSelected([]);
+    }
+  };
+
+  const toggle = (supplierId) => {
+    setSelected((prev) => (prev.includes(supplierId) ? prev.filter((s) => s !== supplierId) : [...prev, supplierId]));
+  };
+
+  return (
+    <div className="card p-4">
+      <div className="mb-3 font-semibold text-ink">Route → Supplier Mapping</div>
+      <p className="mb-3 text-xs text-ink-muted">
+        Restrict which suppliers can be picked for a Purchase Request raised on this route. A route with none checked shows every supplier (no restriction).
+      </p>
+      <select value={routeId} onChange={(e) => pickRoute(e.target.value)} className="input mb-3 w-64" disabled={!canManage}>
+        <option value="">Select route</option>
+        {routes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+      </select>
+
+      {routeId && (
+        <>
+          <div className="mb-3 flex flex-wrap gap-3">
+            {suppliers.map((s) => (
+              <label key={s.id} className="flex items-center gap-1.5 text-sm">
+                <input type="checkbox" checked={selected.includes(s.id)} onChange={() => toggle(s.id)} disabled={!canManage} />
+                {s.name}
+              </label>
+            ))}
+            {suppliers.length === 0 && <span className="text-sm text-ink-muted">No suppliers yet — add some in the Suppliers tab.</span>}
+          </div>
+          {canManage && <Button size="sm" onClick={() => saveMutation.mutate()}>Save Mapping</Button>}
+          {message && <span className="ml-2 text-sm text-success">{message}</span>}
+        </>
+      )}
+    </div>
   );
 }
 

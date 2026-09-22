@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import { itemsApi } from '../api/catalog';
 import { suppliersApi } from '../api/parties';
-import { purchaseRequestsApi, purchasesApi, supplierPaymentsApi } from '../api/purchasing';
+import { purchasesApi, supplierPaymentsApi } from '../api/purchasing';
 import { Tabs } from '../components/Tabs';
 import { usePermission } from '../hooks/usePermission';
 
@@ -32,92 +32,6 @@ function ItemLineEditor({ lines, setLines, items, showTax }) {
         </div>
       ))}
       <button onClick={addLine} className="self-start text-xs font-medium text-gold hover:underline">+ Add line</button>
-    </div>
-  );
-}
-
-function PurchaseIndentsPanel({ canManage }) {
-  const queryClient = useQueryClient();
-  const [supplierId, setSupplierId] = useState('');
-  const [lines, setLines] = useState([{ item_id: '', qty: 1, rate: 0 }]);
-  const [error, setError] = useState('');
-
-  const requestsQuery = useQuery({ queryKey: ['purchase-requests'], queryFn: purchaseRequestsApi.list });
-  const suppliersQuery = useQuery({ queryKey: ['suppliers'], queryFn: suppliersApi.list });
-  const itemsQuery = useQuery({ queryKey: ['items', ''], queryFn: () => itemsApi.list('') });
-
-  const createMutation = useMutation({
-    mutationFn: purchaseRequestsApi.create,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['purchase-requests'] });
-      setSupplierId('');
-      setLines([{ item_id: '', qty: 1, rate: 0 }]);
-    },
-  });
-  const cancelMutation = useMutation({
-    mutationFn: purchaseRequestsApi.cancel,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['purchase-requests'] }),
-  });
-
-  const submit = async () => {
-    setError('');
-    try {
-      await createMutation.mutateAsync({
-        supplier_id: Number(supplierId),
-        items: lines.filter((l) => l.item_id).map((l) => ({ item_id: Number(l.item_id), qty: Number(l.qty), rate: Number(l.rate) })),
-      });
-    } catch (err) {
-      setError(err?.response?.data?.error || 'Failed to save');
-    }
-  };
-
-  const requests = requestsQuery.data || [];
-  const suppliers = suppliersQuery.data || [];
-  const items = itemsQuery.data || [];
-
-  return (
-    <div className="flex flex-col gap-4">
-      {canManage && (
-        <div className="card p-4">
-          <div className="mb-2 font-semibold text-ink">New Purchase Indent</div>
-          <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className="input mb-2 w-64">
-            <option value="">Select supplier</option>
-            {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-          <ItemLineEditor lines={lines} setLines={setLines} items={items} showTax={false} />
-          <button onClick={submit} disabled={!supplierId} className="mt-3 rounded bg-success px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-40">
-            Create Indent
-          </button>
-          {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-        </div>
-      )}
-
-      <div className="card">
-        <div className="border-b border-border-soft px-4 py-3 font-semibold text-ink">Purchase Indents</div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border-soft text-left text-xs uppercase text-ink-muted">
-              <th className="px-4 py-2">Request #</th><th className="px-4 py-2">Supplier</th><th className="px-4 py-2">Status</th><th className="px-4 py-2">Date</th><th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {requests.map((r) => (
-              <tr key={r.id} className="border-b border-border-soft">
-                <td className="px-4 py-2">{r.request_no}</td>
-                <td className="px-4 py-2">{r.supplier_name}</td>
-                <td className="px-4 py-2 capitalize">{r.status.replace(/_/g, ' ')}</td>
-                <td className="px-4 py-2 text-ink-muted">{r.created_at}</td>
-                <td className="px-4 py-2 text-right">
-                  {r.status === 'open' && canManage && (
-                    <button onClick={() => cancelMutation.mutate(r.id)} className="text-xs font-medium text-red-600 hover:underline">Cancel</button>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {requests.length === 0 && <tr><td colSpan={5} className="px-4 py-6 text-center text-ink-muted">No indents yet.</td></tr>}
-          </tbody>
-        </table>
-      </div>
     </div>
   );
 }
@@ -379,7 +293,6 @@ function SupplierPaymentsPanel({ canManage }) {
 }
 
 export function Purchasing() {
-  const canIndent = usePermission('orders.create_purchase_indent');
   const canGrn = usePermission('purchases.create_grn');
   const canDeleteGrn = usePermission('purchases.delete_grn');
   const canViewCost = usePermission('purchases.view_purchase_cost');
@@ -387,10 +300,12 @@ export function Purchasing() {
 
   return (
     <div>
-      <h1 className="mb-4 text-2xl font-bold text-ink">Purchasing</h1>
+      <h1 className="mb-1 text-2xl font-bold text-ink">Purchasing</h1>
+      <p className="mb-4 text-sm text-ink-muted">
+        Purchase indents/requests now live under Orders &amp; Indents Management.
+      </p>
       <Tabs
         tabs={[
-          { key: 'indents', label: 'Purchase Indents', content: <PurchaseIndentsPanel canManage={canIndent} /> },
           { key: 'grn', label: 'GRN (Purchases)', content: <GrnPanel canManage={canGrn} canViewCost={canViewCost} canDelete={canDeleteGrn} /> },
           { key: 'payments', label: 'Supplier Payments', content: <SupplierPaymentsPanel canManage={canSettle} /> },
         ]}
