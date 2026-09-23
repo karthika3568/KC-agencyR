@@ -1,0 +1,88 @@
+import { useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet } from 'react-native';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { branchesApi } from '../../api/branches';
+import { friendlyErrorMessage } from '../../api/client';
+import { FormModal, formStyles } from '../../components/FormModal';
+import { usePermission } from '../../hooks/useAuth';
+import { colors } from '../../theme/colors';
+
+export function BranchesScreen() {
+  const canManage = usePermission('branches.manage');
+  const queryClient = useQueryClient();
+  const [modal, setModal] = useState(undefined);
+  const [form, setForm] = useState({});
+  const [error, setError] = useState('');
+
+  const listQuery = useQuery({ queryKey: ['branches'], queryFn: branchesApi.list });
+  const createMutation = useMutation({
+    mutationFn: branchesApi.create,
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['branches'] }); setModal(undefined); },
+    onError: (e) => setError(friendlyErrorMessage(e)),
+  });
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => branchesApi.update(id, data),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['branches'] }); setModal(undefined); },
+    onError: (e) => setError(friendlyErrorMessage(e)),
+  });
+
+  const openCreate = () => { setForm({ branch_name: '', print_name: '', phone: '', address_line1: '' }); setError(''); setModal(null); };
+  const openEdit = (b) => { setForm(b); setError(''); setModal(b); };
+  const submit = () => {
+    setError('');
+    if (modal?.id) updateMutation.mutate({ id: modal.id, data: form });
+    else createMutation.mutate(form);
+  };
+
+  return (
+    <View style={styles.screen}>
+      <FlatList
+        data={listQuery.data || []}
+        keyExtractor={(r) => String(r.id)}
+        refreshing={listQuery.isFetching}
+        onRefresh={listQuery.refetch}
+        contentContainerStyle={{ padding: 12 }}
+        renderItem={({ item }) => (
+          <TouchableOpacity style={styles.card} onPress={() => canManage && openEdit(item)}>
+            <Text style={styles.name}>{item.branch_name}{item.is_main_branch ? ' (Main)' : ''}</Text>
+            <Text style={styles.meta}>{item.address_line1}</Text>
+            <Text style={styles.meta}>{item.status}</Text>
+          </TouchableOpacity>
+        )}
+      />
+      {canManage && (
+        <TouchableOpacity style={styles.fab} onPress={openCreate}><Text style={styles.fabText}>+ Add Branch</Text></TouchableOpacity>
+      )}
+      <FormModal
+        visible={modal !== undefined}
+        title={modal?.id ? 'Edit Branch' : 'New Branch'}
+        onClose={() => setModal(undefined)}
+        footer={
+          <>
+            <TouchableOpacity style={formStyles.secondaryBtn} onPress={() => setModal(undefined)}><Text style={formStyles.secondaryBtnText}>Cancel</Text></TouchableOpacity>
+            <TouchableOpacity style={formStyles.primaryBtn} onPress={submit}><Text style={formStyles.primaryBtnText}>Save</Text></TouchableOpacity>
+          </>
+        }
+      >
+        <Text style={formStyles.label}>Branch Name</Text>
+        <TextInput value={form.branch_name || ''} onChangeText={(v) => setForm((p) => ({ ...p, branch_name: v }))} style={formStyles.input} />
+        <Text style={formStyles.label}>Print Name</Text>
+        <TextInput value={form.print_name || ''} onChangeText={(v) => setForm((p) => ({ ...p, print_name: v }))} style={formStyles.input} />
+        <Text style={formStyles.label}>Phone</Text>
+        <TextInput value={form.phone || ''} onChangeText={(v) => setForm((p) => ({ ...p, phone: v }))} style={formStyles.input} />
+        <Text style={formStyles.label}>Address</Text>
+        <TextInput value={form.address_line1 || ''} onChangeText={(v) => setForm((p) => ({ ...p, address_line1: v }))} style={formStyles.input} />
+        {error ? <Text style={formStyles.error}>{error}</Text> : null}
+      </FormModal>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.page },
+  card: { backgroundColor: colors.card, borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: colors.borderSoft },
+  name: { fontWeight: '700', color: colors.ink },
+  meta: { color: colors.inkMuted, fontSize: 12, marginTop: 2 },
+  fab: { position: 'absolute', bottom: 16, left: 16, right: 16, backgroundColor: colors.navbar, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+  fabText: { color: colors.gold, fontWeight: '700' },
+});
