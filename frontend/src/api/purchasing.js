@@ -37,6 +37,7 @@ export const purchasesApi = {
   list: async () => (await apiClient.get('/purchases')).data,
   get: async (id) => (await apiClient.get(`/purchases/${id}`)).data,
   create: async (data) => (await apiClient.post('/purchases', data)).data,
+  update: async (id, data) => (await apiClient.put(`/purchases/${id}`, data)).data,
   remove: async (id) => (await apiClient.delete(`/purchases/${id}`)).data,
 };
 

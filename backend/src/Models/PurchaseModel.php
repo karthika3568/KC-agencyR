@@ -52,14 +52,57 @@ class PurchaseModel
         }
 
         $stmt = $this->pdo->prepare(
-            'SELECT pi.*, i.item_name, i.item_code
-             FROM purchase_items pi JOIN items i ON i.id = pi.item_id
+            'SELECT pi.*, i.item_name, i.item_code, su.short_code AS unit_code,
+                    (pi.qty + pi.free_qty) AS total_qty
+             FROM purchase_items pi
+             JOIN items i ON i.id = pi.item_id
+             LEFT JOIN stock_units su ON su.id = pi.unit_id
              WHERE pi.purchase_id = :id'
         );
         $stmt->execute(['id' => $id]);
         $purchase['items'] = $stmt->fetchAll();
 
         return $purchase;
+    }
+
+    /**
+     * Prices one purchase line: gross is paid qty only (free_qty never
+     * enters the money math), discount reduces the taxable base before
+     * GST, MRP is stored as its own field and never derived from rate.
+     * Mirrors InvoiceModel::priceLine()'s convention.
+     */
+    public function priceLine(array $item, array $input): array
+    {
+        $qty = (float) ($input['qty'] ?? 0);
+        $freeQty = (float) ($input['free_qty'] ?? 0);
+        $rate = (float) ($input['rate'] ?? $item['purchase_price']);
+        $mrp = isset($input['mrp']) && $input['mrp'] !== '' ? (float) $input['mrp'] : (float) $item['mrp'];
+        $unitId = (int) ($input['unit_id'] ?? $item['base_unit_id']);
+
+        $gross = round($qty * $rate, 2);
+        $discountPercent = (float) ($input['discount_percent'] ?? 0);
+        $discountAmount = isset($input['discount_amount']) && $input['discount_amount'] !== ''
+            ? (float) $input['discount_amount']
+            : round($gross * $discountPercent / 100, 2);
+
+        $taxable = round($gross - $discountAmount, 2);
+        $taxPercent = (float) ($input['tax_percent'] ?? 0);
+        $taxAmount = round($taxable * $taxPercent / 100, 2);
+
+        return [
+            'item_id' => (int) $item['id'],
+            'unit_id' => $unitId,
+            'qty' => $qty,
+            'free_qty' => $freeQty,
+            'rate' => $rate,
+            'mrp' => $mrp,
+            'discount_percent' => $discountPercent,
+            'discount_amount' => $discountAmount,
+            'tax_percent' => $taxPercent,
+            'tax_amount' => $taxAmount,
+            'line_total' => $taxable,
+            'gross' => $gross,
+        ];
     }
 
     /** Every unpaid (or partially paid) GRN for a supplier, oldest first — feeds FIFO allocation. */
@@ -74,32 +117,34 @@ class PurchaseModel
         return $stmt->fetchAll();
     }
 
+    /** Sums a set of already-priced lines (from priceLine()) into header totals. */
+    private function aggregateTotals(array $lines): array
+    {
+        $subtotal = 0.0;
+        $taxTotal = 0.0;
+        foreach ($lines as $line) {
+            $subtotal += $line['line_total'];
+            $taxTotal += $line['tax_amount'];
+        }
+        return ['subtotal' => round($subtotal, 2), 'tax_total' => round($taxTotal, 2), 'grand_total' => round($subtotal + $taxTotal, 2)];
+    }
+
+    /**
+     * @param array $lines Already-priced lines from priceLine() — the
+     * caller (controller) resolves each item_id and calls priceLine() so
+     * validation errors surface before any DB write starts, same pattern
+     * as InvoiceController::prepareInvoice().
+     */
     public function create(array $header, array $lines, int $createdBy): int
     {
+        if (empty($lines)) {
+            throw new \RuntimeException('At least one item is required');
+        }
+
         $this->pdo->beginTransaction();
         try {
-            $subtotal = 0.0;
-            $taxTotal = 0.0;
-            $priced = [];
-            foreach ($lines as $line) {
-                $qty = (float) $line['qty'];
-                $rate = (float) $line['rate'];
-                $taxPercent = (float) ($line['tax_percent'] ?? 0);
-                $gross = round($qty * $rate, 2);
-                $taxAmount = round($gross * $taxPercent / 100, 2);
-                $subtotal += $gross;
-                $taxTotal += $taxAmount;
-                $priced[] = [
-                    'item_id' => (int) $line['item_id'],
-                    'qty' => $qty,
-                    'free_qty' => (float) ($line['free_qty'] ?? 0),
-                    'rate' => $rate,
-                    'tax_percent' => $taxPercent,
-                    'tax_amount' => $taxAmount,
-                    'line_total' => $gross,
-                ];
-            }
-            $grandTotal = round($subtotal + $taxTotal, 2);
+            $totals = $this->aggregateTotals($lines);
+            $grandTotal = $totals['grand_total'];
             $paidAmount = min((float) ($header['paid_amount'] ?? 0), $grandTotal);
 
             $stmt = $this->pdo->prepare(
@@ -116,8 +161,8 @@ class PurchaseModel
                 'branch_id' => $header['branch_id'],
                 'supplier_invoice_no' => $header['supplier_invoice_no'] ?? null,
                 'payment_mode' => $header['payment_mode'] ?? 'credit',
-                'subtotal' => round($subtotal, 2),
-                'tax_total' => round($taxTotal, 2),
+                'subtotal' => $totals['subtotal'],
+                'tax_total' => $totals['tax_total'],
                 'grand_total' => $grandTotal,
                 'paid_amount' => $paidAmount,
                 'created_by' => $createdBy,
@@ -127,13 +172,10 @@ class PurchaseModel
             $this->pdo->prepare('UPDATE purchases SET grn_no = :code WHERE id = :id')
                 ->execute(['code' => CodeGenerator::fromId('GRN', $purchaseId), 'id' => $purchaseId]);
 
-            $itemStmt = $this->pdo->prepare(
-                'INSERT INTO purchase_items (purchase_id, item_id, qty, free_qty, rate, tax_percent, tax_amount, line_total)
-                 VALUES (:purchase_id, :item_id, :qty, :free_qty, :rate, :tax_percent, :tax_amount, :line_total)'
-            );
+            $this->insertLines($purchaseId, $lines);
+
             $stockService = new StockLedgerService($this->pdo);
-            foreach ($priced as $line) {
-                $itemStmt->execute(['purchase_id' => $purchaseId, ...$line]);
+            foreach ($lines as $line) {
                 $stockService->applyMovement(
                     $line['item_id'],
                     'branch',
@@ -219,6 +261,123 @@ class PurchaseModel
         } catch (\Throwable $e) {
             $this->pdo->rollBack();
             throw $e;
+        }
+    }
+
+    /**
+     * Edits an existing (active) GRN: reverses the old stock effect,
+     * replaces the line items, applies the new stock effect, and adjusts
+     * the supplier ledger by only the delta between old and new pending
+     * balance — paid_amount (real money already paid) is never rewritten.
+     * Mirrors InvoiceModel::editCompleted().
+     */
+    public function editPurchase(int $id, array $header, array $lines, int $actorId): array
+    {
+        if (empty($lines)) {
+            throw new \RuntimeException('At least one item is required');
+        }
+
+        $this->pdo->beginTransaction();
+        try {
+            $stmt = $this->pdo->prepare('SELECT * FROM purchases WHERE id = :id FOR UPDATE');
+            $stmt->execute(['id' => $id]);
+            $purchase = $stmt->fetch();
+
+            if (!$purchase) {
+                throw new \RuntimeException('GRN not found');
+            }
+            if ($purchase['status'] !== 'active') {
+                throw new \RuntimeException('Only an active GRN can be edited');
+            }
+
+            $stmt = $this->pdo->prepare('SELECT * FROM purchase_items WHERE purchase_id = :id');
+            $stmt->execute(['id' => $id]);
+            $oldItems = $stmt->fetchAll();
+
+            $stockService = new StockLedgerService($this->pdo);
+            foreach ($oldItems as $item) {
+                $stockService->applyMovement(
+                    (int) $item['item_id'], 'branch', (int) $purchase['branch_id'],
+                    -((float) $item['qty'] + (float) $item['free_qty']),
+                    'purchase_return', 'purchases', $id, 'grn_edited', null, $actorId
+                );
+            }
+
+            $this->pdo->prepare('DELETE FROM purchase_items WHERE purchase_id = :id')->execute(['id' => $id]);
+
+            $totals = $this->aggregateTotals($lines);
+            $this->insertLines($id, $lines);
+
+            foreach ($lines as $line) {
+                $stockService->applyMovement(
+                    $line['item_id'], 'branch', (int) $purchase['branch_id'],
+                    $line['qty'] + $line['free_qty'],
+                    'purchase', 'purchases', $id, null, null, $actorId
+                );
+            }
+
+            $paidAmount = (float) $purchase['paid_amount'];
+            $oldPending = round((float) $purchase['grand_total'] - $paidAmount, 2);
+            $newPending = round($totals['grand_total'] - $paidAmount, 2);
+            $delta = round($newPending - $oldPending, 2);
+
+            if (abs($delta) > 0.009) {
+                (new SupplierLedgerService($this->pdo))->record(
+                    (int) $purchase['supplier_id'],
+                    $delta > 0 ? 'purchase_credit' : 'debit_note_adjustment',
+                    abs($delta),
+                    $id,
+                    null,
+                    "GRN {$purchase['grn_no']} edited",
+                    $actorId
+                );
+            }
+
+            $stmt = $this->pdo->prepare(
+                'UPDATE purchases SET
+                    supplier_invoice_no = :supplier_invoice_no,
+                    subtotal = :subtotal, tax_total = :tax_total, grand_total = :grand_total
+                 WHERE id = :id'
+            );
+            $stmt->execute([
+                'id' => $id,
+                'supplier_invoice_no' => $header['supplier_invoice_no'] ?? $purchase['supplier_invoice_no'],
+                'subtotal' => $totals['subtotal'],
+                'tax_total' => $totals['tax_total'],
+                'grand_total' => $totals['grand_total'],
+            ]);
+
+            $this->pdo->commit();
+            return $this->find($id);
+        } catch (\Throwable $e) {
+            $this->pdo->rollBack();
+            throw $e;
+        }
+    }
+
+    private function insertLines(int $purchaseId, array $lines): void
+    {
+        $stmt = $this->pdo->prepare(
+            'INSERT INTO purchase_items
+                (purchase_id, item_id, unit_id, qty, free_qty, rate, mrp, discount_percent, discount_amount, tax_percent, tax_amount, line_total)
+             VALUES
+                (:purchase_id, :item_id, :unit_id, :qty, :free_qty, :rate, :mrp, :discount_percent, :discount_amount, :tax_percent, :tax_amount, :line_total)'
+        );
+        foreach ($lines as $line) {
+            $stmt->execute([
+                'purchase_id' => $purchaseId,
+                'item_id' => $line['item_id'],
+                'unit_id' => $line['unit_id'],
+                'qty' => $line['qty'],
+                'free_qty' => $line['free_qty'],
+                'rate' => $line['rate'],
+                'mrp' => $line['mrp'],
+                'discount_percent' => $line['discount_percent'],
+                'discount_amount' => $line['discount_amount'],
+                'tax_percent' => $line['tax_percent'],
+                'tax_amount' => $line['tax_amount'],
+                'line_total' => $line['line_total'],
+            ]);
         }
     }
 }

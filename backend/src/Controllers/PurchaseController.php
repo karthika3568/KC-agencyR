@@ -54,19 +54,97 @@ class PurchaseController
         Response::json($this->stripCostIfUnauthorized($claims, $row));
     }
 
+    /**
+     * Resolves each line's item row and prices it server-side via
+     * PurchaseModel::priceLine() — the frontend's own totals are for
+     * display only, never trusted for the actual save. Also verifies the
+     * item is actually sellable/stocked at the target branch (reuses the
+     * item_branches mapping already enforced by ItemModel::all()).
+     *
+     * @return array{0: array, 1: ?string} [priced lines, error]
+     */
+    private function priceLines(array $items, int $branchId): array
+    {
+        if (empty($items)) {
+            return [[], 'At least one item is required'];
+        }
+
+        $lines = [];
+        foreach ($items as $input) {
+            if (empty($input['item_id']) || empty($input['qty'])) {
+                return [[], 'Each line needs item_id and qty'];
+            }
+            $qty = (float) $input['qty'];
+            $freeQty = (float) ($input['free_qty'] ?? 0);
+            $rate = (float) ($input['rate'] ?? -1);
+            $discountPercent = (float) ($input['discount_percent'] ?? 0);
+            $discountAmountInput = $input['discount_amount'] ?? null;
+
+            if ($qty <= 0) {
+                return [[], 'Quantity must be greater than 0'];
+            }
+            if ($freeQty < 0) {
+                return [[], 'Free quantity cannot be negative'];
+            }
+            if ($rate < 0) {
+                return [[], 'Purchase price cannot be negative'];
+            }
+            if (isset($input['mrp']) && $input['mrp'] !== '' && (float) $input['mrp'] < 0) {
+                return [[], 'MRP cannot be negative'];
+            }
+            if ($discountPercent < 0 || $discountPercent > 100) {
+                return [[], 'Discount percent must be between 0 and 100'];
+            }
+
+            $stmt = $this->pdo->prepare(
+                'SELECT i.*, ib.branch_id AS mapped_branch
+                 FROM items i
+                 LEFT JOIN item_branches ib ON ib.item_id = i.id AND ib.branch_id = :branch_id
+                 WHERE i.id = :id'
+            );
+            $stmt->execute(['id' => (int) $input['item_id'], 'branch_id' => $branchId]);
+            $item = $stmt->fetch();
+            if (!$item) {
+                return [[], "Item {$input['item_id']} not found"];
+            }
+            if ($item['mapped_branch'] === null) {
+                return [[], "'{$item['item_name']}' is not available at this branch — map it under Catalog first"];
+            }
+
+            $grossCheck = round($qty * $rate, 2);
+            if ($discountAmountInput !== null && $discountAmountInput !== '' && (float) $discountAmountInput > $grossCheck + 0.009) {
+                return [[], "Discount amount cannot exceed the gross amount for '{$item['item_name']}'"];
+            }
+
+            $priced = $this->model->priceLine($item, $input);
+            if (!empty($input['unit_id'])) {
+                $priced['unit_id'] = (int) $input['unit_id'];
+            }
+            $lines[] = $priced;
+        }
+
+        return [$lines, null];
+    }
+
     public function store(): void
     {
         $claims = JwtAuthMiddleware::authenticate();
         PermissionMiddleware::require($claims, 'purchases.create_grn');
 
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
-        if (empty($body['supplier_id']) || empty($body['items'])) {
-            Response::error('supplier_id and items are required', 422);
+        if (empty($body['supplier_id'])) {
+            Response::error('supplier_id is required', 422);
+        }
+
+        $branchId = $this->resolveBranchId($claims);
+        [$lines, $error] = $this->priceLines($body['items'] ?? [], $branchId);
+        if ($error) {
+            Response::error($error, 422);
         }
 
         $header = [
             'supplier_id' => (int) $body['supplier_id'],
-            'branch_id' => $this->resolveBranchId($claims),
+            'branch_id' => $branchId,
             'purchase_request_id' => $body['purchase_request_id'] ?? null,
             'supplier_invoice_no' => $body['supplier_invoice_no'] ?? null,
             'payment_mode' => $body['payment_mode'] ?? 'credit',
@@ -74,11 +152,40 @@ class PurchaseController
         ];
 
         try {
-            $id = $this->model->create($header, $body['items'], (int) $claims['sub']);
+            $id = $this->model->create($header, $lines, (int) $claims['sub']);
         } catch (\Throwable $e) {
             Response::error($e->getMessage(), 422);
         }
         Response::json($this->model->find($id), 201);
+    }
+
+    public function update(string $id): void
+    {
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::require($claims, 'purchases.edit_grn');
+
+        $existing = $this->model->find((int) $id);
+        if (!$existing) {
+            Response::error('Not found', 404);
+        }
+
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        [$lines, $error] = $this->priceLines($body['items'] ?? [], (int) $existing['branch_id']);
+        if ($error) {
+            Response::error($error, 422);
+        }
+
+        try {
+            $result = $this->model->editPurchase(
+                (int) $id,
+                ['supplier_invoice_no' => $body['supplier_invoice_no'] ?? null],
+                $lines,
+                (int) $claims['sub']
+            );
+        } catch (\RuntimeException $e) {
+            Response::error($e->getMessage(), 422);
+        }
+        Response::json($result);
     }
 
     public function destroy(string $id): void

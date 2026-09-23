@@ -263,6 +263,7 @@ $purchases = new PurchaseController($pdo);
 $router->get('/api/purchases', fn () => $purchases->index());
 $router->post('/api/purchases', fn () => $purchases->store());
 $router->get('/api/purchases/{id}', fn ($id) => $purchases->show($id));
+$router->put('/api/purchases/{id}', fn ($id) => $purchases->update($id));
 $router->delete('/api/purchases/{id}', fn ($id) => $purchases->destroy($id));
 
 $supplierPayments = new SupplierPaymentController($pdo);
