@@ -16,12 +16,11 @@ function get_pdo(): PDO
     $config = require __DIR__ . '/config.php';
     $db = $config['db'];
 
-    $dsn = sprintf(
-        'mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4',
-        $db['host'],
-        $db['port'],
-        $db['database']
-    );
+    if ($db['host'] === 'localhost') {
+        $dsn = sprintf('mysql:host=localhost;dbname=%s;charset=utf8mb4', $db['database']);
+    } else {
+        $dsn = sprintf('mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4', $db['host'], $db['port'], $db['database']);
+    }
 
     $pdo = new PDO($dsn, $db['username'], $db['password'], [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
