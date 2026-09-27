@@ -49,6 +49,15 @@ class InvoiceController
         Response::json($invoice);
     }
 
+    /** GET /api/invoices/{id}/returnable-items — feeds Sale Return's invoice-line picker. */
+    public function returnableItems(string $id): void
+    {
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::require($claims, 'returns.sales_return');
+        $this->requireOwnedInvoice($claims, (int) $id);
+        Response::json($this->invoices->returnableItems((int) $id));
+    }
+
     public function store(): void
     {
         $claims = JwtAuthMiddleware::authenticate();
@@ -141,9 +150,11 @@ class InvoiceController
         }
 
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
-        // bill_type (GST vs Non-GST) is immutable once an invoice number has
-        // been assigned under that series — never take it from the request.
+        // bill_type (GST vs Non-GST) and price_type (Normal/Retail/Wholesale)
+        // are both immutable once an invoice number has been assigned —
+        // never take either from the request for a completed-invoice edit.
         $body['bill_type'] = $existing['bill_type'];
+        $body['price_type'] = $existing['price_type'];
 
         [$header, $lines, $error] = $this->prepareInvoice($claims, (int) $existing['branch_id'], $body);
         if ($error) {
@@ -239,6 +250,13 @@ class InvoiceController
             return [[], [], "Missing permission '{$requiredBillingPerm}'"];
         }
 
+        // price_type (Phase 14) is independent of bill_type — it only picks
+        // which rate resolveSellingPrice() returns, never whether GST applies.
+        $priceType = $body['price_type'] ?? 'normal';
+        if (!in_array($priceType, ['normal', 'retail', 'wholesale'], true)) {
+            return [[], [], 'price_type must be normal, retail or wholesale'];
+        }
+
         $customerId = !empty($body['customer_id']) ? (int) $body['customer_id'] : null;
         $invoiceFormat = 'local';
         if ($customerId !== null) {
@@ -282,7 +300,7 @@ class InvoiceController
                 unset($line['discount_percent'], $line['discount_amount']);
             }
 
-            $lines[] = $this->invoices->priceLine($item, $line);
+            $lines[] = $this->invoices->priceLine($item, $line, $billType, $priceType);
         }
 
         $header = [
@@ -290,6 +308,7 @@ class InvoiceController
             'customer_id' => $customerId,
             'employee_id' => (int) $claims['sub'],
             'bill_type' => $billType,
+            'price_type' => $priceType,
             'invoice_format' => $invoiceFormat,
             'vehicle_no' => $body['vehicle_no'] ?? null,
         ];

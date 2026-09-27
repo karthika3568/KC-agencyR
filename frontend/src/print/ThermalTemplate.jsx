@@ -1,5 +1,6 @@
 export function ThermalTemplate({ data }) {
   const { invoice, branch, tax_slabs: taxSlabs, amount_in_words: amountInWords, customer_outstanding: outstanding } = data;
+  const isGst = invoice.bill_type !== 'non_gst';
 
   return (
     <div className="thermal-invoice">
@@ -11,6 +12,9 @@ export function ThermalTemplate({ data }) {
       </div>
       <hr />
       <div>Bill No: {invoice.invoice_no || 'HELD'}</div>
+      {invoice.price_type && invoice.price_type !== 'normal' && (
+        <div style={{ fontWeight: 'bold' }}>{invoice.price_type === 'wholesale' ? 'WHOLESALE PRICING' : 'RETAIL PRICING'}</div>
+      )}
       <div>Date: {invoice.invoice_date} {invoice.vehicle_no ? `Veh: ${invoice.vehicle_no}` : ''}</div>
       <div>Customer: {invoice.customer_name || 'Walk-in'}</div>
       <hr />
@@ -19,8 +23,8 @@ export function ThermalTemplate({ data }) {
           <tr>
             <td>Item</td>
             <td>Qty</td>
-            <td>Rate</td>
-            <td style={{ textAlign: 'right' }}>Amt</td>
+            <td>NET RATE</td>
+            <td style={{ textAlign: 'right' }}>NET AMT</td>
           </tr>
         </thead>
         <tbody>
@@ -40,18 +44,20 @@ export function ThermalTemplate({ data }) {
         </tbody>
       </table>
       <hr />
-      {taxSlabs.map((slab) => (
+      {isGst && taxSlabs.map((slab) => (
         <div key={slab.gst_percent} style={{ display: 'flex', justifyContent: 'space-between' }}>
           <span>GST {slab.gst_percent}% (CGST {slab.cgst} + SGST {slab.sgst})</span>
         </div>
       ))}
-      <hr />
+      {isGst && <hr />}
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
         <span>Taxable</span><span>{invoice.taxable_value}</span>
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <span>Tax</span><span>{(Number(invoice.cgst_amount) + Number(invoice.sgst_amount)).toFixed(2)}</span>
-      </div>
+      {isGst && (
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <span>Tax</span><span>{(Number(invoice.cgst_amount) + Number(invoice.sgst_amount)).toFixed(2)}</span>
+        </div>
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
         <span>Round off</span><span>{invoice.round_off}</span>
       </div>

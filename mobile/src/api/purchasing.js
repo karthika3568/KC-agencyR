@@ -27,6 +27,7 @@ export const purchasesApi = {
   get: async (id) => (await apiClient.get(`/purchases/${id}`)).data,
   create: async (data) => (await apiClient.post('/purchases', data)).data,
   remove: async (id) => (await apiClient.delete(`/purchases/${id}`)).data,
+  returnableItems: async (id) => (await apiClient.get(`/purchases/${id}/returnable-items`)).data,
 };
 
 export const supplierPaymentsApi = {

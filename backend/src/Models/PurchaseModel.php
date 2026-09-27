@@ -65,6 +65,30 @@ class PurchaseModel
         return $purchase;
     }
 
+    /** Feeds Purchase Return's "select GRN -> pick lines" flow — see InvoiceModel::returnableItems() for the same pattern on the sales side. */
+    public function returnableItems(int $purchaseId): array
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT pi.id AS purchase_item_id, pi.item_id, i.item_name, i.item_code,
+                    pi.qty AS original_qty, pi.free_qty, pi.rate, pi.mrp, pi.discount_percent, pi.discount_amount,
+                    pi.tax_percent, pi.tax_amount, pi.line_total, su.short_code AS unit_code,
+                    COALESCE(ret.returned_qty, 0) AS already_returned_qty,
+                    GREATEST(pi.qty - COALESCE(ret.returned_qty, 0), 0) AS remaining_qty
+             FROM purchase_items pi
+             JOIN items i ON i.id = pi.item_id
+             LEFT JOIN stock_units su ON su.id = pi.unit_id
+             LEFT JOIN (
+                 SELECT pri.purchase_item_id, SUM(pri.qty) AS returned_qty
+                 FROM purchase_return_items pri
+                 GROUP BY pri.purchase_item_id
+             ) ret ON ret.purchase_item_id = pi.id
+             WHERE pi.purchase_id = :purchase_id
+             ORDER BY pi.id"
+        );
+        $stmt->execute(['purchase_id' => $purchaseId]);
+        return $stmt->fetchAll();
+    }
+
     /**
      * Prices one purchase line: gross is paid qty only (free_qty never
      * enters the money math), discount reduces the taxable base before
@@ -75,9 +99,13 @@ class PurchaseModel
     {
         $qty = (float) ($input['qty'] ?? 0);
         $freeQty = (float) ($input['free_qty'] ?? 0);
-        $rate = (float) ($input['rate'] ?? $item['purchase_price']);
-        $mrp = isset($input['mrp']) && $input['mrp'] !== '' ? (float) $input['mrp'] : (float) $item['mrp'];
         $unitId = (int) ($input['unit_id'] ?? $item['base_unit_id']);
+        // NET_PURRATE is the item's net purchase rate — independent of MRP
+        // and of NET_SRATE (section 21); the secondary-unit rate applies
+        // only when actually purchasing in that unit (section 17).
+        $unitPricing = ItemModel::resolveUnitPricing($item, $unitId);
+        $rate = isset($input['rate']) && $input['rate'] !== '' ? (float) $input['rate'] : $unitPricing['net_purrate'];
+        $mrp = isset($input['mrp']) && $input['mrp'] !== '' ? (float) $input['mrp'] : $unitPricing['mrp'];
 
         $gross = round($qty * $rate, 2);
         $discountPercent = (float) ($input['discount_percent'] ?? 0);

@@ -1,57 +1,148 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { X } from 'lucide-react';
+import { Package, Search, Plus, Trash2, CheckCircle2, AlertTriangle, Truck, SlidersHorizontal, X } from 'lucide-react';
 import { itemsApi } from '../api/catalog';
 import { usersApi } from '../api/users';
 import { stockAdjustmentsApi, stockHubApi, vanStockApi } from '../api/purchasing';
 import { Tabs } from '../components/Tabs';
 import { usePermission } from '../hooks/usePermission';
+import { Button } from '../components/Button.jsx';
 
 function StockHubPanel() {
   const [ownerType, setOwnerType] = useState('');
-  const stockQuery = useQuery({ queryKey: ['stock-hub', ownerType], queryFn: () => stockHubApi.list(ownerType ? { owner_type: ownerType } : {}) });
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const stockQuery = useQuery({
+    queryKey: ['stock-hub', ownerType],
+    queryFn: () => stockHubApi.list(ownerType ? { owner_type: ownerType } : {}),
+  });
   const lowStockQuery = useQuery({ queryKey: ['stock-hub-low'], queryFn: stockHubApi.lowStock });
 
   const rows = stockQuery.data || [];
   const low = lowStockQuery.data || [];
 
+  const filteredRows = rows.filter((r) => {
+    return (
+      r.item_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.item_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.owner_name?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  });
+
   return (
-    <div className="flex flex-col gap-4">
+    <div className="space-y-4">
       {low.length > 0 && (
-        <div className="rounded-lg border border-warning/30 bg-warning-bg p-3 text-sm text-warning">
-          <strong>{low.length} item(s) at or below their minimum stock threshold:</strong>{' '}
-          {low.map((i) => i.item_name).join(', ')}
+        <div className="bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs p-3.5 rounded-lg flex items-start gap-2.5">
+          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+          <div>
+            <strong className="font-semibold text-amber-300">{low.length} Item(s) At or Below Minimum Stock:</strong>
+            <p className="text-amber-400/80 mt-0.5">{low.map((i) => `${i.item_name} (${i.item_code})`).join(', ')}</p>
+          </div>
         </div>
       )}
 
-      <div className="card">
-        <div className="flex items-center justify-between border-b border-border-soft px-4 py-3">
-          <span className="font-semibold text-ink">Stock Hub</span>
-          <select value={ownerType} onChange={(e) => setOwnerType(e.target.value)} className="input w-40">
-            <option value="">All owners</option>
-            <option value="branch">Branch floor</option>
-            <option value="employee">Salesman (van)</option>
-          </select>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+        {/* Left Column Controls */}
+        <div className="lg:col-span-4">
+          <div className="card p-5 space-y-4 sticky top-6">
+            <div className="border-b border-border-soft pb-3">
+              <h2 className="font-semibold text-ink text-base flex items-center gap-2">
+                <SlidersHorizontal className="w-4 h-4 text-indigo-400" />
+                Filter Stock Hub
+              </h2>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium text-ink-muted block mb-1">Owner Location Type</label>
+                <select
+                  value={ownerType}
+                  onChange={(e) => setOwnerType(e.target.value)}
+                  className="input w-full"
+                >
+                  <option value="">All Locations / Owners</option>
+                  <option value="branch">Main Branch / Floor</option>
+                  <option value="employee">Salesman Van Stock</option>
+                </select>
+              </div>
+
+              <div className="p-3 rounded-lg bg-surface-subtle/30 border border-border-soft/60 space-y-2 text-xs">
+                <div className="text-ink-muted">Total Distinct Records: <strong className="text-ink">{rows.length}</strong></div>
+                <div className="text-ink-muted">Low Stock Threshold Alerts: <strong className="text-amber-400">{low.length}</strong></div>
+              </div>
+            </div>
+          </div>
         </div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border-soft text-left text-xs uppercase text-ink-muted">
-              <th className="px-4 py-2">Item</th><th className="px-4 py-2">Owner Type</th><th className="px-4 py-2">Owner</th><th className="px-4 py-2">Qty</th><th className="px-4 py-2">Unit</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.id} className="border-b border-border-soft">
-                <td className="px-4 py-2">{r.item_name} <span className="text-ink-muted">({r.item_code})</span></td>
-                <td className="px-4 py-2 capitalize">{r.owner_type}</td>
-                <td className="px-4 py-2">{r.owner_name}</td>
-                <td className={`px-4 py-2 font-medium ${Number(r.quantity_on_hand) < 0 ? 'text-red-600' : 'text-ink'}`}>{r.quantity_on_hand}</td>
-                <td className="px-4 py-2 text-ink-muted">{r.unit_code}</td>
-              </tr>
-            ))}
-            {rows.length === 0 && <tr><td colSpan={5} className="px-4 py-6 text-center text-ink-muted">No stock movements yet.</td></tr>}
-          </tbody>
-        </table>
+
+        {/* Right Column Table */}
+        <div className="lg:col-span-8 space-y-4">
+          <div className="card p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="relative w-full sm:w-72">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
+              <input
+                type="text"
+                placeholder="Search stock by item or owner..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="input pl-9 w-full text-xs"
+              />
+            </div>
+            <span className="text-xs text-ink-muted">{filteredRows.length} item(s) in view</span>
+          </div>
+
+          <div className="card overflow-hidden">
+            <div className="px-5 py-4 border-b border-border-soft flex items-center justify-between">
+              <h3 className="font-semibold text-ink text-sm">Real-time Stock Inventory</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-border-soft bg-surface-subtle/30 text-ink-muted font-medium">
+                    <th className="px-4 py-3">Item Details</th>
+                    <th className="px-4 py-3">Owner Type</th>
+                    <th className="px-4 py-3">Location / Owner</th>
+                    <th className="px-4 py-3">On Hand Qty</th>
+                    <th className="px-4 py-3">Unit</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border-soft/60">
+                  {filteredRows.map((r) => {
+                    const isQtyLow = Number(r.quantity_on_hand) <= 0;
+                    return (
+                      <tr key={r.id} className="hover:bg-surface-subtle/20 transition">
+                        <td className="px-4 py-3 font-medium text-ink">
+                          {r.item_name}
+                          <span className="text-ink-muted text-[10px] ml-1.5 font-mono">({r.item_code})</span>
+                        </td>
+                        <td className="px-4 py-3 capitalize text-ink-muted">
+                          <span className="px-2 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 border border-slate-700">
+                            {r.owner_type}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-ink font-medium">{r.owner_name}</td>
+                        <td className="px-4 py-3 font-semibold">
+                          {isQtyLow ? (
+                            <span className="text-red-400">{r.quantity_on_hand}</span>
+                          ) : (
+                            <span className="text-emerald-400">{r.quantity_on_hand}</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-ink-muted">{r.unit_code}</td>
+                      </tr>
+                    );
+                  })}
+                  {filteredRows.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-8 text-center text-ink-muted text-xs">
+                        No stock records matching search filters.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -64,83 +155,241 @@ function StockAdjustmentPanel({ canManage }) {
   const [qty, setQty] = useState('');
   const [reason, setReason] = useState('damage');
   const [remarks, setRemarks] = useState('');
-  const [error, setError] = useState('');
+  const [formError, setFormError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const itemsQuery = useQuery({ queryKey: ['items', ''], queryFn: () => itemsApi.list('') });
   const adjustmentsQuery = useQuery({ queryKey: ['stock-adjustments'], queryFn: stockAdjustmentsApi.list });
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['stock-adjustments'] });
+    queryClient.invalidateQueries({ queryKey: ['stock-hub'] });
+  };
+
   const createMutation = useMutation({
     mutationFn: stockAdjustmentsApi.create,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['stock-adjustments'] });
-      queryClient.invalidateQueries({ queryKey: ['stock-hub'] });
-      setItemId(''); setQty(''); setRemarks('');
+      invalidate();
+      resetForm();
+      showSuccess('Stock adjustment logged successfully!');
     },
   });
 
-  const submit = async () => {
-    setError('');
-    try {
-      await createMutation.mutateAsync({ item_id: Number(itemId), adjustment_type: adjustmentType, qty: Number(qty), reason, remarks: remarks || null });
-    } catch (err) {
-      setError(err?.response?.data?.error || 'Failed to save');
+  const resetForm = () => {
+    setItemId('');
+    setAdjustmentType('deduction');
+    setQty('');
+    setReason('damage');
+    setRemarks('');
+    setFormError('');
+  };
+
+  const showSuccess = (msg) => {
+    setSuccessMsg(msg);
+    setTimeout(() => setSuccessMsg(''), 3000);
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!itemId) {
+      setFormError('Please select an item.');
+      return;
     }
+    if (!qty || Number(qty) <= 0) {
+      setFormError('Please enter a valid quantity.');
+      return;
+    }
+
+    setFormError('');
+    createMutation.mutate({
+      item_id: Number(itemId),
+      adjustment_type: adjustmentType,
+      qty: Number(qty),
+      reason,
+      remarks: remarks || null,
+    });
   };
 
   const items = itemsQuery.data || [];
   const adjustments = adjustmentsQuery.data || [];
 
+  const filteredAdjustments = adjustments.filter((a) => {
+    return (
+      a.item_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      a.reason?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      a.created_by_name?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  });
+
   return (
-    <div className="flex flex-col gap-4">
-      {canManage && (
-        <div className="card p-4">
-          <div className="mb-2 font-semibold text-ink">Stock Adjustment</div>
-          <div className="flex flex-wrap gap-2">
-            <select value={itemId} onChange={(e) => setItemId(e.target.value)} className="input w-56">
-              <option value="">Select item</option>
-              {items.map((i) => <option key={i.id} value={i.id}>{i.item_name}</option>)}
-            </select>
-            <select value={adjustmentType} onChange={(e) => setAdjustmentType(e.target.value)} className="input w-32">
-              <option value="addition">Addition</option>
-              <option value="deduction">Deduction</option>
-            </select>
-            <input type="number" step="any" placeholder="Qty" value={qty} onChange={(e) => setQty(e.target.value)} className="input w-24" />
-            <select value={reason} onChange={(e) => setReason(e.target.value)} className="input w-40">
-              <option value="damage">Damage</option>
-              <option value="spoilage">Spoilage</option>
-              <option value="count_correction">Count correction</option>
-              <option value="other">Other</option>
-            </select>
-            <input placeholder="Remarks" value={remarks} onChange={(e) => setRemarks(e.target.value)} className="input w-48" />
-          </div>
-          <button onClick={submit} disabled={!itemId || !qty} className="mt-3 rounded bg-success px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-40">
-            Save Adjustment
-          </button>
-          {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+    <div className="space-y-4">
+      {successMsg && (
+        <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs px-4 py-2.5 rounded-lg flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4" />
+          {successMsg}
         </div>
       )}
 
-      <div className="card">
-        <div className="border-b border-border-soft px-4 py-3 font-semibold text-ink">Adjustment History</div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border-soft text-left text-xs uppercase text-ink-muted">
-              <th className="px-4 py-2">Item</th><th className="px-4 py-2">Type</th><th className="px-4 py-2">Qty</th><th className="px-4 py-2">Reason</th><th className="px-4 py-2">By</th><th className="px-4 py-2">Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            {adjustments.map((a) => (
-              <tr key={a.id} className="border-b border-border-soft">
-                <td className="px-4 py-2">{a.item_name}</td>
-                <td className="px-4 py-2 capitalize">{a.adjustment_type}</td>
-                <td className="px-4 py-2">{a.qty}</td>
-                <td className="px-4 py-2 capitalize">{a.reason.replace('_', ' ')}</td>
-                <td className="px-4 py-2 text-ink-muted">{a.created_by_name}</td>
-                <td className="px-4 py-2 text-ink-muted">{a.created_at}</td>
-              </tr>
-            ))}
-            {adjustments.length === 0 && <tr><td colSpan={6} className="px-4 py-6 text-center text-ink-muted">No adjustments yet.</td></tr>}
-          </tbody>
-        </table>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+        {/* Left Column Form */}
+        <div className="lg:col-span-4">
+          <div className="card p-5 space-y-4 sticky top-6">
+            <div className="border-b border-border-soft pb-3">
+              <h2 className="font-semibold text-ink text-base flex items-center gap-2">
+                <Plus className="w-4 h-4 text-emerald-400" />
+                New Stock Adjustment
+              </h2>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-3">
+              {formError && <div className="text-xs text-red-400 bg-red-950/40 p-2.5 rounded border border-red-800/40">{formError}</div>}
+
+              <div>
+                <label className="text-xs font-medium text-ink-muted block mb-1">Select Item *</label>
+                <select
+                  required
+                  value={itemId}
+                  onChange={(e) => setItemId(e.target.value)}
+                  className="input w-full"
+                >
+                  <option value="">-- Select Item --</option>
+                  {items.map((i) => (
+                    <option key={i.id} value={i.id}>
+                      {i.item_name} ({i.item_code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs font-medium text-ink-muted block mb-1">Type *</label>
+                  <select
+                    value={adjustmentType}
+                    onChange={(e) => setAdjustmentType(e.target.value)}
+                    className="input w-full capitalize"
+                  >
+                    <option value="addition">Addition (+)</option>
+                    <option value="deduction">Deduction (-)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-ink-muted block mb-1">Qty *</label>
+                  <input
+                    required
+                    type="number"
+                    step="any"
+                    min="0.01"
+                    placeholder="1"
+                    value={qty}
+                    onChange={(e) => setQty(e.target.value)}
+                    className="input w-full"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-ink-muted block mb-1">Reason *</label>
+                <select
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  className="input w-full capitalize"
+                >
+                  <option value="damage">Damage</option>
+                  <option value="spoilage">Spoilage</option>
+                  <option value="count_correction">Count Correction</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-ink-muted block mb-1">Remarks / Note</label>
+                <textarea
+                  rows="2"
+                  placeholder="Additional explanation..."
+                  value={remarks}
+                  onChange={(e) => setRemarks(e.target.value)}
+                  className="input w-full"
+                />
+              </div>
+
+              {canManage && (
+                <div className="pt-2">
+                  <Button type="submit" variant="primary" loading={createMutation.isPending} className="w-full">
+                    Save Stock Adjustment
+                  </Button>
+                </div>
+              )}
+            </form>
+          </div>
+        </div>
+
+        {/* Right Column Table */}
+        <div className="lg:col-span-8 space-y-4">
+          <div className="card p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="relative w-full sm:w-72">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
+              <input
+                type="text"
+                placeholder="Search adjustments..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="input pl-9 w-full text-xs"
+              />
+            </div>
+            <span className="text-xs text-ink-muted">{filteredAdjustments.length} adjustment record(s)</span>
+          </div>
+
+          <div className="card overflow-hidden">
+            <div className="px-5 py-4 border-b border-border-soft flex items-center justify-between">
+              <h3 className="font-semibold text-ink text-sm">Stock Adjustment History</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-border-soft bg-surface-subtle/30 text-ink-muted font-medium">
+                    <th className="px-4 py-3">Item</th>
+                    <th className="px-4 py-3">Type</th>
+                    <th className="px-4 py-3">Qty</th>
+                    <th className="px-4 py-3">Reason</th>
+                    <th className="px-4 py-3">By</th>
+                    <th className="px-4 py-3">Date</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border-soft/60">
+                  {filteredAdjustments.map((a) => (
+                    <tr key={a.id} className="hover:bg-surface-subtle/20 transition">
+                      <td className="px-4 py-3 font-medium text-ink">{a.item_name}</td>
+                      <td className="px-4 py-3 capitalize">
+                        {a.adjustment_type === 'addition' ? (
+                          <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                            Addition
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded text-[10px] bg-red-500/20 text-red-300 border border-red-500/30">
+                            Deduction
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 font-semibold text-ink">{a.qty}</td>
+                      <td className="px-4 py-3 text-ink-muted capitalize">{a.reason?.replace('_', ' ')}</td>
+                      <td className="px-4 py-3 text-ink-muted">{a.created_by_name}</td>
+                      <td className="px-4 py-3 text-ink-muted">{a.created_at}</td>
+                    </tr>
+                  ))}
+                  {filteredAdjustments.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-8 text-center text-ink-muted text-xs">
+                        No adjustment records logged yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -151,7 +400,7 @@ function VanStockPanel({ canManage }) {
   const [employeeId, setEmployeeId] = useState('');
   const [mode, setMode] = useState('issue');
   const [lines, setLines] = useState([{ item_id: '', qty: 1 }]);
-  const [error, setError] = useState('');
+  const [formError, setFormError] = useState('');
   const [message, setMessage] = useState('');
 
   const usersQuery = useQuery({ queryKey: ['users'], queryFn: usersApi.list });
@@ -168,7 +417,7 @@ function VanStockPanel({ canManage }) {
       queryClient.invalidateQueries({ queryKey: ['van-pending', employeeId] });
       queryClient.invalidateQueries({ queryKey: ['stock-hub'] });
       setLines([{ item_id: '', qty: 1 }]);
-      setMessage(mode === 'issue' ? 'Stock issued.' : 'Return recorded.');
+      setMessage(mode === 'issue' ? 'Stock issued to salesman successfully!' : 'Van stock return recorded.');
       setTimeout(() => setMessage(''), 3000);
     },
   });
@@ -177,15 +426,26 @@ function VanStockPanel({ canManage }) {
   const addLine = () => setLines((prev) => [...prev, { item_id: '', qty: 1 }]);
   const removeLine = (idx) => setLines((prev) => prev.filter((_, i) => i !== idx));
 
-  const submit = async () => {
-    setError('');
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setFormError('');
+    if (!employeeId) {
+      setFormError('Please select a salesman.');
+      return;
+    }
+    const validLines = lines.filter((l) => l.item_id);
+    if (validLines.length === 0) {
+      setFormError('Please add at least one item line.');
+      return;
+    }
+
     try {
       await mutation.mutateAsync({
         employee_id: Number(employeeId),
-        items: lines.filter((l) => l.item_id).map((l) => ({ item_id: Number(l.item_id), qty: Number(l.qty) })),
+        items: validLines.map((l) => ({ item_id: Number(l.item_id), qty: Number(l.qty) })),
       });
     } catch (err) {
-      setError(err?.response?.data?.error || 'Failed to save');
+      setFormError(err?.response?.data?.error || 'Failed to process van stock');
     }
   };
 
@@ -194,50 +454,164 @@ function VanStockPanel({ canManage }) {
   const pending = pendingQuery.data || [];
 
   return (
-    <div className="flex flex-col gap-4">
-      {canManage && (
-        <div className="card p-4">
-          <div className="mb-2 flex gap-2">
-            <button onClick={() => setMode('issue')} className={`rounded px-3 py-1 text-sm font-medium ${mode === 'issue' ? 'bg-success text-white' : 'bg-gray-100 text-ink'}`}>
-              Issue Stock
-            </button>
-            <button onClick={() => setMode('return')} className={`rounded px-3 py-1 text-sm font-medium ${mode === 'return' ? 'bg-success text-white' : 'bg-gray-100 text-ink'}`}>
-              Day-end Return
-            </button>
-          </div>
-
-          <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className="input mb-3 w-56">
-            <option value="">Select salesman</option>
-            {users.map((u) => <option key={u.id} value={u.id}>{u.name} ({u.role_name})</option>)}
-          </select>
-
-          {employeeId && (
-            <div className="mb-3 text-xs text-ink-muted">
-              Currently with this salesman: {pending.length === 0 ? 'nothing' : pending.map((p) => `Item #${p.item_id}: ${p.quantity_on_hand}`).join(', ')}
-            </div>
-          )}
-
-          <div className="flex flex-col gap-2">
-            {lines.map((line, idx) => (
-              <div key={idx} className="flex items-center gap-2">
-                <select value={line.item_id} onChange={(e) => updateLine(idx, { item_id: e.target.value })} className="input w-56">
-                  <option value="">Select item</option>
-                  {items.map((i) => <option key={i.id} value={i.id}>{i.item_name}</option>)}
-                </select>
-                <input type="number" step="any" value={line.qty} onChange={(e) => updateLine(idx, { qty: e.target.value })} className="input w-24" />
-                <button onClick={() => removeLine(idx)} className="text-red-600"><X size={14} /></button>
-              </div>
-            ))}
-            <button onClick={addLine} className="self-start text-xs font-medium text-gold hover:underline">+ Add line</button>
-          </div>
-
-          <button onClick={submit} disabled={!employeeId} className="mt-3 rounded bg-success px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-40">
-            {mode === 'issue' ? 'Issue Stock' : 'Save Return'}
-          </button>
-          {message && <p className="mt-2 text-sm text-success">{message}</p>}
-          {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+    <div className="space-y-4">
+      {message && (
+        <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs px-4 py-2.5 rounded-lg flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4" />
+          {message}
         </div>
       )}
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+        {/* Left Column Form */}
+        <div className="lg:col-span-5">
+          {canManage && (
+            <div className="card p-5 space-y-4 sticky top-6">
+              <div className="border-b border-border-soft pb-3 flex items-center justify-between">
+                <h2 className="font-semibold text-ink text-base flex items-center gap-2">
+                  <Truck className="w-4 h-4 text-indigo-400" />
+                  Van Stock Operations
+                </h2>
+                <div className="flex gap-1 bg-surface-subtle p-1 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => setMode('issue')}
+                    className={`px-2.5 py-1 rounded text-xs font-semibold transition ${
+                      mode === 'issue' ? 'bg-indigo-500 text-white' : 'text-ink-muted hover:text-ink'
+                    }`}
+                  >
+                    Issue Stock
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMode('return')}
+                    className={`px-2.5 py-1 rounded text-xs font-semibold transition ${
+                      mode === 'return' ? 'bg-indigo-500 text-white' : 'text-ink-muted hover:text-ink'
+                    }`}
+                  >
+                    Day-end Return
+                  </button>
+                </div>
+              </div>
+
+              <form onSubmit={handleSubmit} className="space-y-3">
+                {formError && <div className="text-xs text-red-400 bg-red-950/40 p-2.5 rounded border border-red-800/40">{formError}</div>}
+
+                <div>
+                  <label className="text-xs font-medium text-ink-muted block mb-1">Salesman *</label>
+                  <select
+                    required
+                    value={employeeId}
+                    onChange={(e) => setEmployeeId(e.target.value)}
+                    className="input w-full"
+                  >
+                    <option value="">-- Select Salesman --</option>
+                    {users.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} ({u.role_name})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-ink-muted block">Stock Lines *</label>
+                  {lines.map((line, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <select
+                        value={line.item_id}
+                        onChange={(e) => updateLine(idx, { item_id: e.target.value })}
+                        className="input text-xs flex-1"
+                      >
+                        <option value="">Select Item</option>
+                        {items.map((i) => (
+                          <option key={i.id} value={i.id}>
+                            {i.item_name}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="number"
+                        step="any"
+                        min="0.01"
+                        placeholder="Qty"
+                        value={line.qty}
+                        onChange={(e) => updateLine(idx, { qty: e.target.value })}
+                        className="input text-xs w-20"
+                      />
+                      {lines.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeLine(idx)}
+                          className="p-1 text-red-400 hover:text-red-300 transition"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={addLine}
+                    className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition"
+                  >
+                    + Add Another Item
+                  </button>
+                </div>
+
+                <div className="pt-2">
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    loading={mutation.isPending}
+                    disabled={!employeeId}
+                    className="w-full"
+                  >
+                    {mode === 'issue' ? 'Issue Stock to Salesman' : 'Save Van Stock Return'}
+                  </Button>
+                </div>
+              </form>
+            </div>
+          )}
+        </div>
+
+        {/* Right Column Table */}
+        <div className="lg:col-span-7 space-y-4">
+          <div className="card overflow-hidden">
+            <div className="px-5 py-4 border-b border-border-soft flex items-center justify-between">
+              <h3 className="font-semibold text-ink text-sm">Salesman Active Van Stock</h3>
+              <span className="text-xs text-ink-muted">
+                {employeeId ? `Salesman #${employeeId}` : 'Select salesman to view live balance'}
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-border-soft bg-surface-subtle/30 text-ink-muted font-medium">
+                    <th className="px-4 py-3">Item ID</th>
+                    <th className="px-4 py-3">Salesman On-hand Qty</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border-soft/60">
+                  {pending.map((p) => (
+                    <tr key={p.item_id} className="hover:bg-surface-subtle/20 transition">
+                      <td className="px-4 py-3 font-mono font-medium text-ink">Item #{p.item_id}</td>
+                      <td className="px-4 py-3 font-semibold text-emerald-400">{p.quantity_on_hand}</td>
+                    </tr>
+                  ))}
+                  {(!employeeId || pending.length === 0) && (
+                    <tr>
+                      <td colSpan={2} className="px-4 py-8 text-center text-ink-muted text-xs">
+                        {employeeId ? 'No active van stock assigned to this salesman.' : 'Select a salesman on the left form.'}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -248,8 +622,17 @@ export function Inventory() {
   const canIssue = usePermission('inventory.issue_van_stock');
 
   return (
-    <div>
-      <h1 className="mb-4 text-2xl font-bold text-ink">Inventory</h1>
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border-soft/40 pb-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-ink flex items-center gap-2.5">
+            <Package className="w-7 h-7 text-indigo-400" />
+            Inventory &amp; Stock Hub
+          </h1>
+          <p className="text-xs text-ink-muted mt-1">Monitor real-time warehouse inventory, stock adjustments, and van stock allocations</p>
+        </div>
+      </div>
+
       <Tabs
         tabs={[
           { key: 'hub', label: 'Stock Hub', content: canView ? <StockHubPanel /> : <p className="text-ink-muted">No access.</p> },
@@ -260,3 +643,4 @@ export function Inventory() {
     </div>
   );
 }
+

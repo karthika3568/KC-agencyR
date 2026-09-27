@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { settingsApi } from '../api/admin';
 import { Tabs } from '../components/Tabs';
 import { usePermission } from '../hooks/usePermission';
+import { Branches } from './Branches';
 
 function CompanyProfilePanel({ canManage }) {
   const queryClient = useQueryClient();
@@ -188,17 +189,22 @@ function SequencesPanel({ canManage }) {
 
 export function Settings() {
   const canManage = usePermission('settings.manage');
+  const canBranches = usePermission('branches.manage');
+
+  const tabs = [
+    { key: 'profile', label: 'Company Profile', content: <CompanyProfilePanel canManage={canManage} /> },
+    { key: 'print', label: 'Thermal Printer Setup', content: <PrintSettingsPanel canManage={canManage} /> },
+    { key: 'sequences', label: 'Invoice Sequences', content: <SequencesPanel canManage={canManage} /> },
+  ];
+
+  if (canBranches) {
+    tabs.push({ key: 'branches', label: 'Branches', content: <Branches hideHeader /> });
+  }
 
   return (
     <div>
       <h1 className="mb-4 text-2xl font-bold text-ink">Settings</h1>
-      <Tabs
-        tabs={[
-          { key: 'profile', label: 'Company Profile', content: <CompanyProfilePanel canManage={canManage} /> },
-          { key: 'print', label: 'Thermal Printer Setup', content: <PrintSettingsPanel canManage={canManage} /> },
-          { key: 'sequences', label: 'Invoice Sequences', content: <SequencesPanel canManage={canManage} /> },
-        ]}
-      />
+      <Tabs tabs={tabs} />
     </div>
   );
 }

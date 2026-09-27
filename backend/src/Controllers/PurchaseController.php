@@ -54,6 +54,22 @@ class PurchaseController
         Response::json($this->stripCostIfUnauthorized($claims, $row));
     }
 
+    /** GET /api/purchases/{id}/returnable-items — feeds Purchase Return's GRN-line picker. */
+    public function returnableItems(string $id): void
+    {
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::require($claims, 'returns.purchase_return');
+        $purchase = $this->model->find((int) $id);
+        if (!$purchase) {
+            Response::error('Not found', 404);
+        }
+        $canSwitch = in_array('branches.switch_context', (array) ($claims['permissions'] ?? []), true);
+        if (!$canSwitch && (int) $purchase['branch_id'] !== (int) $claims['branch_id']) {
+            Response::error('Not found', 404);
+        }
+        Response::json($this->model->returnableItems((int) $id));
+    }
+
     /**
      * Resolves each line's item row and prices it server-side via
      * PurchaseModel::priceLine() — the frontend's own totals are for
@@ -76,7 +92,10 @@ class PurchaseController
             }
             $qty = (float) $input['qty'];
             $freeQty = (float) ($input['free_qty'] ?? 0);
-            $rate = (float) ($input['rate'] ?? -1);
+            // Omitted rate means "use the item's NET_PURRATE" (resolved
+            // below via priceLine) — only a rate the caller actually sent
+            // gets validated as non-negative.
+            $rateProvided = isset($input['rate']) && $input['rate'] !== '';
             $discountPercent = (float) ($input['discount_percent'] ?? 0);
             $discountAmountInput = $input['discount_amount'] ?? null;
 
@@ -86,7 +105,7 @@ class PurchaseController
             if ($freeQty < 0) {
                 return [[], 'Free quantity cannot be negative'];
             }
-            if ($rate < 0) {
+            if ($rateProvided && (float) $input['rate'] < 0) {
                 return [[], 'Purchase price cannot be negative'];
             }
             if (isset($input['mrp']) && $input['mrp'] !== '' && (float) $input['mrp'] < 0) {
@@ -111,7 +130,10 @@ class PurchaseController
                 return [[], "'{$item['item_name']}' is not available at this branch — map it under Catalog first"];
             }
 
-            $grossCheck = round($qty * $rate, 2);
+            $effectiveRate = $rateProvided
+                ? (float) $input['rate']
+                : \App\Models\ItemModel::resolveUnitPricing($item, !empty($input['unit_id']) ? (int) $input['unit_id'] : null)['net_purrate'];
+            $grossCheck = round($qty * $effectiveRate, 2);
             if ($discountAmountInput !== null && $discountAmountInput !== '' && (float) $discountAmountInput > $grossCheck + 0.009) {
                 return [[], "Discount amount cannot exceed the gross amount for '{$item['item_name']}'"];
             }

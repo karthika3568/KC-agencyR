@@ -1,31 +1,37 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { X, Pencil, Trash2 } from 'lucide-react';
+import { ShoppingBag, Search, Plus, Trash2, CheckCircle2, Pencil, X, DollarSign, CreditCard } from 'lucide-react';
 import { itemsApi } from '../api/catalog';
 import { suppliersApi } from '../api/parties';
 import { purchasesApi, supplierPaymentsApi } from '../api/purchasing';
 import { Tabs } from '../components/Tabs';
 import { Button } from '../components/Button.jsx';
 import { usePermission } from '../hooks/usePermission';
+import { resolveUnitPricing } from '../utils/pricing';
 
-/**
- * One priced purchase line — mirrors PurchaseModel::priceLine() exactly so
- * the on-screen preview matches what the server will actually save.
- * Free qty NEVER enters the money math; it only adds to received qty.
- */
 function priceGrnLine(line) {
   const qty = Number(line.qty || 0);
   const freeQty = Number(line.free_qty || 0);
   const rate = Number(line.rate || 0);
   const gross = round2(qty * rate);
   const discountPercent = Number(line.discount_percent || 0);
-  const discountAmount = line.discount_mode === 'amount' && line.discount_amount !== ''
-    ? Number(line.discount_amount || 0)
-    : round2((gross * discountPercent) / 100);
+  const discountAmount =
+    line.discount_mode === 'amount' && line.discount_amount !== ''
+      ? Number(line.discount_amount || 0)
+      : round2((gross * discountPercent) / 100);
   const taxable = round2(gross - discountAmount);
   const taxPercent = Number(line.tax_percent || 0);
   const taxAmount = round2((taxable * taxPercent) / 100);
-  return { qty, freeQty, totalQty: round2(qty + freeQty), gross, discountAmount, taxable, taxAmount, netAmount: round2(taxable + taxAmount) };
+  return {
+    qty,
+    freeQty,
+    totalQty: round2(qty + freeQty),
+    gross,
+    discountAmount,
+    taxable,
+    taxAmount,
+    netAmount: round2(taxable + taxAmount),
+  };
 }
 
 function round2(n) {
@@ -33,103 +39,196 @@ function round2(n) {
 }
 
 function PurchaseItemLineEditor({ lines, setLines, items, unitsByItemId, onPickItem }) {
-  const addLine = () => setLines((prev) => [
-    ...prev,
-    { key: `${Date.now()}`, item_id: '', unit_id: '', qty: 1, free_qty: 0, mrp: '', rate: '', discount_mode: 'percent', discount_percent: 0, discount_amount: '', tax_percent: 0 },
-  ]);
+  const addLine = () =>
+    setLines((prev) => [
+      ...prev,
+      {
+        key: `${Date.now()}`,
+        item_id: '',
+        unit_id: '',
+        qty: 1,
+        free_qty: 0,
+        mrp: '',
+        rate: '',
+        discount_mode: 'percent',
+        discount_percent: 0,
+        discount_amount: '',
+        tax_percent: 0,
+      },
+    ]);
   const updateLine = (key, patch) => setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   const removeLine = (key) => setLines((prev) => prev.filter((l) => l.key !== key));
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <label className="text-xs font-semibold text-ink-muted">GRN Item Lines *</label>
+      </div>
+
       {lines.map((line) => {
         const item = items.find((i) => i.id === Number(line.item_id));
         const priced = priceGrnLine(line);
         const availableUnits = unitsByItemId[line.item_id] || (item ? [{ id: item.base_unit_id, short_code: item.base_unit_code }] : []);
         return (
-          <div key={line.key} className="rounded-lg border border-border-soft p-3">
-            <div className="mb-2 flex flex-wrap items-center gap-2">
+          <div key={line.key} className="rounded-lg border border-border-soft/60 p-3 bg-surface-subtle/20 space-y-2">
+            <div className="flex items-center gap-2">
               <select
                 value={line.item_id}
                 onChange={(e) => {
                   const picked = items.find((i) => i.id === Number(e.target.value));
+                  const pricing = picked ? resolveUnitPricing(picked, picked.base_unit_id) : null;
                   updateLine(line.key, {
                     item_id: e.target.value,
                     unit_id: picked ? picked.base_unit_id : '',
-                    mrp: picked ? picked.mrp : '',
-                    rate: picked ? picked.purchase_price : '',
+                    mrp: pricing ? pricing.mrp : '',
+                    rate: pricing ? pricing.net_purrate : '',
                   });
                   if (picked) onPickItem(picked.id);
                 }}
-                className="input w-56"
+                className="input text-xs flex-1"
               >
-                <option value="">Select item</option>
-                {items.map((i) => <option key={i.id} value={i.id}>{i.item_name} ({i.item_code})</option>)}
+                <option value="">Select Item</option>
+                {items.map((i) => (
+                  <option key={i.id} value={i.id}>
+                    {i.item_name} ({i.item_code})
+                  </option>
+                ))}
               </select>
-              <select value={line.unit_id} onChange={(e) => updateLine(line.key, { unit_id: e.target.value })} className="input w-28">
+              <select
+                value={line.unit_id}
+                onChange={(e) => {
+                  const unitId = e.target.value;
+                  if (item) {
+                    // Switching to the item's secondary unit (e.g. PCS -> BOX)
+                    // re-prices from S-MRP/S-NET_PURRATE, never the primary rate.
+                    const pricing = resolveUnitPricing(item, unitId ? Number(unitId) : null);
+                    updateLine(line.key, { unit_id: unitId, mrp: pricing.mrp, rate: pricing.net_purrate });
+                  } else {
+                    updateLine(line.key, { unit_id: unitId });
+                  }
+                }}
+                className="input text-xs w-24"
+              >
                 <option value="">Unit</option>
-                {availableUnits.map((u) => <option key={u.id} value={u.id}>{u.short_code}</option>)}
+                {availableUnits.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.short_code}
+                  </option>
+                ))}
               </select>
-              <button onClick={() => removeLine(line.key)} className="ml-auto text-red-600"><X size={14} /></button>
+              {lines.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => removeLine(line.key)}
+                  className="p-1 text-red-400 hover:text-red-300 transition"
+                  title="Remove Line"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
             </div>
 
-            <div className="flex flex-wrap items-end gap-2">
-              <Field label="Qty">
-                <input type="number" step="any" min="0" value={line.qty} onChange={(e) => updateLine(line.key, { qty: e.target.value })} className="input w-20" />
-              </Field>
-              <Field label="Free Qty">
-                <input type="number" step="any" min="0" value={line.free_qty} onChange={(e) => updateLine(line.key, { free_qty: e.target.value })} className="input w-20" />
-              </Field>
-              <Field label="MRP">
-                <input type="number" step="any" min="0" value={line.mrp} onChange={(e) => updateLine(line.key, { mrp: e.target.value })} className="input w-24" />
-              </Field>
-              <Field label="Purchase Price">
-                <input type="number" step="any" min="0" value={line.rate} onChange={(e) => updateLine(line.key, { rate: e.target.value })} className="input w-24" />
-              </Field>
-              <Field label="Discount">
-                <div className="flex items-center gap-1">
-                  <div className="flex overflow-hidden rounded border border-border-soft">
-                    <button type="button" onClick={() => updateLine(line.key, { discount_mode: 'percent' })} className={`px-1.5 py-1.5 text-xs font-medium ${line.discount_mode !== 'amount' ? 'bg-gold text-white' : 'bg-white text-ink-muted'}`}>%</button>
-                    <button type="button" onClick={() => updateLine(line.key, { discount_mode: 'amount' })} className={`px-1.5 py-1.5 text-xs font-medium ${line.discount_mode === 'amount' ? 'bg-gold text-white' : 'bg-white text-ink-muted'}`}>Rs.</button>
-                  </div>
-                  {line.discount_mode === 'amount' ? (
-                    <input type="number" step="any" min="0" value={line.discount_amount} onChange={(e) => updateLine(line.key, { discount_amount: e.target.value })} className="input w-20" />
-                  ) : (
-                    <input type="number" step="any" min="0" max="100" value={line.discount_percent} onChange={(e) => updateLine(line.key, { discount_percent: e.target.value })} className="input w-16" />
-                  )}
-                </div>
-              </Field>
-              <Field label="Tax %">
-                <input type="number" step="any" min="0" value={line.tax_percent} onChange={(e) => updateLine(line.key, { tax_percent: e.target.value })} className="input w-16" />
-              </Field>
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-xs">
+              <div>
+                <label className="text-[10px] text-ink-muted block">Qty</label>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  value={line.qty}
+                  onChange={(e) => updateLine(line.key, { qty: e.target.value })}
+                  className="input w-full text-xs"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-ink-muted block">Free Qty</label>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  value={line.free_qty}
+                  onChange={(e) => updateLine(line.key, { free_qty: e.target.value })}
+                  className="input w-full text-xs"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-ink-muted block">MRP</label>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  value={line.mrp}
+                  onChange={(e) => updateLine(line.key, { mrp: e.target.value })}
+                  className="input w-full text-xs"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-ink-muted block">Purchase Rate</label>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  value={line.rate}
+                  onChange={(e) => updateLine(line.key, { rate: e.target.value })}
+                  className="input w-full text-xs"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-ink-muted block">Disc (%)</label>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  max="100"
+                  value={line.discount_percent}
+                  onChange={(e) => updateLine(line.key, { discount_percent: e.target.value })}
+                  className="input w-full text-xs"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-ink-muted block">Tax (%)</label>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  value={line.tax_percent}
+                  onChange={(e) => updateLine(line.key, { tax_percent: e.target.value })}
+                  className="input w-full text-xs"
+                />
+              </div>
             </div>
 
-            <div className="mt-2 flex flex-wrap justify-between gap-2 rounded bg-page px-3 py-1.5 text-xs text-ink-muted">
-              <span>Total Qty: <b className="text-ink">{priced.totalQty}</b></span>
-              <span>Gross: <b className="text-ink">{priced.gross.toFixed(2)}</b></span>
-              <span>Discount: <b className="text-ink">{priced.discountAmount.toFixed(2)}</b></span>
-              <span>Net Amount: <b className="text-ink">{priced.netAmount.toFixed(2)}</b></span>
+            <div className="flex items-center justify-between text-[11px] text-ink-muted pt-1 border-t border-border-soft/40">
+              <span>Total Qty: <strong className="text-ink">{priced.totalQty}</strong></span>
+              <span>Net: <strong className="text-emerald-400">₹{priced.netAmount.toFixed(2)}</strong></span>
             </div>
           </div>
         );
       })}
-      <button onClick={addLine} className="self-start text-xs font-medium text-gold hover:underline">+ Add line</button>
+
+      <button
+        type="button"
+        onClick={addLine}
+        className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition"
+      >
+        + Add Another Item
+      </button>
     </div>
   );
 }
 
-function Field({ label, children }) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-[10px] font-medium uppercase text-ink-muted">{label}</span>
-      {children}
-    </label>
-  );
-}
-
 const emptyGrnLine = () => ({
-  key: `${Date.now()}-${Math.random()}`, item_id: '', unit_id: '', qty: 1, free_qty: 0,
-  mrp: '', rate: '', discount_mode: 'percent', discount_percent: 0, discount_amount: '', tax_percent: 0,
+  key: `${Date.now()}-${Math.random()}`,
+  item_id: '',
+  unit_id: '',
+  qty: 1,
+  free_qty: 0,
+  mrp: '',
+  rate: '',
+  discount_mode: 'percent',
+  discount_percent: 0,
+  discount_amount: '',
+  tax_percent: 0,
 });
 
 function GrnFormCard({ editing, onDone, items, unitsByItemId, onPickItem }) {
@@ -142,10 +241,16 @@ function GrnFormCard({ editing, onDone, items, unitsByItemId, onPickItem }) {
   const [lines, setLines] = useState(
     editing
       ? editing.items.map((it) => ({
-          key: `${it.id}`, item_id: it.item_id, unit_id: it.unit_id, qty: Number(it.qty), free_qty: Number(it.free_qty),
-          mrp: it.mrp ?? '', rate: Number(it.rate),
+          key: `${it.id}`,
+          item_id: it.item_id,
+          unit_id: it.unit_id,
+          qty: Number(it.qty),
+          free_qty: Number(it.free_qty),
+          mrp: it.mrp ?? '',
+          rate: Number(it.rate),
           discount_mode: Number(it.discount_amount) > 0 && Number(it.discount_percent) === 0 ? 'amount' : 'percent',
-          discount_percent: Number(it.discount_percent), discount_amount: Number(it.discount_amount) || '',
+          discount_percent: Number(it.discount_percent),
+          discount_amount: Number(it.discount_amount) || '',
           tax_percent: Number(it.tax_percent),
         }))
       : [emptyGrnLine()]
@@ -161,32 +266,49 @@ function GrnFormCard({ editing, onDone, items, unitsByItemId, onPickItem }) {
     supplier_invoice_no: supplierInvoiceNo || null,
     payment_mode: paymentMode,
     paid_amount: Number(paidAmount || 0),
-    items: lines.filter((l) => l.item_id).map((l) => ({
-      item_id: Number(l.item_id),
-      unit_id: l.unit_id ? Number(l.unit_id) : undefined,
-      qty: Number(l.qty),
-      free_qty: Number(l.free_qty || 0),
-      mrp: l.mrp !== '' ? Number(l.mrp) : undefined,
-      rate: Number(l.rate),
-      ...(l.discount_mode === 'amount' ? { discount_amount: Number(l.discount_amount || 0) } : { discount_percent: Number(l.discount_percent || 0) }),
-      tax_percent: Number(l.tax_percent || 0),
-    })),
+    items: lines
+      .filter((l) => l.item_id)
+      .map((l) => ({
+        item_id: Number(l.item_id),
+        unit_id: l.unit_id ? Number(l.unit_id) : undefined,
+        qty: Number(l.qty),
+        free_qty: Number(l.free_qty || 0),
+        mrp: l.mrp !== '' ? Number(l.mrp) : undefined,
+        rate: Number(l.rate),
+        ...(l.discount_mode === 'amount'
+          ? { discount_amount: Number(l.discount_amount || 0) }
+          : { discount_percent: Number(l.discount_percent || 0) }),
+        tax_percent: Number(l.tax_percent || 0),
+      })),
   });
 
   const createMutation = useMutation({
     mutationFn: purchasesApi.create,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['purchases'] });
-      setSupplierId(''); setSupplierInvoiceNo(''); setPaymentMode('credit'); setPaidAmount(0);
+      setSupplierId('');
+      setSupplierInvoiceNo('');
+      setPaymentMode('credit');
+      setPaidAmount(0);
       setLines([emptyGrnLine()]);
       onDone();
     },
-    onError: (err) => { setError(err?.response?.data?.error || 'Failed to save GRN'); setConfirming(false); },
+    onError: (err) => {
+      setError(err?.response?.data?.error || 'Failed to save GRN');
+      setConfirming(false);
+    },
   });
+
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => purchasesApi.update(id, data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['purchases'] }); onDone(); },
-    onError: (err) => { setError(err?.response?.data?.error || 'Failed to update GRN'); setConfirming(false); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['purchases'] });
+      onDone();
+    },
+    onError: (err) => {
+      setError(err?.response?.data?.error || 'Failed to update GRN');
+      setConfirming(false);
+    },
   });
 
   const submit = () => {
@@ -197,77 +319,155 @@ function GrnFormCard({ editing, onDone, items, unitsByItemId, onPickItem }) {
 
   const validLines = lines.filter((l) => l.item_id);
   const priced = validLines.map((l) => priceGrnLine(l));
-  const totals = priced.reduce((acc, p) => ({
-    qty: acc.qty + p.qty, freeQty: acc.freeQty + p.freeQty, totalQty: acc.totalQty + p.totalQty,
-    gross: acc.gross + p.gross, discount: acc.discount + p.discountAmount, net: acc.net + p.netAmount,
-  }), { qty: 0, freeQty: 0, totalQty: 0, gross: 0, discount: 0, net: 0 });
+  const totals = priced.reduce(
+    (acc, p) => ({
+      qty: acc.qty + p.qty,
+      freeQty: acc.freeQty + p.freeQty,
+      totalQty: acc.totalQty + p.totalQty,
+      gross: acc.gross + p.gross,
+      discount: acc.discount + p.discountAmount,
+      net: acc.net + p.netAmount,
+    }),
+    { qty: 0, freeQty: 0, totalQty: 0, gross: 0, discount: 0, net: 0 }
+  );
 
   const saving = createMutation.isPending || updateMutation.isPending;
 
   return (
-    <div className="card p-4">
-      <div className="mb-2 flex items-center justify-between">
-        <div className="font-semibold text-ink">{isEdit ? `Edit ${editing.grn_no}` : 'New GRN (Goods Received)'}</div>
-        {isEdit && <button onClick={onDone} className="text-xs text-ink-muted hover:underline">Cancel edit</button>}
-      </div>
-      <div className="mb-3 flex flex-wrap gap-2">
-        <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className="input w-56" disabled={isEdit}>
-          <option value="">Select supplier</option>
-          {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-        <input placeholder="Supplier Invoice #" value={supplierInvoiceNo} onChange={(e) => setSupplierInvoiceNo(e.target.value)} className="input w-40" />
-        <select value={paymentMode} onChange={(e) => setPaymentMode(e.target.value)} className="input w-32" disabled={isEdit}>
-          <option value="credit">Credit</option>
-          <option value="cash">Cash</option>
-          <option value="bank_transfer">Bank Transfer</option>
-          <option value="upi">UPI</option>
-        </select>
-        <input type="number" step="any" placeholder="Paid amount" value={paidAmount} onChange={(e) => setPaidAmount(e.target.value)} className="input w-32" disabled={isEdit} />
+    <div className="card p-5 space-y-4 sticky top-6">
+      <div className="flex items-center justify-between border-b border-border-soft pb-3">
+        <h2 className="font-semibold text-ink text-base flex items-center gap-2">
+          {isEdit ? <Pencil className="w-4 h-4 text-cyan-400" /> : <Plus className="w-4 h-4 text-emerald-400" />}
+          {isEdit ? `Edit ${editing.grn_no}` : 'New GRN (Goods Received)'}
+        </h2>
+        {isEdit && (
+          <button onClick={onDone} className="text-xs text-ink-muted hover:text-ink underline">
+            Cancel Edit
+          </button>
+        )}
       </div>
 
-      <PurchaseItemLineEditor lines={lines} setLines={setLines} items={items} unitsByItemId={unitsByItemId} onPickItem={onPickItem} />
+      <div className="space-y-3">
+        {error && <div className="text-xs text-red-400 bg-red-950/40 p-2.5 rounded border border-red-800/40">{error}</div>}
 
-      <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1 rounded-lg bg-page p-3 text-sm sm:grid-cols-3">
-        <SummaryStat label="Total Qty" value={totals.qty} />
-        <SummaryStat label="Total Free Qty" value={totals.freeQty} />
-        <SummaryStat label="Total Received" value={totals.totalQty} />
-        <SummaryStat label="Gross Amount" value={totals.gross.toFixed(2)} />
-        <SummaryStat label="Total Discount" value={totals.discount.toFixed(2)} />
-        <SummaryStat label="Grand Total" value={totals.net.toFixed(2)} bold />
-      </div>
+        <div>
+          <label className="text-xs font-medium text-ink-muted block mb-1">Supplier *</label>
+          <select
+            required
+            disabled={isEdit}
+            value={supplierId}
+            onChange={(e) => setSupplierId(e.target.value)}
+            className="input w-full disabled:opacity-50"
+          >
+            <option value="">-- Select Supplier --</option>
+            {suppliers.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </div>
 
-      {confirming && isEdit ? (
-        <div className="mt-3 rounded-lg bg-warning-bg px-3 py-3 text-sm text-warning">
-          <p className="mb-2 font-medium">Are you sure you want to update this GRN?</p>
-          <p className="mb-3 text-xs">Stock will be reversed and reapplied for the new quantities, and the supplier balance adjusted by the difference.</p>
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" size="sm" onClick={() => setConfirming(false)} disabled={saving}>Back</Button>
-            <Button size="sm" onClick={submit} disabled={saving}>Yes, Update GRN</Button>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-xs font-medium text-ink-muted block mb-1">Supplier Invoice #</label>
+            <input
+              type="text"
+              placeholder="INV-98765"
+              value={supplierInvoiceNo}
+              onChange={(e) => setSupplierInvoiceNo(e.target.value)}
+              className="input w-full"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-ink-muted block mb-1">Payment Mode</label>
+            <select
+              disabled={isEdit}
+              value={paymentMode}
+              onChange={(e) => setPaymentMode(e.target.value)}
+              className="input w-full disabled:opacity-50"
+            >
+              <option value="credit">Credit</option>
+              <option value="cash">Cash</option>
+              <option value="bank_transfer">Bank Transfer</option>
+              <option value="upi">UPI</option>
+            </select>
           </div>
         </div>
-      ) : (
-        <Button className="mt-3" onClick={() => (isEdit ? setConfirming(true) : submit())} disabled={!supplierId || validLines.length === 0 || saving}>
-          {isEdit ? 'Save Changes' : 'Save GRN & Update Stock'}
-        </Button>
-      )}
-      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
-    </div>
-  );
-}
 
-function SummaryStat({ label, value, bold }) {
-  return (
-    <div className="flex justify-between sm:block">
-      <span className="text-xs text-ink-muted">{label}</span>
-      <span className={bold ? 'block text-base font-bold text-ink' : 'block font-semibold text-ink'}>{value}</span>
+        <div>
+          <label className="text-xs font-medium text-ink-muted block mb-1">Paid Amount (₹)</label>
+          <input
+            disabled={isEdit}
+            type="number"
+            step="any"
+            placeholder="0.00"
+            value={paidAmount}
+            onChange={(e) => setPaidAmount(e.target.value)}
+            className="input w-full disabled:opacity-50"
+          />
+        </div>
+
+        <PurchaseItemLineEditor
+          lines={lines}
+          setLines={setLines}
+          items={items}
+          unitsByItemId={unitsByItemId}
+          onPickItem={onPickItem}
+        />
+
+        <div className="p-3 rounded-lg bg-surface-subtle/30 border border-border-soft/60 space-y-1 text-xs">
+          <div className="flex justify-between text-ink-muted">
+            <span>Total Qty: <strong className="text-ink">{totals.qty}</strong></span>
+            <span>Free Qty: <strong className="text-ink">{totals.freeQty}</strong></span>
+          </div>
+          <div className="flex justify-between text-ink-muted">
+            <span>Gross Total: <strong>₹{totals.gross.toFixed(2)}</strong></span>
+            <span>Discount: <strong>₹{totals.discount.toFixed(2)}</strong></span>
+          </div>
+          <div className="flex justify-between text-ink font-semibold text-sm pt-1 border-t border-border-soft/40">
+            <span>Grand Total:</span>
+            <span className="text-emerald-400">₹{totals.net.toFixed(2)}</span>
+          </div>
+        </div>
+
+        {confirming && isEdit ? (
+          <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 p-3 text-xs text-amber-300 space-y-2">
+            <p className="font-semibold">Confirm GRN Update?</p>
+            <p className="text-[11px] text-amber-400/80">Stock and supplier balances will be recalculated.</p>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="secondary" onClick={() => setConfirming(false)} disabled={saving}>
+                Back
+              </Button>
+              <Button variant="primary" onClick={submit} loading={saving}>
+                Confirm Update
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="pt-2">
+            <Button
+              type="button"
+              variant="primary"
+              onClick={() => (isEdit ? setConfirming(true) : submit())}
+              disabled={!supplierId || validLines.length === 0 || saving}
+              loading={saving}
+              className="w-full"
+            >
+              {isEdit ? 'Save Changes' : 'Save GRN & Update Stock'}
+            </Button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 function GrnPanel({ canManage, canEdit, canViewCost, canDelete }) {
   const queryClient = useQueryClient();
-  const [editingGrn, setEditingGrn] = useState(undefined); // undefined = create form, object = editing
+  const [editingGrn, setEditingGrn] = useState(undefined);
   const [unitsByItemId, setUnitsByItemId] = useState({});
+  const [searchQuery, setSearchQuery] = useState('');
 
   const purchasesQuery = useQuery({ queryKey: ['purchases'], queryFn: purchasesApi.list });
   const itemsQuery = useQuery({ queryKey: ['items', ''], queryFn: () => itemsApi.list('') });
@@ -281,7 +481,15 @@ function GrnPanel({ canManage, canEdit, canViewCost, canDelete }) {
     if (unitsByItemId[itemId]) return;
     const full = await itemsApi.get(itemId);
     const purchaseUnits = (full.unit_conversions || []).filter((uc) => Number(uc.is_purchase_unit));
-    const options = [{ id: full.base_unit_id, short_code: full.base_unit_code }, ...purchaseUnits.map((uc) => ({ id: uc.unit_id, short_code: uc.short_code }))];
+    const options = [
+      { id: full.base_unit_id, short_code: full.base_unit_code },
+      ...purchaseUnits.map((uc) => ({ id: uc.unit_id, short_code: uc.short_code })),
+    ];
+    // The secondary unit (S-UNIT) lives on the item row, not in
+    // item_unit_conversions — add it explicitly so it's selectable here too.
+    if (full.secondary_unit_id && !options.some((o) => o.id === full.secondary_unit_id)) {
+      options.push({ id: full.secondary_unit_id, short_code: full.secondary_unit_code });
+    }
     setUnitsByItemId((prev) => ({ ...prev, [itemId]: options }));
   };
 
@@ -290,64 +498,131 @@ function GrnPanel({ canManage, canEdit, canViewCost, canDelete }) {
   const purchases = purchasesQuery.data || [];
   const items = itemsQuery.data || [];
 
-  return (
-    <div className="flex flex-col gap-4">
-      {(canManage || editingGrn) && (
-        <GrnFormCard
-          key={editingGrn?.id ?? 'create'}
-          editing={editingGrn}
-          onDone={() => setEditingGrn(undefined)}
-          items={items}
-          unitsByItemId={unitsByItemId}
-          onPickItem={onPickItem}
-        />
-      )}
+  const filteredPurchases = purchases.filter((p) => {
+    return (
+      p.grn_no?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.supplier_invoice_no?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.supplier_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.status?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  });
 
-      <div className="card">
-        <div className="border-b border-border-soft px-4 py-3 font-semibold text-ink">GRN Register</div>
-        <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border-soft text-left text-xs uppercase text-ink-muted">
-              <th className="px-4 py-2">GRN #</th><th className="px-4 py-2">Supplier Inv #</th><th className="px-4 py-2">Supplier</th>
-              <th className="px-4 py-2">Date</th>
-              {canViewCost && <th className="px-4 py-2">Grand Total</th>}
-              {canViewCost && <th className="px-4 py-2">Paid</th>}
-              {canViewCost && <th className="px-4 py-2">Pending</th>}
-              <th className="px-4 py-2">Mode</th><th className="px-4 py-2">Status</th><th className="px-4 py-2 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {purchases.map((p) => (
-              <tr key={p.id} className={`border-b border-border-soft ${p.status === 'cancelled' ? 'opacity-50 line-through' : ''}`}>
-                <td className="px-4 py-2">{p.grn_no}</td>
-                <td className="px-4 py-2">{p.supplier_invoice_no || '-'}</td>
-                <td className="px-4 py-2">{p.supplier_name}</td>
-                <td className="px-4 py-2 text-ink-muted">{p.purchase_date}</td>
-                {canViewCost && <td className="px-4 py-2">{p.grand_total}</td>}
-                {canViewCost && <td className="px-4 py-2">{p.paid_amount}</td>}
-                {canViewCost && (
-                  <td className={`px-4 py-2 font-medium ${Number(p.pending_balance) > 0 ? 'text-red-600' : 'text-success'}`}>
-                    {p.pending_balance}
-                  </td>
+  return (
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+      {/* Left Column Form */}
+      <div className="lg:col-span-5">
+        {(canManage || editingGrn) && (
+          <GrnFormCard
+            key={editingGrn?.id ?? 'create'}
+            editing={editingGrn}
+            onDone={() => setEditingGrn(undefined)}
+            items={items}
+            unitsByItemId={unitsByItemId}
+            onPickItem={onPickItem}
+          />
+        )}
+      </div>
+
+      {/* Right Column Table */}
+      <div className="lg:col-span-7 space-y-4">
+        <div className="card p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="relative w-full sm:w-72">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
+            <input
+              type="text"
+              placeholder="Search GRNs..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="input pl-9 w-full text-xs"
+            />
+          </div>
+          <span className="text-xs text-ink-muted">{filteredPurchases.length} record(s)</span>
+        </div>
+
+        <div className="card overflow-hidden">
+          <div className="px-5 py-4 border-b border-border-soft flex items-center justify-between">
+            <h3 className="font-semibold text-ink text-sm">GRN Register</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-border-soft bg-surface-subtle/30 text-ink-muted font-medium">
+                  <th className="px-4 py-3">GRN #</th>
+                  <th className="px-4 py-3">Supplier</th>
+                  {canViewCost && <th className="px-4 py-3">Grand Total</th>}
+                  {canViewCost && <th className="px-4 py-3">Pending</th>}
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-soft/60">
+                {filteredPurchases.map((p) => (
+                  <tr
+                    key={p.id}
+                    className={`hover:bg-surface-subtle/20 transition ${
+                      p.status === 'cancelled' ? 'opacity-50 line-through' : ''
+                    }`}
+                  >
+                    <td className="px-4 py-3 font-mono font-medium text-ink">
+                      {p.grn_no}
+                      {p.supplier_invoice_no && <div className="text-[10px] text-ink-muted font-mono">{p.supplier_invoice_no}</div>}
+                    </td>
+                    <td className="px-4 py-3 font-medium text-ink">{p.supplier_name}</td>
+                    {canViewCost && <td className="px-4 py-3 font-medium text-ink">₹{Number(p.grand_total).toFixed(2)}</td>}
+                    {canViewCost && (
+                      <td className="px-4 py-3 font-semibold">
+                        {Number(p.pending_balance) > 0 ? (
+                          <span className="text-red-400">₹{Number(p.pending_balance).toFixed(2)}</span>
+                        ) : (
+                          <span className="text-emerald-400">Paid</span>
+                        )}
+                      </td>
+                    )}
+                    <td className="px-4 py-3 capitalize">
+                      {p.status === 'active' ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                          Active
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-500/10 text-gray-400 border border-gray-500/20">
+                          <span className="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
+                          {p.status}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right space-x-1">
+                      {canEdit && p.status === 'active' && (
+                        <button
+                          onClick={() => openEdit(p)}
+                          className="p-1 rounded hover:bg-surface-subtle text-ink-muted hover:text-cyan-400 transition"
+                          title="Edit GRN"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      {canDelete && p.status === 'active' && (
+                        <button
+                          onClick={() => deleteMutation.mutate(p.id)}
+                          className="p-1 rounded hover:bg-surface-subtle text-ink-muted hover:text-red-400 transition"
+                          title="Delete GRN"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {filteredPurchases.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-8 text-center text-ink-muted text-xs">
+                      No GRN records found.
+                    </td>
+                  </tr>
                 )}
-                <td className="px-4 py-2 capitalize">{p.payment_mode.replace('_', ' ')}</td>
-                <td className="px-4 py-2 capitalize">{p.status}</td>
-                <td className="px-4 py-2">
-                  <div className="flex justify-end gap-2">
-                    {canEdit && p.status === 'active' && (
-                      <button title="Edit" onClick={() => openEdit(p)} className="text-ink-muted hover:text-gold"><Pencil size={15} /></button>
-                    )}
-                    {canDelete && p.status === 'active' && (
-                      <button title="Delete" onClick={() => deleteMutation.mutate(p.id)} className="text-danger hover:text-red-700"><Trash2 size={15} /></button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {purchases.length === 0 && <tr><td colSpan={9} className="px-4 py-6 text-center text-ink-muted">No GRNs yet.</td></tr>}
-          </tbody>
-        </table>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
@@ -362,6 +637,7 @@ function SupplierPaymentsPanel({ canManage }) {
   const [referenceNo, setReferenceNo] = useState('');
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const suppliersQuery = useQuery({ queryKey: ['suppliers'], queryFn: suppliersApi.list });
   const unpaidQuery = useQuery({
@@ -385,7 +661,6 @@ function SupplierPaymentsPanel({ canManage }) {
   const suppliers = suppliersQuery.data || [];
   const payments = paymentsQuery.data || [];
 
-  // Live FIFO preview, mirrors the server's default allocation.
   const preview = (() => {
     let remaining = Number(amount || 0);
     return unpaid.map((grn) => {
@@ -396,7 +671,8 @@ function SupplierPaymentsPanel({ canManage }) {
     });
   })();
 
-  const submit = async () => {
+  const submit = async (e) => {
+    e.preventDefault();
     setError('');
     setResult(null);
     try {
@@ -413,79 +689,196 @@ function SupplierPaymentsPanel({ canManage }) {
     }
   };
 
+  const filteredPayments = payments.filter((p) => {
+    return (
+      p.payment_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.supplier_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.reference_no?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  });
+
   return (
-    <div className="flex flex-col gap-4">
-      {canManage && (
-        <div className="card p-4">
-          <div className="mb-2 font-semibold text-ink">Record Supplier Payment</div>
-          <div className="mb-3 flex flex-wrap gap-2">
-            <select value={supplierId} onChange={(e) => { setSupplierId(e.target.value); setResult(null); }} className="input w-56">
-              <option value="">Select supplier</option>
-              {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-            <input type="number" step="any" placeholder="Amount" value={amount} onChange={(e) => setAmount(e.target.value)} className="input w-32" />
-            <select value={paymentMode} onChange={(e) => setPaymentMode(e.target.value)} className="input w-36">
-              <option value="bank_transfer">Bank Transfer</option>
-              <option value="cash">Cash</option>
-              <option value="upi">UPI</option>
-              <option value="cheque">Cheque</option>
-            </select>
-            <input placeholder="Reference #" value={referenceNo} onChange={(e) => setReferenceNo(e.target.value)} className="input w-32" />
-          </div>
-
-          {supplierId && (
-            <div className="mb-3 overflow-hidden rounded border border-border-soft">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="bg-page text-left text-ink-muted">
-                    <th className="px-3 py-1.5">GRN #</th><th className="px-3 py-1.5">Pending</th><th className="px-3 py-1.5">This Pay (FIFO)</th><th className="px-3 py-1.5">Rem After</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {preview.map((g) => (
-                    <tr key={g.id}>
-                      <td className="px-3 py-1.5">{g.grn_no}</td>
-                      <td className="px-3 py-1.5">{g.pending_balance}</td>
-                      <td className="px-3 py-1.5 font-medium text-gold">{g.applied.toFixed(2)}</td>
-                      <td className="px-3 py-1.5">{g.remAfter.toFixed(2)}</td>
-                    </tr>
-                  ))}
-                  {unpaid.length === 0 && <tr><td colSpan={4} className="px-3 py-3 text-center text-ink-muted">No outstanding GRNs.</td></tr>}
-                </tbody>
-              </table>
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+      {/* Left Column Form */}
+      <div className="lg:col-span-5">
+        {canManage && (
+          <div className="card p-5 space-y-4 sticky top-6">
+            <div className="border-b border-border-soft pb-3">
+              <h2 className="font-semibold text-ink text-base flex items-center gap-2">
+                <CreditCard className="w-4 h-4 text-emerald-400" />
+                Record Supplier Payment
+              </h2>
             </div>
-          )}
 
-          <button onClick={submit} disabled={!supplierId || !amount} className="rounded bg-success px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-40">
-            Settle Supplier Balance
-          </button>
-          {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-          {result && <p className="mt-2 text-sm text-success">Allocated Rs. {result.allocated_total} across {Object.keys(result.allocations).length} GRN(s).</p>}
+            <form onSubmit={submit} className="space-y-3">
+              {error && <div className="text-xs text-red-400 bg-red-950/40 p-2.5 rounded border border-red-800/40">{error}</div>}
+              {result && (
+                <div className="text-xs text-emerald-400 bg-emerald-950/40 p-2.5 rounded border border-emerald-800/40 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4" />
+                  Allocated ₹{result.allocated_total} across {Object.keys(result.allocations).length} GRN(s).
+                </div>
+              )}
+
+              <div>
+                <label className="text-xs font-medium text-ink-muted block mb-1">Supplier *</label>
+                <select
+                  required
+                  value={supplierId}
+                  onChange={(e) => {
+                    setSupplierId(e.target.value);
+                    setResult(null);
+                  }}
+                  className="input w-full"
+                >
+                  <option value="">-- Select Supplier --</option>
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-ink-muted block mb-1">Payment Amount (₹) *</label>
+                <input
+                  required
+                  type="number"
+                  step="any"
+                  min="0.01"
+                  placeholder="0.00"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="input w-full"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs font-medium text-ink-muted block mb-1">Payment Mode</label>
+                  <select
+                    value={paymentMode}
+                    onChange={(e) => setPaymentMode(e.target.value)}
+                    className="input w-full"
+                  >
+                    <option value="bank_transfer">Bank Transfer</option>
+                    <option value="cash">Cash</option>
+                    <option value="upi">UPI</option>
+                    <option value="cheque">Cheque</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-ink-muted block mb-1">Ref / UTR #</label>
+                  <input
+                    type="text"
+                    placeholder="Ref #"
+                    value={referenceNo}
+                    onChange={(e) => setReferenceNo(e.target.value)}
+                    className="input w-full"
+                  />
+                </div>
+              </div>
+
+              {supplierId && unpaid.length > 0 && (
+                <div className="space-y-1 pt-1">
+                  <label className="text-[11px] font-medium text-ink-muted block">FIFO Allocation Preview</label>
+                  <div className="overflow-hidden rounded-lg border border-border-soft/60">
+                    <table className="w-full text-left text-[11px]">
+                      <thead>
+                        <tr className="bg-surface-subtle/30 text-ink-muted">
+                          <th className="px-3 py-1.5">GRN #</th>
+                          <th className="px-3 py-1.5">Pending</th>
+                          <th className="px-3 py-1.5">Applied</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border-soft/40">
+                        {preview.map((g) => (
+                          <tr key={g.id}>
+                            <td className="px-3 py-1.5 font-mono text-ink">{g.grn_no}</td>
+                            <td className="px-3 py-1.5 text-ink-muted">₹{g.pending_balance}</td>
+                            <td className="px-3 py-1.5 font-semibold text-emerald-400">₹{g.applied.toFixed(2)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-2">
+                <Button
+                  type="submit"
+                  variant="primary"
+                  loading={createMutation.isPending}
+                  disabled={!supplierId || !amount}
+                  className="w-full"
+                >
+                  Settle Supplier Balance
+                </Button>
+              </div>
+            </form>
+          </div>
+        )}
+      </div>
+
+      {/* Right Column Table */}
+      <div className="lg:col-span-7 space-y-4">
+        <div className="card p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="relative w-full sm:w-72">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
+            <input
+              type="text"
+              placeholder="Search payments..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="input pl-9 w-full text-xs"
+            />
+          </div>
+          <span className="text-xs text-ink-muted">{filteredPayments.length} payment record(s)</span>
         </div>
-      )}
 
-      <div className="card">
-        <div className="border-b border-border-soft px-4 py-3 font-semibold text-ink">Supplier Payment Register</div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border-soft text-left text-xs uppercase text-ink-muted">
-              <th className="px-4 py-2">Code</th><th className="px-4 py-2">Supplier</th><th className="px-4 py-2">Mode</th><th className="px-4 py-2">Reference</th><th className="px-4 py-2">Amount</th><th className="px-4 py-2">Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            {payments.map((p) => (
-              <tr key={p.id} className="border-b border-border-soft">
-                <td className="px-4 py-2">{p.payment_code}</td>
-                <td className="px-4 py-2">{p.supplier_name}</td>
-                <td className="px-4 py-2 capitalize">{p.payment_mode.replace('_', ' ')}</td>
-                <td className="px-4 py-2">{p.reference_no || '-'}</td>
-                <td className="px-4 py-2">{p.amount}</td>
-                <td className="px-4 py-2 text-ink-muted">{p.paid_at}</td>
-              </tr>
-            ))}
-            {payments.length === 0 && <tr><td colSpan={6} className="px-4 py-6 text-center text-ink-muted">No payments yet.</td></tr>}
-          </tbody>
-        </table>
+        <div className="card overflow-hidden">
+          <div className="px-5 py-4 border-b border-border-soft flex items-center justify-between">
+            <h3 className="font-semibold text-ink text-sm">Supplier Payment Register</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-border-soft bg-surface-subtle/30 text-ink-muted font-medium">
+                  <th className="px-4 py-3">Code</th>
+                  <th className="px-4 py-3">Supplier</th>
+                  <th className="px-4 py-3">Mode</th>
+                  <th className="px-4 py-3">Reference</th>
+                  <th className="px-4 py-3">Amount</th>
+                  <th className="px-4 py-3">Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-soft/60">
+                {filteredPayments.map((p) => (
+                  <tr key={p.id} className="hover:bg-surface-subtle/20 transition">
+                    <td className="px-4 py-3 font-mono font-medium text-ink">{p.payment_code}</td>
+                    <td className="px-4 py-3 font-medium text-ink">{p.supplier_name}</td>
+                    <td className="px-4 py-3">
+                      <span className="px-2 py-0.5 rounded text-[10px] uppercase font-medium bg-slate-800 text-slate-300 border border-slate-700">
+                        {p.payment_mode?.replace('_', ' ')}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-ink-muted font-mono">{p.reference_no || '-'}</td>
+                    <td className="px-4 py-3 font-semibold text-emerald-400">₹{Number(p.amount).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-ink-muted">{p.paid_at}</td>
+                  </tr>
+                ))}
+                {filteredPayments.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-8 text-center text-ink-muted text-xs">
+                      No supplier payment records logged yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -499,17 +892,39 @@ export function Purchasing() {
   const canSettle = usePermission('purchases.settle_supplier_payment');
 
   return (
-    <div>
-      <h1 className="mb-1 text-2xl font-bold text-ink">Purchasing</h1>
-      <p className="mb-4 text-sm text-ink-muted">
-        Purchase indents/requests now live under Orders &amp; Indents Management.
-      </p>
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border-soft/40 pb-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-ink flex items-center gap-2.5">
+            <ShoppingBag className="w-7 h-7 text-indigo-400" />
+            Purchasing &amp; Goods Receipt
+          </h1>
+          <p className="text-xs text-ink-muted mt-1">Manage Goods Received Notes (GRN), inventory batch creation, and supplier settlements</p>
+        </div>
+      </div>
+
       <Tabs
         tabs={[
-          { key: 'grn', label: 'GRN (Purchases)', content: <GrnPanel canManage={canGrn} canEdit={canEditGrn} canViewCost={canViewCost} canDelete={canDeleteGrn} /> },
-          { key: 'payments', label: 'Supplier Payments', content: <SupplierPaymentsPanel canManage={canSettle} /> },
+          {
+            key: 'grn',
+            label: 'GRN (Purchases)',
+            content: (
+              <GrnPanel
+                canManage={canGrn}
+                canEdit={canEditGrn}
+                canViewCost={canViewCost}
+                canDelete={canDeleteGrn}
+              />
+            ),
+          },
+          {
+            key: 'payments',
+            label: 'Supplier Payments',
+            content: <SupplierPaymentsPanel canManage={canSettle} />,
+          },
         ]}
       />
     </div>
   );
 }
+

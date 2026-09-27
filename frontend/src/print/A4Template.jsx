@@ -1,6 +1,10 @@
 export function A4Template({ data }) {
   const { invoice, branch, tax_slabs: taxSlabs, amount_in_words: amountInWords, customer_outstanding: outstanding } = data;
   const isOutstation = invoice.invoice_format === 'outstation';
+  // Non-GST bills carry tax_percent/tax_amount = 0 on every line (enforced
+  // server-side in InvoiceModel::priceLine) — hide the GST-specific columns
+  // and slab breakdown entirely so the customer never sees GST implied.
+  const isGst = invoice.bill_type !== 'non_gst';
 
   return (
     <div className="a4-invoice">
@@ -12,7 +16,12 @@ export function A4Template({ data }) {
           {branch.gstin && <div>GSTIN: {branch.gstin}</div>}
         </div>
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontWeight: 'bold', fontSize: 16 }}>TAX INVOICE</div>
+          <div style={{ fontWeight: 'bold', fontSize: 16 }}>{isGst ? 'TAX INVOICE' : 'INVOICE (NON-GST)'}</div>
+          {invoice.price_type && invoice.price_type !== 'normal' && (
+            <div style={{ fontSize: 11, fontWeight: 'bold', color: '#b45309' }}>
+              {invoice.price_type === 'wholesale' ? 'WHOLESALE PRICING' : 'RETAIL PRICING'}
+            </div>
+          )}
           <div style={{ fontWeight: 'bold', color: '#1d4ed8' }}>BILL NO: {invoice.invoice_no || 'HELD'}</div>
           <div>DATE: {invoice.invoice_date} {invoice.vehicle_no ? `| VEHICLE NO: ${invoice.vehicle_no}` : ''}</div>
           {isOutstation && (
@@ -39,7 +48,9 @@ export function A4Template({ data }) {
           <tr>
             <th>HSN</th><th>Particulars</th><th>MRP</th><th>Qty</th><th>Unit</th>
             {!isOutstation && <th>Free</th>}
-            <th>Rate</th><th>Disc</th><th>GST%</th><th>GST Amt</th><th>Amount</th>
+            <th>NET RATE</th><th>Disc</th>
+            {isGst && (<><th>GST%</th><th>GST AMT</th></>)}
+            <th>NET AMT</th>
           </tr>
         </thead>
         <tbody>
@@ -53,33 +64,34 @@ export function A4Template({ data }) {
               {!isOutstation && <td>{item.free_qty}</td>}
               <td>{item.rate}</td>
               <td>{item.discount_amount}</td>
-              <td>{item.tax_percent}</td>
-              <td>{item.tax_amount}</td>
+              {isGst && (<><td>{item.tax_percent}</td><td>{item.tax_amount}</td></>)}
               <td>{item.line_total}</td>
             </tr>
           ))}
         </tbody>
       </table>
 
-      <div style={{ margin: '10px 0', border: '1px solid #999', padding: 8 }}>
-        <div style={{ fontWeight: 'bold', marginBottom: 4 }}>TAX BREAKDOWN (GST SLABS):</div>
-        <table>
-          <thead>
-            <tr><th>GST%</th><th>Taxable</th><th>CGST</th><th>SGST</th><th>Cess</th></tr>
-          </thead>
-          <tbody>
-            {taxSlabs.map((slab) => (
-              <tr key={slab.gst_percent}>
-                <td>{slab.gst_percent}%</td>
-                <td>{slab.taxable.toFixed(2)}</td>
-                <td>{slab.cgst.toFixed(2)}</td>
-                <td>{slab.sgst.toFixed(2)}</td>
-                <td>{slab.cess.toFixed(2)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {isGst && (
+        <div style={{ margin: '10px 0', border: '1px solid #999', padding: 8 }}>
+          <div style={{ fontWeight: 'bold', marginBottom: 4 }}>TAX BREAKDOWN (GST SLABS):</div>
+          <table>
+            <thead>
+              <tr><th>GST%</th><th>Taxable</th><th>CGST</th><th>SGST</th><th>Cess</th></tr>
+            </thead>
+            <tbody>
+              {taxSlabs.map((slab) => (
+                <tr key={slab.gst_percent}>
+                  <td>{slab.gst_percent}%</td>
+                  <td>{slab.taxable.toFixed(2)}</td>
+                  <td>{slab.cgst.toFixed(2)}</td>
+                  <td>{slab.sgst.toFixed(2)}</td>
+                  <td>{slab.cess.toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10 }}>
         <div style={{ width: '55%' }}>
@@ -98,7 +110,9 @@ export function A4Template({ data }) {
         <div className="totals-box" style={{ width: '35%' }}>
           <Row label="GROSS AMOUNT" value={invoice.subtotal} />
           <Row label="DISCOUNT" value={invoice.discount_amount} />
-          <Row label="GST TAX" value={(Number(invoice.cgst_amount) + Number(invoice.sgst_amount) + Number(invoice.igst_amount)).toFixed(2)} />
+          {isGst && (
+            <Row label="GST TAX" value={(Number(invoice.cgst_amount) + Number(invoice.sgst_amount) + Number(invoice.igst_amount)).toFixed(2)} />
+          )}
           <Row label="ROUND OFF" value={invoice.round_off} />
           <Row label="NET TOTAL" value={invoice.grand_total} bold color="#1d4ed8" />
         </div>

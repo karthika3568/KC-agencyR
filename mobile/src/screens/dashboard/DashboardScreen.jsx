@@ -1,62 +1,162 @@
-import { View, Text, StyleSheet, ScrollView, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { dashboardApi } from '../../api/admin';
-import { customerPrebookingsApi, purchaseRequestsApi } from '../../api/purchasing';
-import { useAuth, usePermission } from '../../hooks/useAuth';
-import { colors } from '../../theme/colors';
+import { useAuth } from '../../hooks/useAuth';
+import { NAV_ITEMS } from '../../navigation/navItems';
+import { Icon } from '../../components/Icon';
 
-function StatCard({ label, value }) {
-  return (
-    <View style={styles.card}>
-      <Text style={styles.cardLabel}>{label}</Text>
-      <Text style={styles.cardValue}>{value}</Text>
-    </View>
-  );
-}
+export function DashboardScreen({ navigation }) {
+  const { user, logout } = useAuth();
+  const summaryQuery = useQuery({ queryKey: ['dashboard-summary'], queryFn: dashboardApi.summary });
 
-export function DashboardScreen() {
-  const { user } = useAuth();
-  const canViewSummary = usePermission('dashboard.view_financial_summary');
-  const summaryQuery = useQuery({ queryKey: ['dashboard-summary'], queryFn: dashboardApi.summary, enabled: canViewSummary });
-  const prebookingsQuery = useQuery({ queryKey: ['customer-prebookings'], queryFn: customerPrebookingsApi.list });
-  const requestsQuery = useQuery({ queryKey: ['purchase-requests'], queryFn: purchaseRequestsApi.list });
-
-  const prebookings = prebookingsQuery.data || [];
-  const requests = requestsQuery.data || [];
-  const s = summaryQuery.data || {};
-
-  const countByStatus = (rows, status) => rows.filter((r) => r.status === status).length;
-
-  const refreshing = summaryQuery.isFetching || prebookingsQuery.isFetching || requestsQuery.isFetching;
+  const refreshing = summaryQuery.isFetching;
   const onRefresh = () => {
     summaryQuery.refetch();
-    prebookingsQuery.refetch();
-    requestsQuery.refetch();
   };
 
-  return (
-    <ScrollView style={styles.screen} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
-      <Text style={styles.greeting}>Hi, {user?.name}</Text>
-      <Text style={styles.role}>{user?.role}</Text>
+  const handleLogout = () => {
+    Alert.alert('Logout?', 'Are you sure you want to log out?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Logout', style: 'destructive', onPress: logout },
+    ]);
+  };
 
-      <View style={styles.grid}>
-        {s.today_sales_revenue !== undefined && <StatCard label="Today's Sales" value={`Rs. ${s.today_sales_revenue}`} />}
-        {s.customer_net_outstanding !== undefined && <StatCard label="Customer Outstanding" value={`Rs. ${s.customer_net_outstanding}`} />}
-        <StatCard label="Pre-Bookings" value={prebookings.length} />
-        <StatCard label="Pending Requests" value={countByStatus(requests, 'open')} />
-        <StatCard label="Approved Requests" value={countByStatus(requests, 'approved')} />
-        <StatCard label="Converted to GRN" value={countByStatus(requests, 'converted_to_grn')} />
+  // Filter NAV_ITEMS to show as dashboard cards (excluding Dashboard itself)
+  const navCards = NAV_ITEMS.filter(
+    (item) => item.key !== 'Dashboard' && (!item.perm || user?.permissions?.includes(item.perm))
+  );
+
+  return (
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={styles.scrollContent}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+    >
+      {/* Top Banner Header with AJ Agency Title */}
+      <View style={styles.topBanner}>
+        <View style={{ flex: 1 }}>
+          <View style={styles.logoRow}>
+            <Text style={styles.brandTitle}>AJ </Text>
+            <Text style={styles.brandTitleGold}>Agency</Text>
+          </View>
+          <Text style={styles.brandSub}>DISTRIBUTOR BILLING & INVENTORY</Text>
+        </View>
+        <View style={{ alignItems: 'flex-end' }}>
+          <View style={styles.userBadge}>
+            <Text style={styles.userNameText}>👤 {user?.name || 'User'}</Text>
+          </View>
+          <Text style={styles.branchText}>📍 Branch: {user?.branch || 'MAIN'}</Text>
+        </View>
+      </View>
+
+      {/* 2-Column Grid of Navigation Module Cards matching the design */}
+      <Text style={styles.sectionHeader}>Quick Navigation</Text>
+      <View style={styles.cardsGrid}>
+        {navCards.map((item) => (
+          <TouchableOpacity
+            key={item.key}
+            style={styles.navCard}
+            activeOpacity={0.7}
+            onPress={() => navigation.navigate(item.key)}
+          >
+            <View style={styles.iconCircle}>
+              <Icon name={item.icon} size={26} color="#1e3a8a" />
+            </View>
+            <Text style={styles.navCardLabel} numberOfLines={2}>{item.label}</Text>
+          </TouchableOpacity>
+        ))}
+
+        {/* Logout Card at the end */}
+        <TouchableOpacity
+          style={[styles.navCard, styles.logoutCard]}
+          activeOpacity={0.7}
+          onPress={handleLogout}
+        >
+          <View style={[styles.iconCircle, styles.logoutIconCircle]}>
+            <Icon name="Logout" size={26} color="#ef4444" />
+          </View>
+          <Text style={[styles.navCardLabel, styles.logoutCardLabel]} numberOfLines={1}>Logout</Text>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.page, padding: 16 },
-  greeting: { fontSize: 20, fontWeight: '700', color: colors.ink },
-  role: { fontSize: 13, color: colors.inkMuted, marginBottom: 16 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  card: { width: '47%', backgroundColor: colors.card, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: colors.borderSoft },
-  cardLabel: { fontSize: 11, color: colors.inkMuted, marginBottom: 6, fontWeight: '600', textTransform: 'uppercase' },
-  cardValue: { fontSize: 20, fontWeight: '700', color: colors.ink },
+  screen: { flex: 1, backgroundColor: '#f8fafc' },
+  scrollContent: { padding: 14, paddingBottom: 140 },
+  topBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#ffffff',
+    padding: 14,
+    borderRadius: 14,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+  },
+  logoRow: { flexDirection: 'row', alignItems: 'center' },
+  brandTitle: { fontSize: 22, fontWeight: '900', color: '#1e3a8a' },
+  brandTitleGold: { fontSize: 22, fontWeight: '900', color: '#d97706' },
+  brandSub: { fontSize: 9, color: '#64748b', fontWeight: '700', marginTop: 1, letterSpacing: 0.5 },
+  userBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f1f5f9', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  userNameText: { fontSize: 13, fontWeight: '700', color: '#0f172a' },
+  branchText: { fontSize: 11, fontWeight: '700', color: '#dc2626', marginTop: 4 },
+  sectionHeader: { fontSize: 15, fontWeight: '800', color: '#1e293b', marginBottom: 12 },
+  cardsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 12,
+  },
+  navCard: {
+    width: '48.5%',
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+  },
+  logoutCard: {
+    borderColor: '#fca5a5',
+    backgroundColor: '#fef2f2',
+  },
+  iconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#e0e7ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  logoutIconCircle: {
+    backgroundColor: '#fee2e2',
+  },
+  navCardLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1e293b',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  logoutCardLabel: {
+    color: '#dc2626',
+    fontWeight: '800',
+  },
 });
+

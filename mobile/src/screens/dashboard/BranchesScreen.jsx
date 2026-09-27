@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { branchesApi } from '../../api/branches';
 import { friendlyErrorMessage } from '../../api/client';
 import { FormModal, formStyles } from '../../components/FormModal';
+import { Icon } from '../../components/Icon';
 import { usePermission } from '../../hooks/useAuth';
 import { colors } from '../../theme/colors';
 
@@ -36,12 +37,22 @@ export function BranchesScreen() {
 
   return (
     <View style={styles.screen}>
+      <View style={styles.topHeader}>
+        <Text style={styles.topTitle}>Branch List</Text>
+        {canManage && (
+          <TouchableOpacity style={styles.topRightBtn} onPress={openCreate}>
+            <Icon name="plus" size={14} color={colors.gold} style={{ marginRight: 4 }} />
+            <Text style={styles.topRightBtnText}>+ Add Branch</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
       <FlatList
         data={listQuery.data || []}
         keyExtractor={(r) => String(r.id)}
         refreshing={listQuery.isFetching}
         onRefresh={listQuery.refetch}
-        contentContainerStyle={{ padding: 12 }}
+        contentContainerStyle={{ padding: 12, paddingBottom: 140, flexGrow: 1 }}
         renderItem={({ item }) => (
           <TouchableOpacity style={styles.card} onPress={() => canManage && openEdit(item)}>
             <Text style={styles.name}>{item.branch_name}{item.is_main_branch ? ' (Main)' : ''}</Text>
@@ -50,9 +61,7 @@ export function BranchesScreen() {
           </TouchableOpacity>
         )}
       />
-      {canManage && (
-        <TouchableOpacity style={styles.fab} onPress={openCreate}><Text style={styles.fabText}>+ Add Branch</Text></TouchableOpacity>
-      )}
+
       <FormModal
         visible={modal !== undefined}
         title={modal?.id ? 'Edit Branch' : 'New Branch'}
@@ -80,9 +89,27 @@ export function BranchesScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.page },
+  topHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: colors.card,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSoft,
+  },
+  topTitle: { fontSize: 16, fontWeight: '700', color: colors.ink },
+  topRightBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.navbar,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  topRightBtnText: { color: colors.gold, fontWeight: '700', fontSize: 12 },
   card: { backgroundColor: colors.card, borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: colors.borderSoft },
   name: { fontWeight: '700', color: colors.ink },
   meta: { color: colors.inkMuted, fontSize: 12, marginTop: 2 },
-  fab: { position: 'absolute', bottom: 16, left: 16, right: 16, backgroundColor: colors.navbar, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
-  fabText: { color: colors.gold, fontWeight: '700' },
 });

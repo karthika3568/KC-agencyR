@@ -1,4 +1,17 @@
 -- =====================================================================
+-- AJ Agency POS / Distributor Billing System — Seed / Demo Data
+-- Consolidated from seed.sql + seed_phase2.sql + seed_phase3.sql +
+-- seed_phase5.sql (the exact, already-applied seed sequence for this
+-- project, concatenated in order — nothing rewritten, nothing invented).
+--
+-- Run AFTER schema.sql, against the same database:
+--   mysql -u root -p pos_system < seed.sql
+-- =====================================================================
+
+-- ---------------------------------------------------------------------
+-- Source: seed.sql
+-- ---------------------------------------------------------------------
+-- =====================================================================
 -- POS / Distributor Billing System — Phase 1 Seed Data
 -- Run AFTER schema.sql, against the same database.
 -- =====================================================================
@@ -133,3 +146,66 @@ INSERT INTO users (id, branch_id, role_id, name, email, password_hash, phone, st
    '$2y$10$WChYQdvaqGR.YxQ4bpSgcepz2jqCyv2DEBgr6/LsX4n54RLPODp7G',
    '9999999999', 'active')
   ON DUPLICATE KEY UPDATE name = VALUES(name);
+
+-- ---------------------------------------------------------------------
+-- Source: seed_phase2.sql
+-- ---------------------------------------------------------------------
+-- =====================================================================
+-- POS / Distributor Billing System — Phase 2 Seed Data
+-- Run AFTER schema_phase2.sql.
+-- =====================================================================
+
+SET NAMES utf8mb4;
+
+-- Standard Indian GST slabs
+INSERT INTO tax_codes (code, name, gst_percent, cgst_percent, sgst_percent, igst_percent, cess_percent) VALUES
+('GST0', 'GST 0%', 0, 0, 0, 0, NULL),
+('GST5', 'GST 5%', 5, 2.5, 2.5, 5, NULL),
+('GST12', 'GST 12%', 12, 6, 6, 12, NULL),
+('GST18', 'GST 18%', 18, 9, 9, 18, NULL),
+('GST28', 'GST 28%', 28, 14, 14, 28, NULL)
+ON DUPLICATE KEY UPDATE name = VALUES(name);
+
+-- Common stock units
+INSERT INTO stock_units (name, short_code, is_decimal) VALUES
+('Pieces', 'PCS', 0),
+('Kilogram', 'KG', 1),
+('Litre', 'LTR', 1),
+('Box', 'BOX', 0),
+('Carton', 'CTN', 0)
+ON DUPLICATE KEY UPDATE name = VALUES(name);
+
+-- ---------------------------------------------------------------------
+-- Source: seed_phase3.sql
+-- ---------------------------------------------------------------------
+-- =====================================================================
+-- POS / Distributor Billing System — Phase 3 Seed Data
+-- Run AFTER schema_phase3.sql.
+-- =====================================================================
+
+SET NAMES utf8mb4;
+
+-- One GST + one Non-GST sequence per existing branch, per section 4.19.
+INSERT INTO invoice_sequences (branch_id, series, prefix, current_number)
+SELECT id, 'gst', 'INV-', 0 FROM branches
+ON DUPLICATE KEY UPDATE branch_id = branch_id;
+
+INSERT INTO invoice_sequences (branch_id, series, prefix, current_number)
+SELECT id, 'non_gst', 'EST-', 0 FROM branches
+ON DUPLICATE KEY UPDATE branch_id = branch_id;
+
+-- ---------------------------------------------------------------------
+-- Source: seed_phase5.sql
+-- ---------------------------------------------------------------------
+-- =====================================================================
+-- POS / Distributor Billing System — Phase 5 Seed Data
+-- Run AFTER schema_phase5.sql.
+-- =====================================================================
+
+SET NAMES utf8mb4;
+
+INSERT INTO expense_categories (name) VALUES
+('Rent'), ('Electricity'), ('Staff Salary'), ('Transport / Fuel'),
+('Packing Material'), ('Maintenance'), ('Miscellaneous')
+ON DUPLICATE KEY UPDATE name = VALUES(name);
+

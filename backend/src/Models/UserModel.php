@@ -84,7 +84,7 @@ class UserModel
     public function all(?int $branchId = null): array
     {
         $sql = "SELECT u.id, u.name, u.email, u.phone, u.status, u.branch_id, u.role_id,
-                       r.name AS role_name, b.branch_name
+                       u.created_at, r.name AS role_name, b.branch_name
                 FROM users u
                 JOIN roles r ON r.id = u.role_id
                 LEFT JOIN branches b ON b.id = u.branch_id";

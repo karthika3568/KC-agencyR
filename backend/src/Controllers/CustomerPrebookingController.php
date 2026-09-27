@@ -71,7 +71,7 @@ class CustomerPrebookingController
                 return [[], [], 'Each line needs item_id and qty'];
             }
             $stmt = $this->pdo->prepare(
-                'SELECT i.id, i.retail_price, tc.gst_percent FROM items i
+                'SELECT i.*, tc.gst_percent FROM items i
                  LEFT JOIN tax_codes tc ON tc.id = i.tax_code_id WHERE i.id = :id'
             );
             $stmt->execute(['id' => (int) $line['item_id']]);
@@ -79,10 +79,11 @@ class CustomerPrebookingController
             if (!$item) {
                 return [[], [], "Item {$line['item_id']} not found"];
             }
+            $unitPricing = \App\Models\ItemModel::resolveUnitPricing($item, !empty($line['unit_id']) ? (int) $line['unit_id'] : null);
             $lines[] = [
                 'item_id' => (int) $item['id'],
                 'qty' => (float) $line['qty'],
-                'rate' => isset($line['rate']) && $line['rate'] !== '' ? (float) $line['rate'] : (float) $item['retail_price'],
+                'rate' => isset($line['rate']) && $line['rate'] !== '' ? (float) $line['rate'] : $unitPricing['net_srate'],
                 'tax_percent' => (float) ($item['gst_percent'] ?? 0),
             ];
         }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { customerPrebookingsApi, purchaseRequestsApi, routeSuppliersApi } from '../../api/purchasing';
 import { customersApi, suppliersApi, routesApi } from '../../api/parties';
@@ -10,6 +10,7 @@ import { FormModal, formStyles } from '../../components/FormModal';
 import { SelectField } from '../../components/SelectField';
 import { ItemLineEditor } from '../../components/ItemLineEditor';
 import { SegmentedTabs } from '../../components/SegmentedTabs';
+import { Icon } from '../../components/Icon';
 import { colors } from '../../theme/colors';
 import { usePermission } from '../../hooks/useAuth';
 
@@ -31,6 +32,7 @@ function PrebookingFormModal({ visible, onClose }) {
   const [routeId, setRouteId] = useState(null);
   const [employeeId, setEmployeeId] = useState(null);
   const [bookingSource, setBookingSource] = useState('direct');
+  const [customEstimatedTotal, setCustomEstimatedTotal] = useState('');
   const [lines, setLines] = useState([{ key: '1', item_id: null, qty: '1', rate: '' }]);
   const [error, setError] = useState('');
 
@@ -41,6 +43,7 @@ function PrebookingFormModal({ visible, onClose }) {
     const item = items.find((i) => i.id === l.item_id);
     return s + Number(l.qty || 0) * Number(l.rate || 0) * (Number(item?.gst_percent || 0) / 100);
   }, 0);
+  const autoEstimatedTotal = (subtotal + gst).toFixed(2);
 
   const createMutation = useMutation({
     mutationFn: customerPrebookingsApi.create,
@@ -53,7 +56,7 @@ function PrebookingFormModal({ visible, onClose }) {
   });
 
   const reset = () => {
-    setCustomerId(null); setRouteId(null); setEmployeeId(null); setBookingSource('direct');
+    setCustomerId(null); setRouteId(null); setEmployeeId(null); setBookingSource('direct'); setCustomEstimatedTotal('');
     setLines([{ key: '1', item_id: null, qty: '1', rate: '' }]);
     setError('');
   };
@@ -67,6 +70,7 @@ function PrebookingFormModal({ visible, onClose }) {
       route_id: routeId,
       employee_id: employeeId,
       booking_source: bookingSource,
+      estimated_total: Number(customEstimatedTotal !== '' ? customEstimatedTotal : (subtotal + gst)),
       items: validLines.map((l) => ({ item_id: l.item_id, qty: Number(l.qty), rate: l.rate !== '' ? Number(l.rate) : undefined })),
     });
   };
@@ -99,12 +103,21 @@ function PrebookingFormModal({ visible, onClose }) {
       <Text style={formStyles.label}>Items</Text>
       <ItemLineEditor lines={lines} setLines={setLines} items={items} />
 
+      <Text style={formStyles.label}>Estimated Total (Rs.) (Editable)</Text>
+      <TextInput
+        keyboardType="numeric"
+        value={customEstimatedTotal !== '' ? customEstimatedTotal : autoEstimatedTotal}
+        onChangeText={setCustomEstimatedTotal}
+        style={formStyles.input}
+        placeholder={autoEstimatedTotal}
+      />
+
       <View style={styles.totalsBox}>
         <View style={styles.totalRow}><Text style={styles.totalLabel}>Subtotal</Text><Text style={styles.totalValue}>{subtotal.toFixed(2)}</Text></View>
         <View style={styles.totalRow}><Text style={styles.totalLabel}>GST</Text><Text style={styles.totalValue}>{gst.toFixed(2)}</Text></View>
         <View style={[styles.totalRow, styles.grandRow]}>
-          <Text style={styles.grandLabel}>Estimated Total</Text>
-          <Text style={styles.grandValue}>Rs. {(subtotal + gst).toFixed(2)}</Text>
+          <Text style={styles.grandLabel}>Final Estimated Total</Text>
+          <Text style={styles.grandValue}>Rs. {customEstimatedTotal !== '' ? Number(customEstimatedTotal).toFixed(2) : autoEstimatedTotal}</Text>
         </View>
       </View>
 
@@ -202,10 +215,10 @@ function RequestFormModal({ visible, onClose }) {
   );
 }
 
-function PrebookingsTab() {
+function PrebookingsTab({ modalVisible, setModalVisible }) {
   const canManageStatus = usePermission('orders.manage_prebooking_status');
   const queryClient = useQueryClient();
-  const [modalVisible, setModalVisible] = useState(false);
+  const [viewBooking, setViewBooking] = useState(null);
   const listQuery = useQuery({ queryKey: ['customer-prebookings'], queryFn: customerPrebookingsApi.list });
   const cancelMutation = useMutation({
     mutationFn: customerPrebookingsApi.cancel,
@@ -218,7 +231,7 @@ function PrebookingsTab() {
       <FlatList
         data={rows}
         keyExtractor={(r) => String(r.id)}
-        contentContainerStyle={{ padding: 12 }}
+        contentContainerStyle={{ padding: 12, paddingBottom: 140, flexGrow: 1 }}
         refreshing={listQuery.isFetching}
         onRefresh={listQuery.refetch}
         ListEmptyComponent={<Text style={styles.empty}>No pre-bookings yet.</Text>}
@@ -231,31 +244,60 @@ function PrebookingsTab() {
             <Text style={styles.cardMeta}>{r.customer_name} · {r.item_count} item(s)</Text>
             {r.route_name ? <Text style={styles.cardMeta}>Route: {r.route_name}</Text> : null}
             <Text style={styles.cardTotal}>Rs. {Number(r.estimated_total).toFixed(2)}</Text>
-            {canManageStatus && r.status === 'pending' && (
-              <TouchableOpacity
-                style={styles.cancelLink}
-                onPress={() => Alert.alert('Cancel pre-booking?', r.prebooking_no, [
-                  { text: 'No' }, { text: 'Yes, cancel', style: 'destructive', onPress: () => cancelMutation.mutate(r.id) },
-                ])}
-              >
-                <Text style={styles.cancelLinkText}>Cancel</Text>
+
+            <View style={styles.cardActions}>
+              <TouchableOpacity onPress={() => setViewBooking(r)} style={styles.actionBtn}>
+                <Icon name="view" size={14} color={colors.ink} style={{ marginRight: 4 }} />
+                <Text style={styles.actionBtnText}>View</Text>
               </TouchableOpacity>
-            )}
+
+              {canManageStatus && r.status === 'pending' && (
+                <TouchableOpacity
+                  style={styles.actionBtnDanger}
+                  onPress={() => Alert.alert('Cancel pre-booking?', r.prebooking_no, [
+                    { text: 'No' }, { text: 'Yes, cancel', style: 'destructive', onPress: () => cancelMutation.mutate(r.id) },
+                  ])}
+                >
+                  <Icon name="delete" size={14} color={colors.danger} style={{ marginRight: 4 }} />
+                  <Text style={styles.actionBtnDangerText}>Cancel</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         )}
       />
-      <TouchableOpacity style={styles.fab} onPress={() => setModalVisible(true)}>
-        <Text style={styles.fabText}>+ New Pre-Booking</Text>
-      </TouchableOpacity>
       <PrebookingFormModal visible={modalVisible} onClose={() => setModalVisible(false)} />
+
+      {/* View Modal */}
+      {viewBooking && (
+        <FormModal
+          visible
+          title={`Pre-Booking: ${viewBooking.prebooking_no}`}
+          onClose={() => setViewBooking(null)}
+          footer={
+            <TouchableOpacity style={formStyles.primaryBtn} onPress={() => setViewBooking(null)}>
+              <Text style={formStyles.primaryBtnText}>Close</Text>
+            </TouchableOpacity>
+          }
+        >
+          <View style={styles.detailBox}>
+            <DetailRow label="Pre-Booking #" value={viewBooking.prebooking_no} />
+            <DetailRow label="Customer" value={viewBooking.customer_name} />
+            <DetailRow label="Route" value={viewBooking.route_name || '-'} />
+            <DetailRow label="Items Count" value={viewBooking.item_count} />
+            <DetailRow label="Estimated Total" value={`Rs. ${Number(viewBooking.estimated_total).toFixed(2)}`} />
+            <DetailRow label="Status" value={viewBooking.status} />
+          </View>
+        </FormModal>
+      )}
     </>
   );
 }
 
-function RequestsTab() {
+function RequestsTab({ modalVisible, setModalVisible }) {
   const canApprove = usePermission('orders.approve_purchase_request');
   const queryClient = useQueryClient();
-  const [modalVisible, setModalVisible] = useState(false);
+  const [viewRequest, setViewRequest] = useState(null);
   const listQuery = useQuery({ queryKey: ['purchase-requests'], queryFn: purchaseRequestsApi.list });
   const approveMutation = useMutation({
     mutationFn: purchaseRequestsApi.approve,
@@ -268,7 +310,7 @@ function RequestsTab() {
       <FlatList
         data={rows}
         keyExtractor={(r) => String(r.id)}
-        contentContainerStyle={{ padding: 12 }}
+        contentContainerStyle={{ padding: 12, paddingBottom: 140, flexGrow: 1 }}
         refreshing={listQuery.isFetching}
         onRefresh={listQuery.refetch}
         ListEmptyComponent={<Text style={styles.empty}>No requests yet.</Text>}
@@ -281,38 +323,110 @@ function RequestsTab() {
             <Text style={styles.cardMeta}>{r.supplier_name} · {r.item_count} item(s)</Text>
             {r.route_name ? <Text style={styles.cardMeta}>Route: {r.route_name}</Text> : null}
             <Text style={styles.cardTotal}>Rs. {Number(r.estimated_total).toFixed(2)}</Text>
-            {canApprove && r.status === 'open' && (
-              <TouchableOpacity style={styles.approveLink} onPress={() => approveMutation.mutate(r.id)}>
-                <Text style={styles.approveLinkText}>Approve</Text>
+
+            <View style={styles.cardActions}>
+              <TouchableOpacity onPress={() => setViewRequest(r)} style={styles.actionBtn}>
+                <Icon name="view" size={14} color={colors.ink} style={{ marginRight: 4 }} />
+                <Text style={styles.actionBtnText}>View</Text>
               </TouchableOpacity>
-            )}
+
+              {canApprove && r.status === 'open' && (
+                <TouchableOpacity style={styles.actionBtnSuccess} onPress={() => approveMutation.mutate(r.id)}>
+                  <Icon name="check" size={14} color={colors.success} style={{ marginRight: 4 }} />
+                  <Text style={styles.actionBtnSuccessText}>Approve</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         )}
       />
-      <TouchableOpacity style={styles.fab} onPress={() => setModalVisible(true)}>
-        <Text style={styles.fabText}>+ New Request</Text>
-      </TouchableOpacity>
       <RequestFormModal visible={modalVisible} onClose={() => setModalVisible(false)} />
+
+      {/* View Modal */}
+      {viewRequest && (
+        <FormModal
+          visible
+          title={`Request: ${viewRequest.request_no}`}
+          onClose={() => setViewRequest(null)}
+          footer={
+            <TouchableOpacity style={formStyles.primaryBtn} onPress={() => setViewRequest(null)}>
+              <Text style={formStyles.primaryBtnText}>Close</Text>
+            </TouchableOpacity>
+          }
+        >
+          <View style={styles.detailBox}>
+            <DetailRow label="Request #" value={viewRequest.request_no} />
+            <DetailRow label="Supplier" value={viewRequest.supplier_name} />
+            <DetailRow label="Route" value={viewRequest.route_name || '-'} />
+            <DetailRow label="Items Count" value={viewRequest.item_count} />
+            <DetailRow label="Estimated Total" value={`Rs. ${Number(viewRequest.estimated_total).toFixed(2)}`} />
+            <DetailRow label="Status" value={viewRequest.status} />
+          </View>
+        </FormModal>
+      )}
     </>
   );
 }
 
 export function OrdersScreen() {
   const [tab, setTab] = useState('prebookings');
+  const [modalVisible, setModalVisible] = useState(false);
+
   return (
     <View style={styles.screen}>
-      <SegmentedTabs
-        tabs={[{ key: 'prebookings', label: 'Customer Pre-Bookings' }, { key: 'requests', label: 'Supplier Requests' }]}
-        active={tab}
-        onChange={setTab}
-      />
-      {tab === 'prebookings' ? <PrebookingsTab /> : <RequestsTab />}
+      <View style={styles.topHeader}>
+        <View style={{ flex: 1 }}>
+          <SegmentedTabs
+            tabs={[{ key: 'prebookings', label: 'Customer Pre-Bookings' }, { key: 'requests', label: 'Supplier Requests' }]}
+            active={tab}
+            onChange={(t) => { setTab(t); setModalVisible(false); }}
+          />
+        </View>
+        <TouchableOpacity style={styles.topRightBtn} onPress={() => setModalVisible(true)}>
+          <Icon name="plus" size={14} color={colors.gold} style={{ marginRight: 4 }} />
+          <Text style={styles.topRightBtnText}>
+            {tab === 'prebookings' ? '+ Pre-Booking' : '+ Request'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+      {tab === 'prebookings' ? (
+        <PrebookingsTab modalVisible={modalVisible} setModalVisible={setModalVisible} />
+      ) : (
+        <RequestsTab modalVisible={modalVisible} setModalVisible={setModalVisible} />
+      )}
+    </View>
+  );
+}
+
+function DetailRow({ label, value }) {
+  return (
+    <View style={styles.detailRow}>
+      <Text style={styles.detailLabel}>{label}:</Text>
+      <Text style={styles.detailVal}>{value}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.page },
+  topHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 10,
+    backgroundColor: colors.card,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSoft,
+  },
+  topRightBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.navbar,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginLeft: 8,
+  },
+  topRightBtnText: { color: colors.gold, fontWeight: '700', fontSize: 12 },
   empty: { textAlign: 'center', color: colors.inkMuted, marginTop: 40 },
   card: { backgroundColor: colors.card, borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: colors.borderSoft },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between' },
@@ -320,12 +434,13 @@ const styles = StyleSheet.create({
   status: { fontWeight: '700', fontSize: 11, textTransform: 'uppercase' },
   cardMeta: { color: colors.inkMuted, fontSize: 12, marginTop: 4 },
   cardTotal: { fontWeight: '700', color: colors.ink, marginTop: 6 },
-  cancelLink: { marginTop: 8, alignSelf: 'flex-start' },
-  cancelLinkText: { color: colors.danger, fontWeight: '600', fontSize: 12 },
-  approveLink: { marginTop: 8, alignSelf: 'flex-start' },
-  approveLinkText: { color: colors.success, fontWeight: '700', fontSize: 12 },
-  fab: { position: 'absolute', bottom: 16, left: 16, right: 16, backgroundColor: colors.navbar, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
-  fabText: { color: colors.gold, fontWeight: '700' },
+  cardActions: { flexDirection: 'row', gap: 8, marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.borderSoft },
+  actionBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, backgroundColor: colors.page, borderWidth: 1, borderColor: colors.borderSoft },
+  actionBtnText: { color: colors.ink, fontWeight: '600', fontSize: 12 },
+  actionBtnDanger: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: colors.danger },
+  actionBtnDangerText: { color: colors.danger, fontWeight: '700', fontSize: 12 },
+  actionBtnSuccess: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, backgroundColor: '#F0FDF4', borderWidth: 1, borderColor: colors.success },
+  actionBtnSuccessText: { color: colors.success, fontWeight: '700', fontSize: 12 },
   totalsBox: { backgroundColor: colors.page, borderRadius: 10, padding: 12, marginTop: 8 },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 2 },
   totalLabel: { color: colors.inkMuted, fontSize: 12 },
@@ -333,4 +448,8 @@ const styles = StyleSheet.create({
   grandRow: { marginTop: 4, borderTopWidth: 1, borderTopColor: colors.borderSoft, paddingTop: 6 },
   grandLabel: { fontWeight: '700', color: colors.ink },
   grandValue: { fontWeight: '700', color: colors.ink, fontSize: 15 },
+  detailBox: { backgroundColor: colors.page, borderRadius: 10, padding: 12 },
+  detailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.borderSoft },
+  detailLabel: { fontWeight: '600', color: colors.inkMuted, fontSize: 13 },
+  detailVal: { fontWeight: '700', color: colors.ink, fontSize: 13 },
 });

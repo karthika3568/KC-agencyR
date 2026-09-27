@@ -19,6 +19,7 @@ import { Reports } from './pages/Reports.jsx';
 import { StaffPermissions } from './pages/StaffPermissions.jsx';
 import { Settings } from './pages/Settings.jsx';
 import { Branches } from './pages/Branches.jsx';
+import { PriceAdjustment } from './pages/PriceAdjustment.jsx';
 
 function Protected({ children }) {
   return (
@@ -35,6 +36,7 @@ export default function App() {
       <Route path="/" element={<Protected><Dashboard /></Protected>} />
       <Route path="/pos" element={<Protected><POS /></Protected>} />
       <Route path="/catalog" element={<Protected><Catalog /></Protected>} />
+      <Route path="/price-adjustment" element={<Protected><PriceAdjustment /></Protected>} />
       <Route path="/parties" element={<Protected><Parties /></Protected>} />
       <Route path="/purchasing" element={<Protected><Purchasing /></Protected>} />
       <Route path="/orders" element={<Protected><OrderManagement /></Protected>} />

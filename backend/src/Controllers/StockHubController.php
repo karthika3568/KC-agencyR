@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Helpers\Response;
+use App\Helpers\TableExporter;
 use App\Middleware\JwtAuthMiddleware;
 use App\Middleware\PermissionMiddleware;
 use PDO;
@@ -67,6 +68,15 @@ class StockHubController
              HAVING branch_qty <= i.min_stock_threshold
              ORDER BY i.item_name"
         );
-        Response::json($stmt->fetchAll());
+        $rows = $stmt->fetchAll();
+
+        if (!empty($_GET['export'])) {
+            PermissionMiddleware::require($claims, 'reports.export_excel');
+            TableExporter::export([
+                'item_code' => 'Code', 'item_name' => 'Item', 'branch_qty' => 'Qty on Hand', 'min_stock_threshold' => 'Min Threshold',
+            ], $rows, 'low_stock.xlsx');
+        }
+
+        Response::json($rows);
     }
 }

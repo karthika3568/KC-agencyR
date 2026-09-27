@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   LayoutDashboard, ShoppingCart, Package, Users, Truck, Warehouse, RotateCcw,
   Wallet, Banknote, Receipt, BarChart3, ShieldCheck, Settings as SettingsIcon,
-  Building2, LogOut, ChevronDown, MapPin, FileText, ClipboardList,
+  LogOut, ChevronDown, MapPin, FileText, ClipboardList, Tag,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth.jsx';
 import { usePermission } from '../hooks/usePermission';
@@ -15,9 +15,10 @@ const NAV_ITEMS = [
   { to: '/', label: 'Dashboard', perm: 'dashboard.view_financial_summary', icon: LayoutDashboard },
   { to: '/pos', label: 'Billing', perm: 'pos.access', icon: ShoppingCart },
   { to: '/catalog', label: 'Catalog', perm: 'catalog.manage_items', icon: Package },
+  { to: '/price-adjustment', label: 'Price Adjustment', perm: 'catalog.manage_items', icon: Tag },
   { to: '/parties', label: 'Parties', perm: 'parties.manage_customers', icon: Users },
   { to: '/purchasing', label: 'Purchasing', perm: 'purchases.create_grn', icon: Truck },
-  { to: '/orders', label: 'Orders', perm: 'orders.create_prebooking', icon: ClipboardList },
+  { to: '/orders', label: 'Orders & Indents', perm: ['orders.create_prebooking', 'orders.create_purchase_indent', 'orders.approve_purchase_request', 'orders.manage_prebooking_status'], icon: ClipboardList },
   { to: '/inventory', label: 'Inventory', perm: 'inventory.view_stock', icon: Warehouse },
   { to: '/returns', label: 'Returns', perm: 'returns.sales_return', icon: RotateCcw },
   { to: '/invoices', label: 'Invoices', perm: 'pos.access', icon: FileText },
@@ -27,8 +28,8 @@ const NAV_ITEMS = [
   { to: '/reports', label: 'Reports', perm: 'reports.view_all', icon: BarChart3 },
   { to: '/staff', label: 'Staff', perm: 'staff.manage_permissions', icon: ShieldCheck },
   { to: '/settings', label: 'Settings', perm: 'settings.manage', icon: SettingsIcon },
-  { to: '/branches', label: 'Branches', perm: 'branches.manage', icon: Building2 },
 ];
+
 
 function NavItem({ to, label, icon: Icon, end }) {
   return (

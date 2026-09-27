@@ -1,16 +1,69 @@
-# Backend
+# =====================================================================
+# Backend (PHP)
+# =====================================================================
 backend/vendor/
+backend/node_modules/
 backend/.env
+backend/.env.*
+!backend/.env.example
 backend/public/uploads/
+backend/storage_test/
+backend/*.log
+backend/cache/
+backend/tmp/
 
-# Frontend
+# =====================================================================
+# Frontend (React web)
+# =====================================================================
 frontend/node_modules/
 frontend/dist/
 frontend/dev-dist/
 frontend/.env
+frontend/.env.*
+!frontend/.env.example
 
+# =====================================================================
+# Mobile (React Native) — most RN-generated paths are already covered
+# by mobile/.gitignore (the RN CLI template); these are repo-wide
+# backstops so nothing generated can land regardless of where it's run.
+# =====================================================================
+mobile/node_modules/
+mobile/.env
+mobile/.env.*
+!mobile/.env.example
+mobile/android/.gradle/
+mobile/android/app/build/
+mobile/android/build/
+mobile/android/.cxx/
+mobile/android/local.properties
+mobile/ios/build/
+mobile/ios/Pods/
+*.apk
+*.aab
+*.jsbundle
+
+# =====================================================================
+# Node (generic, any package.json anywhere)
+# =====================================================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# =====================================================================
+# Environment files (generic backstop — real .env never committed,
+# .env.example always allowed)
+# =====================================================================
+.env
+.env.*
+!.env.example
+
+# =====================================================================
 # OS / editor
+# =====================================================================
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
+.claude/

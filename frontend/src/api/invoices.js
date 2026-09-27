@@ -10,4 +10,5 @@ export const invoicesApi = {
   print: async (id) => (await apiClient.get(`/invoices/${id}/print`)).data,
   cancel: async (id, reason) => (await apiClient.post(`/invoices/${id}/cancel`, { reason })).data,
   editCompleted: async (id, data) => (await apiClient.put(`/invoices/${id}/edit`, data)).data,
+  returnableItems: async (id) => (await apiClient.get(`/invoices/${id}/returnable-items`)).data,
 };

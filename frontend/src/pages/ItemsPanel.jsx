@@ -5,16 +5,25 @@ import { categoriesApi, brandsApi, productLinesApi, taxCodesApi, stockUnitsApi, 
 import { suppliersApi } from '../api/parties';
 import { branchesApi } from '../api/branches';
 import { Button } from '../components/Button.jsx';
+import { Toast } from '../components/Toast.jsx';
 import { resolveImageUrl } from '../utils/media';
 
 const emptyForm = {
   item_name: '', category_id: '', brand_id: '', product_line_id: '', supplier_id: '',
   hsn_code: '', barcode: '', base_unit_id: '', secondary_unit_id: '', tax_code_id: '',
   purchase_price: '', cost_price: '', wholesale_price: '', retail_price: '', mrp: '', min_stock_threshold: '',
+  net_srate: '', net_purrate: '', secondary_mrp: '', secondary_net_srate: '', secondary_net_purrate: '',
   is_active: true, opening_stock: '',
 };
 
 function toNullableInt(v) {
+  return v === '' || v === null || v === undefined ? null : Number(v);
+}
+
+// Blank means "no override" — sent as null, never 0, so the backend's
+// NET_SRATE/NET_PURRATE fallback to the legacy price columns (or the
+// primary-unit rate, for the secondary fields) stays in effect.
+function toNullableNumber(v) {
   return v === '' || v === null || v === undefined ? null : Number(v);
 }
 
@@ -30,6 +39,9 @@ function ItemFormModal({ item, onClose }) {
           secondary_unit_id: item.secondary_unit_id ?? '', tax_code_id: item.tax_code_id ?? '',
           purchase_price: item.purchase_price, cost_price: item.cost_price, wholesale_price: item.wholesale_price,
           retail_price: item.retail_price, mrp: item.mrp, min_stock_threshold: item.min_stock_threshold,
+          net_srate: item.net_srate ?? '', net_purrate: item.net_purrate ?? '',
+          secondary_mrp: item.secondary_mrp ?? '', secondary_net_srate: item.secondary_net_srate ?? '',
+          secondary_net_purrate: item.secondary_net_purrate ?? '',
           is_active: !!Number(item.is_active),
         }
       : emptyForm
@@ -152,6 +164,11 @@ function ItemFormModal({ item, onClose }) {
       wholesale_price: Number(form.wholesale_price || 0),
       retail_price: Number(form.retail_price || 0),
       mrp: Number(form.mrp || 0),
+      net_srate: toNullableNumber(form.net_srate),
+      net_purrate: toNullableNumber(form.net_purrate),
+      secondary_mrp: toNullableNumber(form.secondary_mrp),
+      secondary_net_srate: toNullableNumber(form.secondary_net_srate),
+      secondary_net_purrate: toNullableNumber(form.secondary_net_purrate),
       min_stock_threshold: Number(form.min_stock_threshold || 0),
       is_active: form.is_active ? 1 : 0,
       branch_ids: selectedBranches,
@@ -247,6 +264,8 @@ function ItemFormModal({ item, onClose }) {
           <Field label="Wholesale price"><input type="number" step="any" value={form.wholesale_price} onChange={(e) => update('wholesale_price', e.target.value)} className="input" /></Field>
           <Field label="Retail price"><input type="number" step="any" value={form.retail_price} onChange={(e) => update('retail_price', e.target.value)} className="input" /></Field>
           <Field label="MRP"><input type="number" step="any" value={form.mrp} onChange={(e) => update('mrp', e.target.value)} className="input" /></Field>
+          <Field label="NET SALE RATE"><input type="number" step="any" value={form.net_srate} onChange={(e) => update('net_srate', e.target.value)} className="input" placeholder={form.retail_price || '0.00'} /></Field>
+          <Field label="NET PURCHASE RATE"><input type="number" step="any" value={form.net_purrate} onChange={(e) => update('net_purrate', e.target.value)} className="input" placeholder={form.purchase_price || '0.00'} /></Field>
           <Field label="Min stock threshold"><input type="number" step="any" value={form.min_stock_threshold} onChange={(e) => update('min_stock_threshold', e.target.value)} className="input" /></Field>
           {!isEdit && (
             <Field label="Opening stock (per branch below)">
@@ -321,6 +340,20 @@ function ItemFormModal({ item, onClose }) {
           )}
         </div>
 
+        {form.secondary_unit_id && (
+          <div className="mt-4">
+            <div className="mb-1 text-xs font-medium text-ink-muted">
+              Secondary unit pricing ({stockUnits.find((u) => u.id === Number(form.secondary_unit_id))?.short_code || 'S-UNIT'}) —
+              used automatically when a sale/purchase line is in this unit instead of the primary unit
+            </div>
+            <div className="grid grid-cols-2 gap-3 rounded-lg border border-border-soft p-3 sm:grid-cols-3">
+              <Field label="S-MRP"><input type="number" step="any" value={form.secondary_mrp} onChange={(e) => update('secondary_mrp', e.target.value)} className="input" placeholder={form.mrp || '0.00'} /></Field>
+              <Field label="S-NET_SRATE"><input type="number" step="any" value={form.secondary_net_srate} onChange={(e) => update('secondary_net_srate', e.target.value)} className="input" placeholder={form.net_srate || '0.00'} /></Field>
+              <Field label="S-NET_PURRATE"><input type="number" step="any" value={form.secondary_net_purrate} onChange={(e) => update('secondary_net_purrate', e.target.value)} className="input" placeholder={form.net_purrate || '0.00'} /></Field>
+            </div>
+          </div>
+        )}
+
         <div className="mt-4">
           <div className="mb-1 text-xs font-medium text-ink-muted">Available at branches</div>
           <div className="flex flex-wrap gap-3 rounded-lg border border-border-soft p-3">
@@ -344,17 +377,26 @@ function ItemFormModal({ item, onClose }) {
   );
 }
 
+const PAGE_SIZE = 10;
+
 export function ItemsPanel({ canManage }) {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [modalItem, setModalItem] = useState(undefined); // undefined = closed, null = create, object = edit
   const [importResult, setImportResult] = useState(null);
   const [importFile, setImportFile] = useState(null);
+  const [importSuccessMsg, setImportSuccessMsg] = useState('');
   const fileInputRef = useRef(null);
 
   const itemsQuery = useQuery({ queryKey: ['items', search], queryFn: () => itemsApi.list(search) });
   const invalidateItems = () => queryClient.invalidateQueries({ queryKey: ['items'] });
   const deleteItem = useMutation({ mutationFn: itemsApi.remove, onSuccess: invalidateItems });
+
+  const handleSearchChange = (value) => {
+    setSearch(value);
+    setPage(1); // a new search always starts back at page 1
+  };
 
   const handleDelete = async (item) => {
     if (!window.confirm(`Delete "${item.item_name}"? This cannot be undone.`)) return;
@@ -379,15 +421,24 @@ export function ItemsPanel({ canManage }) {
 
   const handleCommit = async () => {
     if (!importFile) return;
+    setImportSuccessMsg('');
     const result = await itemsApi.importCommit(importFile);
     setImportResult(result);
     invalidateItems();
+    if (result.invalid_rows === 0 && (result.inserted > 0 || result.updated > 0)) {
+      setImportSuccessMsg(`Import successful — ${result.inserted} item(s) added, ${result.updated} updated.`);
+      setTimeout(() => setImportSuccessMsg(''), 4000);
+    }
   };
 
   const items = itemsQuery.data || [];
+  const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pagedItems = items.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   return (
     <div className="flex flex-col gap-4">
+      <Toast message={importSuccessMsg} onClose={() => setImportSuccessMsg('')} />
       <div className="card">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-soft px-4 py-3">
           <span className="font-semibold text-ink">Items</span>
@@ -396,7 +447,7 @@ export function ItemsPanel({ canManage }) {
               type="text"
               placeholder="Search name / code / barcode"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               className="input w-56"
             />
             <Button variant="secondary" size="sm" onClick={() => itemsApi.downloadExport()}>Export Excel</Button>
@@ -415,13 +466,15 @@ export function ItemsPanel({ canManage }) {
               <th className="px-4 py-2">Category</th>
               <th className="px-4 py-2">Unit</th>
               <th className="px-4 py-2">MRP</th>
-              <th className="px-4 py-2">Retail</th>
+              <th className="px-4 py-2">NET_SRATE</th>
+              <th className="px-4 py-2">NET_PURRATE</th>
               <th className="px-4 py-2">GST%</th>
+              <th className="px-4 py-2">HSN</th>
               {canManage && <th className="px-4 py-2 text-right">Actions</th>}
             </tr>
           </thead>
           <tbody>
-            {items.map((item) => (
+            {pagedItems.map((item) => (
               <tr key={item.id} className="border-b border-border-soft">
                 <td className="px-4 py-2">
                   <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded bg-page">
@@ -441,8 +494,10 @@ export function ItemsPanel({ canManage }) {
                 <td className="px-4 py-2 text-ink-muted">{item.category_name || '—'}</td>
                 <td className="px-4 py-2 text-ink-muted">{item.base_unit_code}</td>
                 <td className="px-4 py-2 text-ink-muted">{item.mrp}</td>
-                <td className="px-4 py-2 text-ink-muted">{item.retail_price}</td>
+                <td className="px-4 py-2 text-ink-muted">{item.net_srate ?? item.retail_price}</td>
+                <td className="px-4 py-2 text-ink-muted">{item.net_purrate ?? item.purchase_price}</td>
                 <td className="px-4 py-2 text-ink-muted">{item.gst_percent ?? '—'}</td>
+                <td className="px-4 py-2 text-ink-muted">{item.hsn_code || '—'}</td>
                 {canManage && (
                   <td className="px-4 py-2 text-right">
                     <div className="flex justify-end gap-1">
@@ -459,11 +514,38 @@ export function ItemsPanel({ canManage }) {
             ))}
             {items.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-4 py-6 text-center text-ink-muted">No items yet.</td>
+                <td colSpan={canManage ? 11 : 10} className="px-4 py-6 text-center text-ink-muted">No items yet.</td>
               </tr>
             )}
           </tbody>
         </table>
+
+        {items.length > 0 && (
+          <div className="flex items-center justify-between border-t border-border-soft px-4 py-3 text-sm">
+            <span className="text-ink-muted">
+              Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, items.length)} of {items.length}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="rounded border border-border-soft px-3 py-1 text-ink disabled:opacity-40"
+              >
+                Previous
+              </button>
+              <span className="text-ink-muted">Page {currentPage} of {totalPages}</span>
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="rounded border border-border-soft px-3 py-1 text-ink disabled:opacity-40"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {canManage && (
@@ -480,7 +562,7 @@ export function ItemsPanel({ canManage }) {
             <div className="mt-3 text-sm">
               <p className="mb-2 text-ink-muted">
                 {importResult.total_rows} rows — {importResult.valid_rows} valid, {importResult.invalid_rows} invalid.
-                {importResult.committed && ` Inserted ${importResult.inserted}.`}
+                {importResult.committed && ` Inserted ${importResult.inserted}, updated ${importResult.updated}.`}
               </p>
               <div className="max-h-64 overflow-auto rounded border border-border-soft">
                 <table className="w-full text-xs">

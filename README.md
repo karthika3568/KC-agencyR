@@ -38,7 +38,11 @@ Multi-branch, role-based POS + distributor billing system.
   discrepancies. See the Phase 7 section below for what could and couldn't
   be verified from this environment.
 
-All 7 phases of the spec are now built.
+All 7 phases of the spec are now built. A React Native mobile app (`mobile/`)
+was added afterward as a full-parity client of the same backend — see
+[`AJ_AGENCY_PROJECT_DOCUMENTATION.md`](AJ_AGENCY_PROJECT_DOCUMENTATION.md) for
+the consolidated technical reference covering all three apps (web, mobile,
+backend), the full API endpoint list, and database documentation.
 
 ## Stack
 
@@ -54,34 +58,21 @@ All 7 phases of the spec are now built.
 
 ## 1. Database setup
 
+The database is now a single consolidated `schema.sql` + `seed.sql` pair
+(previously 15+ separate per-phase files — those are kept for historical
+reference under `backend/database/migrations/`, but a fresh install only
+needs the two files below). Full detail: [`backend/database/README.md`](backend/database/README.md).
+
 1. Open phpMyAdmin (`http://localhost/phpmyadmin`) and create an empty database, e.g. `pos_system`.
-2. Import, **in this exact order**:
+2. Import, in this order:
    1. `backend/database/schema.sql`
    2. `backend/database/seed.sql`
-   3. `backend/database/schema_phase2.sql`
-   4. `backend/database/seed_phase2.sql`
-   5. `backend/database/schema_phase3.sql`
-   6. `backend/database/seed_phase3.sql`
-   7. `backend/database/schema_phase4.sql`
-   8. `backend/database/schema_phase5.sql`
-   9. `backend/database/seed_phase5.sql`
-   10. `backend/database/schema_phase6.sql`
-   11. `backend/database/schema_phase7.sql`
 
 Or from the command line:
 
 ```bash
 mysql -u root -p pos_system < backend/database/schema.sql
 mysql -u root -p pos_system < backend/database/seed.sql
-mysql -u root -p pos_system < backend/database/schema_phase2.sql
-mysql -u root -p pos_system < backend/database/seed_phase2.sql
-mysql -u root -p pos_system < backend/database/schema_phase3.sql
-mysql -u root -p pos_system < backend/database/seed_phase3.sql
-mysql -u root -p pos_system < backend/database/schema_phase4.sql
-mysql -u root -p pos_system < backend/database/schema_phase5.sql
-mysql -u root -p pos_system < backend/database/seed_phase5.sql
-mysql -u root -p pos_system < backend/database/schema_phase6.sql
-mysql -u root -p pos_system < backend/database/schema_phase7.sql
 ```
 
 ## 2. Backend setup
@@ -561,21 +552,30 @@ Password: Admin@123
   /backend
     /config          database.php, config.php (.env-driven)
     /src
-      /Controllers   AuthController
+      /Controllers   20 controllers (Auth, Item, Invoice, Purchase, Reports, ...)
       /Middleware    JwtAuthMiddleware, PermissionMiddleware, CorsMiddleware
-      /Models        UserModel (effective-permission computation)
-      /Helpers       JwtHelper, Response
-      /Services      (empty — later phases: StockLedgerService, InvoiceNumberService, ...)
-    /public          index.php (single entry point / router), .htaccess
-    /database        schema.sql, seed.sql
+      /Models        14 models (UserModel, ItemModel, InvoiceModel, ...)
+      /Helpers       Router, Response
+    /public          index.php (single entry point / router)
+    /database        schema.sql, seed.sql, README.md, migrations/ (historical)
   /frontend
     /src
-      /pages         Login, Dashboard, stub pages for future modules
-      /components    Sidebar, Header, Can, ProtectedRoute, AppShell
+      /pages         Login, Dashboard, POS, Catalog, Reports, Settings, ...
+      /components    TopNav, Card, Button, CustomerSelect, Toast, ...
       /hooks         useAuth, usePermission
-      /api           client.js, auth.js
-      /store         (empty — later phases: cart/UI state via Zustand)
-      /print         (empty — later phases: thermal/A4 invoice templates)
+      /api           client.js + one module per domain
+      /store         branchStore.js (Zustand, persisted)
+      /print         ThermalTemplate.jsx, A4Template.jsx
+  /mobile
+    /android         Native Android project (Gradle)
+    /ios             Native iOS project
+    /src
+      /screens       one folder per module (pos, products, purchases, reports, ...)
+      /components    shared UI (FormModal, ImportExcelModal, ...)
+      /api           mirrors frontend/src/api
+      /navigation    RootNavigator, DrawerContent
+      /config        env.js (hardcoded API base URL — see AJ_AGENCY_PROJECT_DOCUMENTATION.md §8)
+  AJ_AGENCY_PROJECT_DOCUMENTATION.md   Consolidated technical reference
 ```
 
 ## Assumptions made in Phase 1 (not 100% explicit in the spec)

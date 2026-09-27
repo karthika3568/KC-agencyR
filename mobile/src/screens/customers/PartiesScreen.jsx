@@ -43,9 +43,10 @@ export function PartiesScreen() {
               { name: 'name', label: 'Supplier name' },
               { name: 'phone', label: 'Phone', keyboardType: 'phone-pad' },
               { name: 'gstin', label: 'GSTIN' },
+              { name: 'opening_balance', label: 'Outstanding (Rs.)', keyboardType: 'numeric' },
             ]}
             renderTitle={(r) => r.name}
-            renderSubtitle={(r) => r.phone || 'No phone'}
+            renderSubtitle={(r) => `${r.phone || 'No phone'}${Number(r.opening_balance) ? ` · Outstanding Rs. ${r.opening_balance}` : ''}`}
           />
         )}
         {tab === 'routes' && (

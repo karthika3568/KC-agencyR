@@ -40,4 +40,20 @@ export const itemsApi = {
     form.append('image', { uri: asset.uri, type: asset.type || 'image/jpeg', name: asset.fileName || 'photo.jpg' });
     return (await apiClient.post('/items/image-search', form, { headers: { 'Content-Type': 'multipart/form-data' } })).data;
   },
+
+  // Binary .xlsx downloads — actually fetched via fileExportService (needs auth header + file save), these are just the paths it hits.
+  exportPath: '/items/export',
+  importTemplatePath: '/items/import/template',
+
+  /** pickedFile: { uri, name, type } from @react-native-documents/picker */
+  async importPreview(pickedFile) {
+    const form = new FormData();
+    form.append('file', { uri: pickedFile.uri, type: pickedFile.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', name: pickedFile.name || 'import.xlsx' });
+    return (await apiClient.post('/items/import/preview', form, { headers: { 'Content-Type': 'multipart/form-data' } })).data;
+  },
+  async importCommit(pickedFile) {
+    const form = new FormData();
+    form.append('file', { uri: pickedFile.uri, type: pickedFile.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', name: pickedFile.name || 'import.xlsx' });
+    return (await apiClient.post('/items/import/commit', form, { headers: { 'Content-Type': 'multipart/form-data' } })).data;
+  },
 };

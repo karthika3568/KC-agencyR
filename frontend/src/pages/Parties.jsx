@@ -1,176 +1,958 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  Users, Truck, MapPin, Building2, CheckCircle2, Power, Edit2, Trash2, Search, Plus, Phone, CreditCard, Tag
+} from 'lucide-react';
 import { routesApi, citiesApi, customersApi, suppliersApi } from '../api/parties';
 import { routeSuppliersApi } from '../api/purchasing';
-import { EntityTable } from '../components/EntityTable';
 import { Tabs } from '../components/Tabs';
 import { Button } from '../components/Button.jsx';
 import { usePermission } from '../hooks/usePermission';
 
-function useEntity(key, api) {
+// CUSTOMERS PANEL (Left Form, Right Directory Table)
+function CustomersPanel({ canManage }) {
   const queryClient = useQueryClient();
-  const query = useQuery({ queryKey: [key], queryFn: api.list });
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: [key] });
-  const create = useMutation({ mutationFn: api.create, onSuccess: invalidate });
-  const update = useMutation({ mutationFn: ({ id, data }) => api.update(id, data), onSuccess: invalidate });
-  const remove = useMutation({ mutationFn: api.remove, onSuccess: invalidate });
-  return { rows: query.data || [], create, update, remove };
+  const query = useQuery({ queryKey: ['customers'], queryFn: customersApi.list });
+  const routesQuery = useQuery({ queryKey: ['routes'], queryFn: routesApi.list });
+  const citiesQuery = useQuery({ queryKey: ['cities'], queryFn: citiesApi.list });
+
+  const routes = routesQuery.data || [];
+  const cities = citiesQuery.data || [];
+
+  const [editingId, setEditingId] = useState(null);
+  const [ledgerName, setLedgerName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [routeId, setRouteId] = useState('');
+  const [cityId, setCityId] = useState('');
+  const [creditLimit, setCreditLimit] = useState('0');
+  const [isLocalCustomer, setIsLocalCustomer] = useState('1');
+  const [isActive, setIsActive] = useState(true);
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [formError, setFormError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['customers'] });
+
+  const createMutation = useMutation({
+    mutationFn: customersApi.create,
+    onSuccess: () => {
+      invalidate();
+      resetForm();
+      showSuccess('Customer created successfully!');
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => customersApi.update(id, data),
+    onSuccess: () => {
+      invalidate();
+      resetForm();
+      showSuccess('Customer updated successfully!');
+    },
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: customersApi.remove,
+    onSuccess: () => {
+      invalidate();
+      showSuccess('Customer deleted.');
+    },
+  });
+
+  const resetForm = () => {
+    setEditingId(null);
+    setLedgerName('');
+    setPhone('');
+    setRouteId('');
+    setCityId('');
+    setCreditLimit('0');
+    setIsLocalCustomer('1');
+    setIsActive(true);
+    setFormError('');
+  };
+
+  const showSuccess = (msg) => {
+    setSuccessMsg(msg);
+    setTimeout(() => setSuccessMsg(''), 3000);
+  };
+
+  const handleEdit = (item) => {
+    setEditingId(item.id);
+    setLedgerName(item.ledger_name || item.name || '');
+    setPhone(item.phone || '');
+    setRouteId(item.route_id ? String(item.route_id) : '');
+    setCityId(item.city_id ? String(item.city_id) : '');
+    setCreditLimit(String(item.credit_limit ?? '0'));
+    setIsLocalCustomer(String(item.is_local_customer ?? '1'));
+    setIsActive(item.status === 'inactive' || item.is_active === 0 || item.is_active === false ? false : true);
+    setFormError('');
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!ledgerName.trim()) {
+      setFormError('Customer name is required.');
+      return;
+    }
+    const payload = {
+      ledger_name: ledgerName.trim(),
+      phone: phone.trim(),
+      route_id: routeId ? Number(routeId) : null,
+      city_id: cityId ? Number(cityId) : null,
+      credit_limit: Number(creditLimit || 0),
+      is_local_customer: Number(isLocalCustomer ?? 1),
+      is_active: isActive ? 1 : 0,
+      status: isActive ? 'active' : 'inactive',
+    };
+
+    if (editingId) {
+      updateMutation.mutate({ id: editingId, data: payload });
+    } else {
+      createMutation.mutate(payload);
+    }
+  };
+
+  const rows = query.data || [];
+  const routeMap = new Map(routes.map((r) => [r.id, r.name]));
+  const cityMap = new Map(cities.map((c) => [c.id, c.name]));
+
+  const filtered = rows.filter((r) => {
+    const nameStr = (r.ledger_name || r.name || '').toLowerCase();
+    const phoneStr = (r.phone || '').toLowerCase();
+    const matchesSearch = nameStr.includes(searchQuery.toLowerCase()) || phoneStr.includes(searchQuery.toLowerCase());
+
+    const cActive = r.status !== 'inactive' && r.is_active !== 0 && r.is_active !== false;
+    const matchesStatus =
+      statusFilter === 'all' ||
+      (statusFilter === 'active' && cActive) ||
+      (statusFilter === 'inactive' && !cActive);
+    return matchesSearch && matchesStatus;
+  });
+
+  return (
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+      {/* LEFT FORM */}
+      <div className="lg:col-span-5">
+        <div className="card p-5 border border-border-soft bg-white shadow-xs rounded-2xl sticky top-4">
+          <div className="flex items-center justify-between border-b border-border-soft pb-3 mb-4">
+            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <Users className="h-5 w-5 text-indigo-600" />
+              {editingId ? 'Edit Customer' : 'Create Customer'}
+            </h2>
+            {editingId && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                Editing #{editingId}
+              </span>
+            )}
+          </div>
+
+          {successMsg && (
+            <div className="mb-4 rounded-xl bg-emerald-50 p-3 text-xs font-semibold text-emerald-800 border border-emerald-200 flex items-center gap-1.5">
+              <CheckCircle2 size={16} /> {successMsg}
+            </div>
+          )}
+
+          {formError && (
+            <div className="mb-4 rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-800 border border-red-200">
+              {formError}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+                Customer Name / Ledger <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={ledgerName}
+                onChange={(e) => setLedgerName(e.target.value)}
+                placeholder="e.g., Sri Ragavendra Traders"
+                disabled={!canManage}
+                className="input w-full"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Phone Number</label>
+              <input
+                type="text"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="e.g., 9876543210"
+                disabled={!canManage}
+                className="input w-full"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Route</label>
+                <select value={routeId} onChange={(e) => setRouteId(e.target.value)} disabled={!canManage} className="input w-full">
+                  <option value="">-- Select Route --</option>
+                  {routes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">City</label>
+                <select value={cityId} onChange={(e) => setCityId(e.target.value)} disabled={!canManage} className="input w-full">
+                  <option value="">-- Select City --</option>
+                  {cities.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Credit Limit (Rs.)</label>
+                <input
+                  type="number"
+                  value={creditLimit}
+                  onChange={(e) => setCreditLimit(e.target.value)}
+                  placeholder="0"
+                  disabled={!canManage}
+                  className="input w-full"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Customer Type</label>
+                <select value={isLocalCustomer} onChange={(e) => setIsLocalCustomer(e.target.value)} disabled={!canManage} className="input w-full">
+                  <option value="1">Local Customer</option>
+                  <option value="0">Outstation Customer</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">Status</label>
+              <div className="flex items-center gap-4 bg-slate-50 p-2.5 rounded-xl border border-border-soft">
+                <label className="flex items-center gap-2 text-xs font-bold cursor-pointer text-slate-800">
+                  <input
+                    type="radio"
+                    name="cust_status"
+                    checked={isActive}
+                    onChange={() => setIsActive(true)}
+                    disabled={!canManage}
+                    className="accent-emerald-600 h-4 w-4"
+                  />
+                  <span className="flex items-center gap-1 text-emerald-700"><Power size={14} /> Active</span>
+                </label>
+
+                <label className="flex items-center gap-2 text-xs font-bold cursor-pointer text-slate-800">
+                  <input
+                    type="radio"
+                    name="cust_status"
+                    checked={!isActive}
+                    onChange={() => setIsActive(false)}
+                    disabled={!canManage}
+                    className="accent-rose-600 h-4 w-4"
+                  />
+                  <span className="flex items-center gap-1 text-slate-500"><Power size={14} /> Inactive</span>
+                </label>
+              </div>
+            </div>
+
+            {canManage && (
+              <div className="flex items-center gap-2 pt-2">
+                <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="flex-1 justify-center py-2 text-xs font-bold">
+                  {editingId ? 'Update Customer' : 'Save Customer'}
+                </Button>
+                {editingId && (
+                  <Button type="button" variant="secondary" onClick={resetForm} className="py-2 text-xs font-bold">
+                    Cancel
+                  </Button>
+                )}
+              </div>
+            )}
+          </form>
+        </div>
+      </div>
+
+      {/* RIGHT TABLE */}
+      <div className="lg:col-span-7">
+        <div className="card border border-border-soft bg-white shadow-xs rounded-2xl overflow-hidden">
+          <div className="p-4 border-b border-border-soft flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <span>Customer Directory</span>
+              <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-700">{filtered.length} Total</span>
+            </h2>
+
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                <input
+                  type="text"
+                  placeholder="Search customers..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="input pl-8 py-1 text-xs w-44 sm:w-56"
+                />
+              </div>
+
+              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="input py-1 text-xs w-28">
+                <option value="all">All Status</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-border-soft bg-slate-50/80 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <th className="px-4 py-3">#</th>
+                  <th className="px-4 py-3">Customer Name</th>
+                  <th className="px-4 py-3">Phone</th>
+                  <th className="px-4 py-3">Route / City</th>
+                  <th className="px-4 py-3">Credit Limit</th>
+                  <th className="px-4 py-3">Status</th>
+                  {canManage && <th className="px-4 py-3 text-right">Actions</th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-soft">
+                {filtered.map((r, index) => {
+                  const cActive = r.status !== 'inactive' && r.is_active !== 0 && r.is_active !== false;
+                  return (
+                    <tr key={r.id} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="px-4 py-3 font-semibold text-slate-400">{index + 1}</td>
+                      <td className="px-4 py-3 font-bold text-slate-900">{r.ledger_name || r.name}</td>
+                      <td className="px-4 py-3 font-medium text-slate-600">{r.phone || '-'}</td>
+                      <td className="px-4 py-3 font-medium text-slate-600">
+                        {routeMap.get(r.route_id) || 'No Route'} {cityMap.get(r.city_id) ? `(${cityMap.get(r.city_id)})` : ''}
+                      </td>
+                      <td className="px-4 py-3 font-bold text-indigo-600">Rs. {Number(r.credit_limit || 0).toLocaleString()}</td>
+                      <td className="px-4 py-3">
+                        {cActive ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200">
+                            Active
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-500 border border-slate-200">
+                            Inactive
+                          </span>
+                        )}
+                      </td>
+                      {canManage && (
+                        <td className="px-4 py-3 text-right space-x-1">
+                          <button onClick={() => handleEdit(r)} className="rounded-lg bg-slate-100 p-1.5 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600"><Edit2 size={14} /></button>
+                          <button onClick={() => { if (confirm(`Delete "${r.ledger_name || r.name}"?`)) removeMutation.mutate(r.id); }} className="rounded-lg bg-slate-100 p-1.5 text-slate-700 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={14} /></button>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+                {filtered.length === 0 && (
+                  <tr><td colSpan={canManage ? 7 : 6} className="px-4 py-8 text-center text-slate-400 font-medium">No customers found.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
-function RoutesPanel({ canManage }) {
-  const { rows, create, remove } = useEntity('routes', routesApi);
+// SUPPLIERS PANEL (Left Form, Right Directory Table)
+function SuppliersPanel({ canManage }) {
+  const queryClient = useQueryClient();
+  const query = useQuery({ queryKey: ['suppliers'], queryFn: suppliersApi.list });
+  const balancesQuery = useQuery({ queryKey: ['suppliers', 'balances'], queryFn: suppliersApi.balances });
+
+  const balanceById = new Map((balancesQuery.data || []).map((b) => [b.id, b]));
+
+  const [editingId, setEditingId] = useState(null);
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [gstin, setGstin] = useState('');
+  const [openingBalance, setOpeningBalance] = useState('0');
+  const [isActive, setIsActive] = useState(true);
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [formError, setFormError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['suppliers'] });
+
+  const createMutation = useMutation({
+    mutationFn: suppliersApi.create,
+    onSuccess: () => { invalidate(); resetForm(); showSuccess('Supplier created successfully!'); },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => suppliersApi.update(id, data),
+    onSuccess: () => { invalidate(); resetForm(); showSuccess('Supplier updated successfully!'); },
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: suppliersApi.remove,
+    onSuccess: () => { invalidate(); showSuccess('Supplier deleted.'); },
+  });
+
+  const resetForm = () => {
+    setEditingId(null);
+    setName('');
+    setPhone('');
+    setGstin('');
+    setOpeningBalance('0');
+    setIsActive(true);
+    setFormError('');
+  };
+
+  const showSuccess = (msg) => {
+    setSuccessMsg(msg);
+    setTimeout(() => setSuccessMsg(''), 3000);
+  };
+
+  const handleEdit = (item) => {
+    setEditingId(item.id);
+    setName(item.name || '');
+    setPhone(item.phone || '');
+    setGstin(item.gstin || '');
+    setOpeningBalance(String(item.opening_balance ?? '0'));
+    setIsActive(item.status === 'inactive' || item.is_active === 0 || item.is_active === false ? false : true);
+    setFormError('');
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!name.trim()) {
+      setFormError('Supplier name is required.');
+      return;
+    }
+    const payload = {
+      name: name.trim(),
+      phone: phone.trim(),
+      gstin: gstin.trim(),
+      opening_balance: Number(openingBalance || 0),
+      is_active: isActive ? 1 : 0,
+      status: isActive ? 'active' : 'inactive',
+    };
+
+    if (editingId) {
+      updateMutation.mutate({ id: editingId, data: payload });
+    } else {
+      createMutation.mutate(payload);
+    }
+  };
+
+  const rows = query.data || [];
+  const filtered = rows.filter((r) => {
+    const matchesSearch = r.name?.toLowerCase().includes(searchQuery.toLowerCase()) || r.gstin?.toLowerCase().includes(searchQuery.toLowerCase());
+    const sActive = r.status !== 'inactive' && r.is_active !== 0 && r.is_active !== false;
+    const matchesStatus =
+      statusFilter === 'all' ||
+      (statusFilter === 'active' && sActive) ||
+      (statusFilter === 'inactive' && !sActive);
+    return matchesSearch && matchesStatus;
+  });
+
   return (
-    <div className="flex flex-col gap-4">
-      <EntityTable
-        title="Routes"
-        canManage={canManage}
-        fields={[{ name: 'name', label: 'Route name', required: true }]}
-        columns={[{ key: 'name', label: 'Name' }]}
-        rows={rows}
-        onCreate={(data) => create.mutateAsync(data)}
-        onDelete={(id) => remove.mutateAsync(id)}
-      />
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+      {/* LEFT FORM */}
+      <div className="lg:col-span-4">
+        <div className="card p-5 border border-border-soft bg-white shadow-xs rounded-2xl sticky top-4">
+          <div className="flex items-center justify-between border-b border-border-soft pb-3 mb-4">
+            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <Truck className="h-5 w-5 text-indigo-600" />
+              {editingId ? 'Edit Supplier' : 'Create Supplier'}
+            </h2>
+            {editingId && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">Editing #{editingId}</span>}
+          </div>
+
+          {successMsg && <div className="mb-4 rounded-xl bg-emerald-50 p-3 text-xs font-semibold text-emerald-800 border border-emerald-200 flex items-center gap-1.5"><CheckCircle2 size={16} /> {successMsg}</div>}
+          {formError && <div className="mb-4 rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-800 border border-red-200">{formError}</div>}
+
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Supplier Name <span className="text-red-500">*</span></label>
+              <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., HUL Distributors" disabled={!canManage} className="input w-full" />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Phone Number</label>
+              <input type="text" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="e.g., 9443322110" disabled={!canManage} className="input w-full" />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">GSTIN Number</label>
+              <input type="text" value={gstin} onChange={(e) => setGstin(e.target.value)} placeholder="e.g., 33AAAAA0000A1Z5" disabled={!canManage} className="input w-full" />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Opening Balance (Rs.)</label>
+              <input type="number" value={openingBalance} onChange={(e) => setOpeningBalance(e.target.value)} placeholder="0" disabled={!canManage} className="input w-full" />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">Status</label>
+              <div className="flex items-center gap-4 bg-slate-50 p-2.5 rounded-xl border border-border-soft">
+                <label className="flex items-center gap-2 text-xs font-bold cursor-pointer text-slate-800">
+                  <input type="radio" name="sup_status" checked={isActive} onChange={() => setIsActive(true)} disabled={!canManage} className="accent-emerald-600 h-4 w-4" />
+                  <span className="flex items-center gap-1 text-emerald-700"><Power size={14} /> Active</span>
+                </label>
+                <label className="flex items-center gap-2 text-xs font-bold cursor-pointer text-slate-800">
+                  <input type="radio" name="sup_status" checked={!isActive} onChange={() => setIsActive(false)} disabled={!canManage} className="accent-rose-600 h-4 w-4" />
+                  <span className="flex items-center gap-1 text-slate-500"><Power size={14} /> Inactive</span>
+                </label>
+              </div>
+            </div>
+
+            {canManage && (
+              <div className="flex items-center gap-2 pt-2">
+                <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="flex-1 justify-center py-2 text-xs font-bold">
+                  {editingId ? 'Update Supplier' : 'Save Supplier'}
+                </Button>
+                {editingId && <Button type="button" variant="secondary" onClick={resetForm} className="py-2 text-xs font-bold">Cancel</Button>}
+              </div>
+            )}
+          </form>
+        </div>
+      </div>
+
+      {/* RIGHT TABLE */}
+      <div className="lg:col-span-8">
+        <div className="card border border-border-soft bg-white shadow-xs rounded-2xl overflow-hidden">
+          <div className="p-4 border-b border-border-soft flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <span>Supplier Directory</span>
+              <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-700">{filtered.length} Total</span>
+            </h2>
+
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                <input type="text" placeholder="Search suppliers..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="input pl-8 py-1 text-xs w-44 sm:w-56" />
+              </div>
+              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="input py-1 text-xs w-28">
+                <option value="all">All Status</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-border-soft bg-slate-50/80 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <th className="px-4 py-3">#</th>
+                  <th className="px-4 py-3">Supplier Name</th>
+                  <th className="px-4 py-3">Phone</th>
+                  <th className="px-4 py-3">GSTIN</th>
+                  <th className="px-4 py-3">Outstanding</th>
+                  <th className="px-4 py-3">Status</th>
+                  {canManage && <th className="px-4 py-3 text-right">Actions</th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-soft">
+                {filtered.map((r, index) => {
+                  const sActive = r.status !== 'inactive' && r.is_active !== 0 && r.is_active !== false;
+                  const val = Number(balanceById.get(r.id)?.current_outstanding ?? 0);
+                  return (
+                    <tr key={r.id} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="px-4 py-3 font-semibold text-slate-400">{index + 1}</td>
+                      <td className="px-4 py-3 font-bold text-slate-900">{r.name}</td>
+                      <td className="px-4 py-3 font-medium text-slate-600">{r.phone || '-'}</td>
+                      <td className="px-4 py-3 font-medium text-slate-600">{r.gstin || '-'}</td>
+                      <td className="px-4 py-3 font-bold">
+                        <span className={val > 0 ? 'text-rose-600' : 'text-emerald-600'}>Rs. {val.toFixed(2)}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {sActive ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200">Active</span> : <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-500 border border-slate-200">Inactive</span>}
+                      </td>
+                      {canManage && (
+                        <td className="px-4 py-3 text-right space-x-1">
+                          <button onClick={() => handleEdit(r)} className="rounded-lg bg-slate-100 p-1.5 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600"><Edit2 size={14} /></button>
+                          <button onClick={() => { if (confirm(`Delete "${r.name}"?`)) removeMutation.mutate(r.id); }} className="rounded-lg bg-slate-100 p-1.5 text-slate-700 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={14} /></button>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+                {filtered.length === 0 && (
+                  <tr><td colSpan={canManage ? 7 : 6} className="px-4 py-8 text-center text-slate-400 font-medium">No suppliers found.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ROUTES PANEL (Left Form, Right Directory Table & Mapping)
+function RoutesPanel({ canManage }) {
+  const queryClient = useQueryClient();
+  const query = useQuery({ queryKey: ['routes'], queryFn: routesApi.list });
+
+  const [editingId, setEditingId] = useState(null);
+  const [name, setName] = useState('');
+  const [isActive, setIsActive] = useState(true);
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [formError, setFormError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['routes'] });
+
+  const createMutation = useMutation({
+    mutationFn: routesApi.create,
+    onSuccess: () => { invalidate(); resetForm(); showSuccess('Route created successfully!'); },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => routesApi.update(id, data),
+    onSuccess: () => { invalidate(); resetForm(); showSuccess('Route updated successfully!'); },
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: routesApi.remove,
+    onSuccess: () => { invalidate(); showSuccess('Route deleted.'); },
+  });
+
+  const resetForm = () => {
+    setEditingId(null);
+    setName('');
+    setIsActive(true);
+    setFormError('');
+  };
+
+  const showSuccess = (msg) => {
+    setSuccessMsg(msg);
+    setTimeout(() => setSuccessMsg(''), 3000);
+  };
+
+  const handleEdit = (item) => {
+    setEditingId(item.id);
+    setName(item.name || '');
+    setIsActive(item.is_active === undefined ? true : Boolean(Number(item.is_active)));
+    setFormError('');
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!name.trim()) {
+      setFormError('Route name is required.');
+      return;
+    }
+    const payload = {
+      name: name.trim(),
+      is_active: isActive ? 1 : 0,
+    };
+
+    if (editingId) {
+      updateMutation.mutate({ id: editingId, data: payload });
+    } else {
+      createMutation.mutate(payload);
+    }
+  };
+
+  const rows = query.data || [];
+  const filtered = rows.filter((r) => r.name?.toLowerCase().includes(searchQuery.toLowerCase()));
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+        {/* LEFT FORM */}
+        <div className="lg:col-span-4">
+          <div className="card p-5 border border-border-soft bg-white shadow-xs rounded-2xl sticky top-4">
+            <div className="flex items-center justify-between border-b border-border-soft pb-3 mb-4">
+              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <MapPin className="h-5 w-5 text-indigo-600" />
+                {editingId ? 'Edit Route' : 'Create Route'}
+              </h2>
+            </div>
+
+            {successMsg && <div className="mb-4 rounded-xl bg-emerald-50 p-3 text-xs font-semibold text-emerald-800 border border-emerald-200 flex items-center gap-1.5"><CheckCircle2 size={16} /> {successMsg}</div>}
+            {formError && <div className="mb-4 rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-800 border border-red-200">{formError}</div>}
+
+            <form onSubmit={handleSubmit} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Route Name <span className="text-red-500">*</span></label>
+                <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., North Town Route" disabled={!canManage} className="input w-full" />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">Status</label>
+                <div className="flex items-center gap-4 bg-slate-50 p-2.5 rounded-xl border border-border-soft">
+                  <label className="flex items-center gap-2 text-xs font-bold cursor-pointer text-slate-800">
+                    <input type="radio" name="route_status" checked={isActive} onChange={() => setIsActive(true)} disabled={!canManage} className="accent-emerald-600 h-4 w-4" />
+                    <span className="flex items-center gap-1 text-emerald-700"><Power size={14} /> Active</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-xs font-bold cursor-pointer text-slate-800">
+                    <input type="radio" name="route_status" checked={!isActive} onChange={() => setIsActive(false)} disabled={!canManage} className="accent-rose-600 h-4 w-4" />
+                    <span className="flex items-center gap-1 text-slate-500"><Power size={14} /> Inactive</span>
+                  </label>
+                </div>
+              </div>
+
+              {canManage && (
+                <div className="flex items-center gap-2 pt-2">
+                  <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="flex-1 justify-center py-2 text-xs font-bold">
+                    {editingId ? 'Update Route' : 'Save Route'}
+                  </Button>
+                  {editingId && <Button type="button" variant="secondary" onClick={resetForm} className="py-2 text-xs font-bold">Cancel</Button>}
+                </div>
+              )}
+            </form>
+          </div>
+        </div>
+
+        {/* RIGHT TABLE */}
+        <div className="lg:col-span-8">
+          <div className="card border border-border-soft bg-white shadow-xs rounded-2xl overflow-hidden">
+            <div className="p-4 border-b border-border-soft flex items-center justify-between">
+              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <span>Routes Directory</span>
+                <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-700">{filtered.length} Total</span>
+              </h2>
+
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                <input type="text" placeholder="Search routes..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="input pl-8 py-1 text-xs w-48" />
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-border-soft bg-slate-50/80 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    <th className="px-4 py-3">#</th>
+                    <th className="px-4 py-3">Route Name</th>
+                    <th className="px-4 py-3">Status</th>
+                    {canManage && <th className="px-4 py-3 text-right">Actions</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border-soft">
+                  {filtered.map((r, index) => {
+                    const rActive = r.is_active === undefined ? true : Boolean(Number(r.is_active));
+                    return (
+                      <tr key={r.id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="px-4 py-3 font-semibold text-slate-400">{index + 1}</td>
+                        <td className="px-4 py-3 font-bold text-slate-900">{r.name}</td>
+                        <td className="px-4 py-3">
+                          {rActive ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200">Active</span> : <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-500 border border-slate-200">Inactive</span>}
+                        </td>
+                        {canManage && (
+                          <td className="px-4 py-3 text-right space-x-1">
+                            <button onClick={() => handleEdit(r)} className="rounded-lg bg-slate-100 p-1.5 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600"><Edit2 size={14} /></button>
+                            <button onClick={() => { if (confirm(`Delete "${r.name}"?`)) removeMutation.mutate(r.id); }} className="rounded-lg bg-slate-100 p-1.5 text-slate-700 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={14} /></button>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                  {filtered.length === 0 && (
+                    <tr><td colSpan={canManage ? 4 : 3} className="px-4 py-8 text-center text-slate-400 font-medium">No routes found.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <RouteSupplierMappingPanel canManage={canManage} />
     </div>
   );
 }
 
+// CITIES PANEL (Left Form, Right Directory Table)
 function CitiesPanel({ canManage }) {
-  const { rows, create, remove } = useEntity('cities', citiesApi);
+  const queryClient = useQueryClient();
+  const query = useQuery({ queryKey: ['cities'], queryFn: citiesApi.list });
   const routesQuery = useQuery({ queryKey: ['routes'], queryFn: routesApi.list });
+
   const routes = routesQuery.data || [];
-  const routeName = (id) => routes.find((r) => r.id === id)?.name || '—';
+  const routeMap = new Map(routes.map((r) => [r.id, r.name]));
+
+  const [editingId, setEditingId] = useState(null);
+  const [name, setName] = useState('');
+  const [routeId, setRouteId] = useState('');
+  const [isActive, setIsActive] = useState(true);
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [formError, setFormError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['cities'] });
+
+  const createMutation = useMutation({
+    mutationFn: citiesApi.create,
+    onSuccess: () => { invalidate(); resetForm(); showSuccess('City created successfully!'); },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => citiesApi.update(id, data),
+    onSuccess: () => { invalidate(); resetForm(); showSuccess('City updated successfully!'); },
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: citiesApi.remove,
+    onSuccess: () => { invalidate(); showSuccess('City deleted.'); },
+  });
+
+  const resetForm = () => {
+    setEditingId(null);
+    setName('');
+    setRouteId('');
+    setIsActive(true);
+    setFormError('');
+  };
+
+  const showSuccess = (msg) => {
+    setSuccessMsg(msg);
+    setTimeout(() => setSuccessMsg(''), 3000);
+  };
+
+  const handleEdit = (item) => {
+    setEditingId(item.id);
+    setName(item.name || '');
+    setRouteId(item.route_id ? String(item.route_id) : '');
+    setIsActive(item.is_active === undefined ? true : Boolean(Number(item.is_active)));
+    setFormError('');
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!name.trim() || !routeId) {
+      setFormError('City name and Route selection are required.');
+      return;
+    }
+    const payload = {
+      name: name.trim(),
+      route_id: Number(routeId),
+      is_active: isActive ? 1 : 0,
+    };
+
+    if (editingId) {
+      updateMutation.mutate({ id: editingId, data: payload });
+    } else {
+      createMutation.mutate(payload);
+    }
+  };
+
+  const rows = query.data || [];
+  const filtered = rows.filter((r) => r.name?.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
-    <EntityTable
-      title="Cities"
-      canManage={canManage}
-      fields={[
-        { name: 'name', label: 'City name', required: true },
-        {
-          name: 'route_id',
-          label: 'Route',
-          type: 'select',
-          required: true,
-          options: routes.map((r) => ({ value: r.id, label: r.name })),
-        },
-      ]}
-      columns={[
-        { key: 'name', label: 'Name' },
-        { key: 'route_id', label: 'Route', render: (r) => routeName(r.route_id) },
-      ]}
-      rows={rows}
-      onCreate={(data) => create.mutateAsync({ ...data, route_id: Number(data.route_id) })}
-      onDelete={(id) => remove.mutateAsync(id)}
-    />
-  );
-}
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+      {/* LEFT FORM */}
+      <div className="lg:col-span-4">
+        <div className="card p-5 border border-border-soft bg-white shadow-xs rounded-2xl sticky top-4">
+          <div className="flex items-center justify-between border-b border-border-soft pb-3 mb-4">
+            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <Building2 className="h-5 w-5 text-indigo-600" />
+              {editingId ? 'Edit City' : 'Create City'}
+            </h2>
+          </div>
 
-function CustomersPanel({ canManage }) {
-  const { rows, create, remove } = useEntity('customers', customersApi);
-  const routesQuery = useQuery({ queryKey: ['routes'], queryFn: routesApi.list });
-  const citiesQuery = useQuery({ queryKey: ['cities'], queryFn: citiesApi.list });
-  const routes = routesQuery.data || [];
-  const cities = citiesQuery.data || [];
+          {successMsg && <div className="mb-4 rounded-xl bg-emerald-50 p-3 text-xs font-semibold text-emerald-800 border border-emerald-200 flex items-center gap-1.5"><CheckCircle2 size={16} /> {successMsg}</div>}
+          {formError && <div className="mb-4 rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-800 border border-red-200">{formError}</div>}
 
-  return (
-    <EntityTable
-      title="Customers"
-      canManage={canManage}
-      fields={[
-        { name: 'ledger_name', label: 'Ledger name', required: true },
-        { name: 'phone', label: 'Phone' },
-        {
-          name: 'route_id',
-          label: 'Route',
-          type: 'select',
-          options: routes.map((r) => ({ value: r.id, label: r.name })),
-        },
-        {
-          name: 'city_id',
-          label: 'City',
-          type: 'select',
-          options: cities.map((c) => ({ value: c.id, label: c.name })),
-        },
-        { name: 'credit_limit', label: 'Credit limit', type: 'number', default: '0' },
-        {
-          name: 'is_local_customer',
-          label: 'Local customer?',
-          type: 'select',
-          default: '1',
-          options: [
-            { value: '1', label: 'Local' },
-            { value: '0', label: 'Outstation' },
-          ],
-        },
-      ]}
-      columns={[
-        { key: 'ledger_name', label: 'Name' },
-        { key: 'phone', label: 'Phone' },
-        { key: 'credit_limit', label: 'Credit limit' },
-        { key: 'is_local_customer', label: 'Type', render: (r) => (r.is_local_customer ? 'Local' : 'Outstation') },
-        { key: 'status', label: 'Status' },
-      ]}
-      rows={rows}
-      onCreate={(data) =>
-        create.mutateAsync({
-          ...data,
-          route_id: data.route_id ? Number(data.route_id) : null,
-          city_id: data.city_id ? Number(data.city_id) : null,
-          credit_limit: Number(data.credit_limit || 0),
-          is_local_customer: Number(data.is_local_customer ?? 1),
-        })
-      }
-      onDelete={(id) => remove.mutateAsync(id)}
-    />
-  );
-}
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">City Name <span className="text-red-500">*</span></label>
+              <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., Madurai, Trichy" disabled={!canManage} className="input w-full" />
+            </div>
 
-function SuppliersPanel({ canManage }) {
-  const { rows, create, update, remove } = useEntity('suppliers', suppliersApi);
-  const balancesQuery = useQuery({ queryKey: ['suppliers', 'balances'], queryFn: suppliersApi.balances });
-  const balanceById = new Map((balancesQuery.data || []).map((b) => [b.id, b]));
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Assigned Route <span className="text-red-500">*</span></label>
+              <select value={routeId} onChange={(e) => setRouteId(e.target.value)} disabled={!canManage} className="input w-full">
+                <option value="">-- Select Route --</option>
+                {routes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+              </select>
+            </div>
 
-  return (
-    <EntityTable
-      title="Suppliers"
-      canManage={canManage}
-      fields={[
-        { name: 'name', label: 'Name', required: true },
-        { name: 'phone', label: 'Phone' },
-        { name: 'gstin', label: 'GSTIN' },
-        { name: 'opening_balance', label: 'Opening balance', type: 'number', default: '0' },
-      ]}
-      columns={[
-        { key: 'name', label: 'Name' },
-        { key: 'phone', label: 'Phone' },
-        { key: 'gstin', label: 'GSTIN' },
-        { key: 'opening_balance', label: 'Opening Balance', render: (r) => `Rs. ${Number(r.opening_balance).toFixed(2)}` },
-        {
-          key: 'total_purchases',
-          label: 'Payable (Purchases)',
-          render: (r) => `Rs. ${Number(balanceById.get(r.id)?.total_purchases ?? 0).toFixed(2)}`,
-        },
-        {
-          key: 'total_paid',
-          label: 'Paid',
-          render: (r) => `Rs. ${Number(balanceById.get(r.id)?.total_paid ?? 0).toFixed(2)}`,
-        },
-        {
-          key: 'current_outstanding',
-          label: 'Current Outstanding',
-          render: (r) => {
-            const val = Number(balanceById.get(r.id)?.current_outstanding ?? 0);
-            return <span className={val > 0.009 ? 'font-semibold text-danger' : 'font-semibold text-success'}>Rs. {val.toFixed(2)}</span>;
-          },
-        },
-        { key: 'status', label: 'Status' },
-      ]}
-      rows={rows}
-      onCreate={(data) => create.mutateAsync({ ...data, opening_balance: Number(data.opening_balance || 0) })}
-      onUpdate={(id, data) => update.mutateAsync({ id, data: { ...data, opening_balance: Number(data.opening_balance || 0) } })}
-      onDelete={(id) => remove.mutateAsync(id)}
-    />
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">Status</label>
+              <div className="flex items-center gap-4 bg-slate-50 p-2.5 rounded-xl border border-border-soft">
+                <label className="flex items-center gap-2 text-xs font-bold cursor-pointer text-slate-800">
+                  <input type="radio" name="city_status" checked={isActive} onChange={() => setIsActive(true)} disabled={!canManage} className="accent-emerald-600 h-4 w-4" />
+                  <span className="flex items-center gap-1 text-emerald-700"><Power size={14} /> Active</span>
+                </label>
+                <label className="flex items-center gap-2 text-xs font-bold cursor-pointer text-slate-800">
+                  <input type="radio" name="city_status" checked={!isActive} onChange={() => setIsActive(false)} disabled={!canManage} className="accent-rose-600 h-4 w-4" />
+                  <span className="flex items-center gap-1 text-slate-500"><Power size={14} /> Inactive</span>
+                </label>
+              </div>
+            </div>
+
+            {canManage && (
+              <div className="flex items-center gap-2 pt-2">
+                <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="flex-1 justify-center py-2 text-xs font-bold">
+                  {editingId ? 'Update City' : 'Save City'}
+                </Button>
+                {editingId && <Button type="button" variant="secondary" onClick={resetForm} className="py-2 text-xs font-bold">Cancel</Button>}
+              </div>
+            )}
+          </form>
+        </div>
+      </div>
+
+      {/* RIGHT TABLE */}
+      <div className="lg:col-span-8">
+        <div className="card border border-border-soft bg-white shadow-xs rounded-2xl overflow-hidden">
+          <div className="p-4 border-b border-border-soft flex items-center justify-between">
+            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <span>Cities Directory</span>
+              <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-700">{filtered.length} Total</span>
+            </h2>
+
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+              <input type="text" placeholder="Search cities..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="input pl-8 py-1 text-xs w-48" />
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-border-soft bg-slate-50/80 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <th className="px-4 py-3">#</th>
+                  <th className="px-4 py-3">City Name</th>
+                  <th className="px-4 py-3">Route</th>
+                  <th className="px-4 py-3">Status</th>
+                  {canManage && <th className="px-4 py-3 text-right">Actions</th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-soft">
+                {filtered.map((r, index) => {
+                  const rActive = r.is_active === undefined ? true : Boolean(Number(r.is_active));
+                  return (
+                    <tr key={r.id} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="px-4 py-3 font-semibold text-slate-400">{index + 1}</td>
+                      <td className="px-4 py-3 font-bold text-slate-900">{r.name}</td>
+                      <td className="px-4 py-3 font-semibold text-indigo-600">{routeMap.get(r.route_id) || '-'}</td>
+                      <td className="px-4 py-3">
+                        {rActive ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200">Active</span> : <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-500 border border-slate-200">Inactive</span>}
+                      </td>
+                      {canManage && (
+                        <td className="px-4 py-3 text-right space-x-1">
+                          <button onClick={() => handleEdit(r)} className="rounded-lg bg-slate-100 p-1.5 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600"><Edit2 size={14} /></button>
+                          <button onClick={() => { if (confirm(`Delete "${r.name}"?`)) removeMutation.mutate(r.id); }} className="rounded-lg bg-slate-100 p-1.5 text-slate-700 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={14} /></button>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+                {filtered.length === 0 && (
+                  <tr><td colSpan={canManage ? 5 : 4} className="px-4 py-8 text-center text-slate-400 font-medium">No cities found.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -184,8 +966,8 @@ function RouteSupplierMappingPanel({ canManage }) {
   const saveMutation = useMutation({
     mutationFn: () => routeSuppliersApi.set(routeId, selected),
     onSuccess: () => {
-      setMessage('Saved.');
-      setTimeout(() => setMessage(''), 2000);
+      setMessage('Route-Supplier mapping saved successfully!');
+      setTimeout(() => setMessage(''), 3000);
     },
   });
 
@@ -207,31 +989,92 @@ function RouteSupplierMappingPanel({ canManage }) {
   };
 
   return (
-    <div className="card p-4">
-      <div className="mb-3 font-semibold text-ink">Route → Supplier Mapping</div>
-      <p className="mb-3 text-xs text-ink-muted">
-        Restrict which suppliers can be picked for a Purchase Request raised on this route. A route with none checked shows every supplier (no restriction).
-      </p>
-      <select value={routeId} onChange={(e) => pickRoute(e.target.value)} className="input mb-3 w-64" disabled={!canManage}>
-        <option value="">Select route</option>
-        {routes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-      </select>
-
-      {routeId && (
-        <>
-          <div className="mb-3 flex flex-wrap gap-3">
-            {suppliers.map((s) => (
-              <label key={s.id} className="flex items-center gap-1.5 text-sm">
-                <input type="checkbox" checked={selected.includes(s.id)} onChange={() => toggle(s.id)} disabled={!canManage} />
-                {s.name}
-              </label>
-            ))}
-            {suppliers.length === 0 && <span className="text-sm text-ink-muted">No suppliers yet — add some in the Suppliers tab.</span>}
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 border-t border-border-soft pt-6">
+      {/* LEFT FORM */}
+      <div className="lg:col-span-5">
+        <div className="card p-5 border border-border-soft bg-white shadow-xs rounded-2xl sticky top-4 space-y-4">
+          <div className="border-b border-border-soft pb-3">
+            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <MapPin className="h-5 w-5 text-indigo-600" />
+              Route → Supplier Mapping
+            </h2>
+            <p className="text-xs text-slate-500 font-medium mt-1">
+              Restrict which suppliers can be picked for a Purchase Request raised on this route.
+            </p>
           </div>
-          {canManage && <Button size="sm" onClick={() => saveMutation.mutate()}>Save Mapping</Button>}
-          {message && <span className="ml-2 text-sm text-success">{message}</span>}
-        </>
-      )}
+
+          {message && (
+            <div className="rounded-xl bg-emerald-50 p-3 text-xs font-semibold text-emerald-800 border border-emerald-200 flex items-center gap-1.5">
+              <CheckCircle2 size={16} /> {message}
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+              Select Route
+            </label>
+            <select value={routeId} onChange={(e) => pickRoute(e.target.value)} disabled={!canManage} className="input w-full">
+              <option value="">-- Choose Route --</option>
+              {routes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
+          </div>
+
+          {routeId && (
+            <>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">
+                  Allowed Suppliers
+                </label>
+                <div className="max-h-60 overflow-y-auto space-y-2 p-3 bg-slate-50 rounded-xl border border-border-soft">
+                  {suppliers.map((s) => (
+                    <label key={s.id} className="flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer p-1 rounded-lg hover:bg-white transition-colors">
+                      <input type="checkbox" checked={selected.includes(s.id)} onChange={() => toggle(s.id)} disabled={!canManage} className="accent-indigo-600 h-4 w-4 rounded" />
+                      <span>{s.name}</span>
+                      {s.phone && <span className="text-[10px] text-slate-400">({s.phone})</span>}
+                    </label>
+                  ))}
+                  {suppliers.length === 0 && <p className="text-xs text-slate-400">No suppliers found.</p>}
+                </div>
+              </div>
+
+              {canManage && (
+                <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} className="w-full justify-center py-2 text-xs font-bold">
+                  Save Route Mapping
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* RIGHT LIST */}
+      <div className="lg:col-span-7">
+        <div className="card border border-border-soft bg-white shadow-xs rounded-2xl overflow-hidden p-4">
+          <h2 className="text-base font-bold text-slate-900 mb-3 flex items-center justify-between">
+            <span>Mapped Route Overview</span>
+            <span className="text-xs text-slate-500 font-normal">{routes.length} Routes</span>
+          </h2>
+
+          <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-1">
+            {routes.map((r) => (
+              <div
+                key={r.id}
+                onClick={() => pickRoute(r.id)}
+                className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
+                  String(routeId) === String(r.id)
+                    ? 'border-indigo-500 bg-indigo-50/40 ring-1 ring-indigo-500/20'
+                    : 'border-border-soft bg-white hover:border-slate-300'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs text-slate-900">{r.name}</span>
+                  <span className="text-[11px] font-semibold text-indigo-600 hover:underline">Select &amp; Edit →</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -242,7 +1085,7 @@ export function Parties() {
 
   return (
     <div>
-      <h1 className="mb-4 text-2xl font-bold text-ink">Parties</h1>
+      <h1 className="mb-4 text-2xl font-bold text-slate-900 tracking-tight">Parties &amp; Master Management</h1>
       <Tabs
         tabs={[
           { key: 'customers', label: 'Customers', content: <CustomersPanel canManage={canManageCustomers} /> },
@@ -254,3 +1097,4 @@ export function Parties() {
     </div>
   );
 }
+

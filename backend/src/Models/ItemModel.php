@@ -13,8 +13,79 @@ class ItemModel
     private const WRITABLE_COLUMNS = [
         'item_name', 'category_id', 'brand_id', 'product_line_id', 'supplier_id', 'hsn_code', 'barcode',
         'base_unit_id', 'secondary_unit_id', 'conversion_factor', 'purchase_price', 'cost_price',
-        'wholesale_price', 'retail_price', 'mrp', 'min_stock_threshold', 'tax_code_id', 'image', 'is_active',
+        'wholesale_price', 'retail_price', 'mrp', 'net_srate', 'net_purrate',
+        'secondary_mrp', 'secondary_net_srate', 'secondary_net_purrate',
+        'retail_selling_price', 'wholesale_selling_price',
+        'min_stock_threshold', 'tax_code_id', 'image', 'is_active',
     ];
+
+    /**
+     * Resolves the effective MRP/sale-rate/purchase-rate for a given unit
+     * on an item — NET_SRATE/NET_PURRATE are independent fields (never
+     * derived from MRP or from each other, section 21), and the
+     * secondary-unit variant is used only when the sale/purchase is
+     * actually happening in that unit (section 17). Falls back to the
+     * legacy retail_price/purchase_price columns explicitly (never
+     * silently) when NET_SRATE/NET_PURRATE aren't set on an older item
+     * (section 19).
+     */
+    public static function resolveUnitPricing(array $item, ?int $unitId): array
+    {
+        $isSecondary = $unitId !== null
+            && !empty($item['secondary_unit_id'])
+            && (int) $unitId === (int) $item['secondary_unit_id'];
+
+        if ($isSecondary) {
+            return [
+                'mrp' => $item['secondary_mrp'] !== null && $item['secondary_mrp'] !== '' ? (float) $item['secondary_mrp'] : (float) $item['mrp'],
+                'net_srate' => $item['secondary_net_srate'] !== null && $item['secondary_net_srate'] !== ''
+                    ? (float) $item['secondary_net_srate']
+                    : (float) ($item['net_srate'] ?? $item['retail_price']),
+                'net_purrate' => $item['secondary_net_purrate'] !== null && $item['secondary_net_purrate'] !== ''
+                    ? (float) $item['secondary_net_purrate']
+                    : (float) ($item['net_purrate'] ?? $item['purchase_price']),
+            ];
+        }
+
+        return [
+            'mrp' => (float) $item['mrp'],
+            'net_srate' => (float) ($item['net_srate'] ?? $item['retail_price']),
+            'net_purrate' => (float) ($item['net_purrate'] ?? $item['purchase_price']),
+        ];
+    }
+
+    /**
+     * Central billing price resolver (Phase 14) — the ONLY place that
+     * decides which selling price a cart line uses. `retail_selling_price`/
+     * `wholesale_selling_price` are a flat, unit-agnostic override on top of
+     * whatever resolveUnitPricing() already resolved for the unit actually
+     * being sold (so a secondary-unit line still gets its own S-NET_SRATE
+     * when Retail/Wholesale isn't configured, exactly like Normal mode) —
+     * this project has no per-unit Retail/Wholesale price, by design (one
+     * flat Retail/Wholesale price per item, same as the test data).
+     *
+     * NEVER falls back to MRP or NET_PURRATE — an unconfigured Retail/
+     * Wholesale price falls back only to that unit's own NET_SRATE, and the
+     * `configured` flag tells the caller whether that fallback happened, so
+     * the UI can say so instead of silently pretending the item has a
+     * configured Retail/Wholesale price when it doesn't.
+     */
+    public static function resolveSellingPrice(array $item, ?int $unitId, string $priceType = 'normal'): array
+    {
+        $unitPricing = self::resolveUnitPricing($item, $unitId);
+
+        if ($priceType === 'wholesale' || $priceType === 'retail') {
+            $column = $priceType === 'wholesale' ? 'wholesale_selling_price' : 'retail_selling_price';
+            $configured = isset($item[$column]) && $item[$column] !== null && $item[$column] !== '';
+            return [
+                'rate' => $configured ? (float) $item[$column] : $unitPricing['net_srate'],
+                'mrp' => $unitPricing['mrp'],
+                'configured' => $configured,
+            ];
+        }
+
+        return ['rate' => $unitPricing['net_srate'], 'mrp' => $unitPricing['mrp'], 'configured' => true];
+    }
 
     public function __construct(private PDO $pdo)
     {
@@ -52,8 +123,13 @@ class ItemModel
             $params['branch_id'] = $branchId;
         }
         if ($search !== null && $search !== '') {
-            $where[] = '(i.item_name LIKE :search OR i.item_code LIKE :search OR i.barcode LIKE :search)';
-            $params['search'] = "%$search%";
+            // Three distinct placeholders, not one reused three times — PDO
+            // with emulated prepares off rejects a repeated named parameter
+            // ("Invalid parameter number").
+            $where[] = '(i.item_name LIKE :search_name OR i.item_code LIKE :search_code OR i.barcode LIKE :search_barcode)';
+            $params['search_name'] = "%$search%";
+            $params['search_code'] = "%$search%";
+            $params['search_barcode'] = "%$search%";
         }
 
         if ($joins) {

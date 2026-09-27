@@ -1,132 +1,459 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil } from 'lucide-react';
+import { ShieldCheck, Search, Plus, Edit2, CheckCircle2, UserCheck, Lock, UserX, Loader2, AlertTriangle, Users } from 'lucide-react';
 import { staffApi, rolesApi } from '../api/admin';
 import { branchesApi } from '../api/branches';
 import { usePermission } from '../hooks/usePermission';
 import { Button } from '../components/Button.jsx';
 
-function CreateStaffForm() {
+export function StaffPermissions() {
+  const canManageAccounts = usePermission('staff.manage_accounts');
+  const canManagePermissions = usePermission('staff.manage_permissions');
+
   const queryClient = useQueryClient();
-  const [form, setForm] = useState({ name: '', email: '', password: '', role_id: '', phone: '' });
-  const [error, setError] = useState('');
-
-  const rolesQuery = useQuery({ queryKey: ['roles'], queryFn: rolesApi.list });
-  const createMutation = useMutation({
-    mutationFn: staffApi.create,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['staff'] });
-      setForm({ name: '', email: '', password: '', role_id: '', phone: '' });
-    },
-  });
-
-  const submit = async (e) => {
-    e.preventDefault();
-    setError('');
-    try {
-      await createMutation.mutateAsync({ ...form, role_id: Number(form.role_id) });
-    } catch (err) {
-      setError(err?.response?.data?.error || 'Failed to create account');
-    }
-  };
-
-  const roles = rolesQuery.data || [];
-
-  return (
-    <form onSubmit={submit} className="card p-4">
-      <div className="mb-2 font-semibold text-ink">New Staff Account</div>
-      <div className="flex flex-wrap gap-2">
-        <input required placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input w-40" />
-        <input required type="email" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="input w-48" />
-        <input required type="password" placeholder="Password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="input w-36" />
-        <select required value={form.role_id} onChange={(e) => setForm({ ...form, role_id: e.target.value })} className="input w-48">
-          <option value="">Select role</option>
-          {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-        </select>
-        <input placeholder="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="input w-32" />
-      </div>
-      <button type="submit" className="mt-3 rounded bg-success px-4 py-1.5 text-sm font-semibold text-white">
-        Create Account
-      </button>
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-    </form>
-  );
-}
-
-function EditStaffModal({ user, onClose }) {
-  const queryClient = useQueryClient();
-  const [form, setForm] = useState({
-    name: user.name,
-    phone: user.phone || '',
-    role_id: user.role_id,
-    branch_id: user.branch_id ?? '',
-  });
-  const [error, setError] = useState('');
-
+  const staffQuery = useQuery({ queryKey: ['staff'], queryFn: staffApi.list });
   const rolesQuery = useQuery({ queryKey: ['roles'], queryFn: rolesApi.list });
   const branchesQuery = useQuery({ queryKey: ['branches'], queryFn: branchesApi.list });
-  const updateMutation = useMutation({
-    mutationFn: (data) => staffApi.update(user.id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['staff'] });
-      onClose();
-    },
-  });
 
-  const submit = async (e) => {
-    e.preventDefault();
-    setError('');
-    try {
-      await updateMutation.mutateAsync({
-        name: form.name,
-        phone: form.phone || null,
-        role_id: Number(form.role_id),
-        branch_id: form.branch_id ? Number(form.branch_id) : null,
-      });
-    } catch (err) {
-      setError(err?.response?.data?.error || 'Failed to save');
-    }
-  };
-
+  const staff = staffQuery.data || [];
   const roles = rolesQuery.data || [];
   const branches = branchesQuery.data || [];
 
+  const [form, setForm] = useState({ name: '', email: '', password: '', role_id: '', branch_id: '', phone: '', status: 'active' });
+  const [editingId, setEditingId] = useState(null);
+  const [selectedUserForPerms, setSelectedUserForPerms] = useState(null);
+
+  const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['staff'] });
+
+  const createMutation = useMutation({
+    mutationFn: staffApi.create,
+    onSuccess: () => {
+      invalidate();
+      resetForm();
+      showSuccess('Staff account created successfully!');
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => staffApi.update(id, data),
+    onSuccess: () => {
+      invalidate();
+      resetForm();
+      showSuccess('Staff account updated successfully!');
+    },
+  });
+
+  const resetForm = () => {
+    setForm({ name: '', email: '', password: '', role_id: '', branch_id: '', phone: '', status: 'active' });
+    setEditingId(null);
+    setError('');
+  };
+
+  const showSuccess = (msg) => {
+    setSuccessMsg(msg);
+    setTimeout(() => setSuccessMsg(''), 3000);
+  };
+
+  const handleEdit = (u) => {
+    setEditingId(u.id);
+    setForm({
+      name: u.name || '',
+      email: u.email || '',
+      password: '', // Blank unless updating
+      role_id: u.role_id ? String(u.role_id) : '',
+      branch_id: u.branch_id ? String(u.branch_id) : '',
+      phone: u.phone || '',
+      status: u.status || 'active',
+    });
+    setError('');
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (!form.name.trim() || !form.email.trim() || !form.role_id) {
+      setError('Name, email, and role are required.');
+      return;
+    }
+
+    try {
+      if (editingId) {
+        const payload = {
+          name: form.name.trim(),
+          phone: form.phone || null,
+          role_id: Number(form.role_id),
+          branch_id: form.branch_id ? Number(form.branch_id) : null,
+          status: form.status,
+        };
+        if (form.password) payload.password = form.password;
+        await updateMutation.mutateAsync({ id: editingId, data: payload });
+      } else {
+        if (!form.password) {
+          setError('Password is required for new accounts.');
+          return;
+        }
+        await createMutation.mutateAsync({
+          name: form.name.trim(),
+          email: form.email.trim(),
+          password: form.password,
+          role_id: Number(form.role_id),
+          branch_id: form.branch_id ? Number(form.branch_id) : null,
+          phone: form.phone || null,
+          status: form.status,
+        });
+      }
+    } catch (err) {
+      setError(err?.response?.data?.error || 'Failed to save staff account');
+    }
+  };
+
+  const filteredStaff = staff.filter((u) => {
+    const queryMatch =
+      u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      u.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      u.role_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      u.phone?.includes(searchQuery);
+    const statusMatch = statusFilter === 'all' || u.status === statusFilter;
+    return queryMatch && statusMatch;
+  });
+
   return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/30">
-      <form onSubmit={submit} className="w-[420px] card p-5">
-        <div className="mb-3 text-lg font-semibold text-ink">Edit Staff — {user.name}</div>
-
-        <label className="mb-1 block text-xs font-medium text-ink-muted">Name</label>
-        <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input mb-3" />
-
-        <label className="mb-1 block text-xs font-medium text-ink-muted">Phone</label>
-        <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="input mb-3" />
-
-        <label className="mb-1 block text-xs font-medium text-ink-muted">Role</label>
-        <select required value={form.role_id} onChange={(e) => setForm({ ...form, role_id: e.target.value })} className="input mb-3">
-          {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-        </select>
-
-        <label className="mb-1 block text-xs font-medium text-ink-muted">Branch</label>
-        <select value={form.branch_id} onChange={(e) => setForm({ ...form, branch_id: e.target.value })} className="input mb-3">
-          <option value="">No home branch</option>
-          {branches.map((b) => <option key={b.id} value={b.id}>{b.branch_name}</option>)}
-        </select>
-
-        {error && <p className="mb-2 text-sm text-danger">{error}</p>}
-
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button type="submit">Save</Button>
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border-soft/40 pb-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-ink flex items-center gap-2.5">
+            <ShieldCheck className="w-7 h-7 text-indigo-400" />
+            Staff &amp; Permissions
+          </h1>
+          <p className="text-xs text-ink-muted mt-1">Manage user credentials, branch assignments, roles, and granular security overrides</p>
         </div>
-      </form>
+      </div>
+
+      {successMsg && (
+        <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs px-4 py-2.5 rounded-lg flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4" />
+          {successMsg}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+        {/* Left Column Form */}
+        <div className="lg:col-span-4">
+          <div className="card p-5 space-y-4 sticky top-6">
+            <div className="flex items-center justify-between border-b border-border-soft pb-3">
+              <h2 className="font-semibold text-ink text-base flex items-center gap-2">
+                {editingId ? <Edit2 className="w-4 h-4 text-cyan-400" /> : <Plus className="w-4 h-4 text-emerald-400" />}
+                {editingId ? 'Edit Staff Account' : 'Create Staff Account'}
+              </h2>
+              {editingId && (
+                <button onClick={resetForm} className="text-xs text-ink-muted hover:text-ink underline">
+                  Cancel Edit
+                </button>
+              )}
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-3">
+              {error && <div className="text-xs text-red-400 bg-red-950/40 p-2.5 rounded border border-red-800/40">{error}</div>}
+
+              <div>
+                <label className="text-xs font-medium text-ink-muted block mb-1">Full Name *</label>
+                <input
+                  required
+                  type="text"
+                  placeholder="John Doe"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  className="input w-full"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-ink-muted block mb-1">Email Address *</label>
+                <input
+                  required
+                  disabled={Boolean(editingId)}
+                  type="email"
+                  placeholder="john@store.com"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  className="input w-full disabled:opacity-50"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-ink-muted block mb-1">
+                  {editingId ? 'New Password (leave empty to keep current)' : 'Password *'}
+                </label>
+                <input
+                  type="password"
+                  placeholder="••••••••"
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  className="input w-full"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs font-medium text-ink-muted block mb-1">Role *</label>
+                  <select
+                    required
+                    value={form.role_id}
+                    onChange={(e) => setForm({ ...form, role_id: e.target.value })}
+                    className="input w-full"
+                  >
+                    <option value="">Select Role</option>
+                    {roles.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-ink-muted block mb-1">Branch</label>
+                  <select
+                    value={form.branch_id}
+                    onChange={(e) => setForm({ ...form, branch_id: e.target.value })}
+                    className="input w-full"
+                  >
+                    <option value="">All / No Home Branch</option>
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.branch_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-ink-muted block mb-1">Phone Number</label>
+                <input
+                  type="text"
+                  placeholder="+91 9876543210"
+                  value={form.phone}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  className="input w-full"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-ink-muted block mb-1.5">Status</label>
+                <div className="flex items-center gap-4">
+                  <label className="inline-flex items-center gap-2 cursor-pointer text-xs text-ink">
+                    <input
+                      type="radio"
+                      name="staffStatus"
+                      checked={form.status === 'active'}
+                      onChange={() => setForm((prev) => ({ ...prev, status: 'active' }))}
+                      className="form-radio text-emerald-500 focus:ring-emerald-500/20"
+                    />
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+                      Active
+                    </span>
+                  </label>
+                  <label className="inline-flex items-center gap-2 cursor-pointer text-xs text-ink">
+                    <input
+                      type="radio"
+                      name="staffStatus"
+                      checked={form.status === 'inactive'}
+                      onChange={() => setForm((prev) => ({ ...prev, status: 'inactive' }))}
+                      className="form-radio text-gray-500 focus:ring-gray-500/20"
+                    />
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-gray-500 inline-block"></span>
+                      Inactive
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              {canManageAccounts && (
+                <div className="pt-2 flex items-center gap-2">
+                  <Button type="submit" variant="primary" loading={createMutation.isPending || updateMutation.isPending} className="w-full">
+                    {editingId ? 'Update Staff Account' : 'Save Staff Account'}
+                  </Button>
+                  {editingId && (
+                    <Button type="button" variant="secondary" onClick={resetForm}>
+                      Reset
+                    </Button>
+                  )}
+                </div>
+              )}
+            </form>
+          </div>
+        </div>
+
+        {/* Right Column Table */}
+        <div className="lg:col-span-8 space-y-4">
+          <div className="card p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="relative w-full sm:w-72">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
+              <input
+                type="text"
+                placeholder="Search staff by name, email, role..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="input pl-9 w-full text-xs"
+              />
+            </div>
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-ink-muted">Filter:</span>
+              <button
+                onClick={() => setStatusFilter('all')}
+                className={`px-2.5 py-1 rounded-md transition ${statusFilter === 'all' ? 'bg-indigo-500/20 text-indigo-300 font-medium' : 'text-ink-muted hover:text-ink'}`}
+              >
+                All ({staff.length})
+              </button>
+              <button
+                onClick={() => setStatusFilter('active')}
+                className={`px-2.5 py-1 rounded-md transition ${statusFilter === 'active' ? 'bg-emerald-500/20 text-emerald-300 font-medium' : 'text-ink-muted hover:text-ink'}`}
+              >
+                Active ({staff.filter((s) => s.status === 'active' || s.status !== 'inactive').length})
+              </button>
+              <button
+                onClick={() => setStatusFilter('inactive')}
+                className={`px-2.5 py-1 rounded-md transition ${statusFilter === 'inactive' ? 'bg-gray-500/20 text-gray-300 font-medium' : 'text-ink-muted hover:text-ink'}`}
+              >
+                Inactive ({staff.filter((s) => s.status === 'inactive').length})
+              </button>
+            </div>
+          </div>
+
+          <div className="card overflow-hidden">
+            <div className="px-5 py-4 border-b border-border-soft flex items-center justify-between">
+              <h3 className="font-semibold text-ink text-sm">Staff Directory</h3>
+              <span className="text-xs text-ink-muted">{filteredStaff.length} member(s)</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-border-soft bg-surface-subtle/30 text-ink-muted font-medium">
+                    <th className="px-4 py-3">Staff Member</th>
+                    <th className="px-4 py-3">Email / Phone</th>
+                    <th className="px-4 py-3">Role</th>
+                    <th className="px-4 py-3">Branch</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border-soft/60">
+                  {staffQuery.isLoading && (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-10 text-center text-ink-muted text-xs">
+                        <div className="flex items-center justify-center gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Loading staff…
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  {!staffQuery.isLoading && staffQuery.isError && (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-10 text-center text-xs">
+                        <div className="flex flex-col items-center gap-2 text-red-400">
+                          <AlertTriangle className="w-5 h-5" />
+                          Unable to load staff users. Please try again.
+                          <button
+                            type="button"
+                            onClick={() => staffQuery.refetch()}
+                            className="mt-1 px-3 py-1 rounded bg-red-500/10 border border-red-500/30 text-red-300 font-medium hover:bg-red-500/20 transition"
+                          >
+                            Retry
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  {!staffQuery.isLoading && !staffQuery.isError && staff.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-10 text-center text-ink-muted text-xs">
+                        <div className="flex flex-col items-center gap-2">
+                          <Users className="w-5 h-5" />
+                          No staff accounts yet — create the first one on the left.
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  {!staffQuery.isLoading && !staffQuery.isError && staff.length > 0 && filteredStaff.map((u) => {
+                    const isActive = u.status !== 'inactive';
+                    return (
+                      <tr key={u.id} className="hover:bg-surface-subtle/20 transition">
+                        <td className="px-4 py-3 font-medium text-ink">{u.name}</td>
+                        <td className="px-4 py-3 text-ink-muted">
+                          <div>{u.email}</div>
+                          {u.phone && <div className="text-[10px] text-ink-muted/70">{u.phone}</div>}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="px-2 py-0.5 rounded text-[10px] bg-indigo-500/15 text-indigo-300 font-medium border border-indigo-500/20">
+                            {u.role_name}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-ink-muted">{u.branch_name || 'All Branches'}</td>
+                        <td className="px-4 py-3">
+                          {isActive ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                              Active
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-500/10 text-gray-400 border border-gray-500/20">
+                              <span className="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
+                              Inactive
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right space-x-2">
+                          {canManageAccounts && (
+                            <button
+                              onClick={() => handleEdit(u)}
+                              className="p-1 rounded hover:bg-surface-subtle text-ink-muted hover:text-cyan-400 transition"
+                              title="Edit Staff"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          {canManagePermissions && (
+                            <button
+                              onClick={() => setSelectedUserForPerms(u)}
+                              className="px-2 py-1 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-medium hover:bg-amber-500/20 transition"
+                            >
+                              Permissions
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {!staffQuery.isLoading && !staffQuery.isError && staff.length > 0 && filteredStaff.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-8 text-center text-ink-muted text-xs">
+                        No staff members found matching search.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {selectedUserForPerms && <PermissionsPanel user={selectedUserForPerms} onClose={() => setSelectedUserForPerms(null)} />}
     </div>
   );
 }
 
 function PermissionsPanel({ user, onClose }) {
   const queryClient = useQueryClient();
-  const [pending, setPending] = useState({}); // permission_id -> true|false|null (staged, unsaved)
+  const [pending, setPending] = useState({});
   const permsQuery = useQuery({ queryKey: ['staff-permissions', user.id], queryFn: () => staffApi.getPermissions(user.id) });
 
   const saveMutation = useMutation({
@@ -151,135 +478,87 @@ function PermissionsPanel({ user, onClose }) {
 
   const cycle = (row) => {
     const current = currentOverride(row);
-    // cycle: follow role -> force allow -> force deny -> follow role
     const next = current === null ? true : current === true ? false : null;
     setPending((prev) => ({ ...prev, [row.id]: next }));
   };
 
   const save = () => {
-    const overrides = Object.entries(pending).map(([permission_id, is_granted]) => ({ permission_id: Number(permission_id), is_granted }));
+    const overrides = Object.entries(pending).map(([permission_id, is_granted]) => ({
+      permission_id: Number(permission_id),
+      is_granted,
+    }));
     saveMutation.mutate(overrides);
   };
 
   return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/30">
-      <div className="max-h-[80vh] w-[600px] overflow-auto card p-5">
-        <div className="mb-1 text-lg font-semibold text-ink">Permissions — {user.name}</div>
-        <p className="mb-3 text-xs text-ink-muted">
-          Click a badge to cycle: <em>Role default</em> → <em>Force allow</em> → <em>Force deny</em> → back to role default.
-        </p>
-
-        {Object.entries(grouped).map(([module, perms]) => (
-          <div key={module} className="mb-3">
-            <div className="mb-1 text-xs font-bold uppercase text-ink-muted">{module}</div>
-            <div className="flex flex-col gap-1">
-              {perms.map((row) => {
-                const override = currentOverride(row);
-                const effective = override === null ? row.role_grants : override;
-                let badgeLabel = 'Role default';
-                let badgeClass = 'bg-gray-100 text-ink-muted';
-                if (override === true) { badgeLabel = 'Force allow'; badgeClass = 'bg-green-100 text-success'; }
-                if (override === false) { badgeLabel = 'Force deny'; badgeClass = 'bg-red-100 text-red-700'; }
-
-                return (
-                  <div key={row.id} className="flex items-center justify-between text-sm">
-                    <span className={effective ? 'text-ink' : 'text-ink-muted'}>{row.label}</span>
-                    <button onClick={() => cycle(row)} className={`rounded px-2 py-0.5 text-xs font-medium ${badgeClass}`}>
-                      {badgeLabel}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="max-h-[85vh] w-full max-w-2xl overflow-hidden card flex flex-col space-y-0">
+        <div className="p-5 border-b border-border-soft flex items-center justify-between">
+          <div>
+            <h3 className="text-base font-semibold text-ink flex items-center gap-2">
+              <Lock className="w-4 h-4 text-amber-400" />
+              Granular Permissions — {user.name}
+            </h3>
+            <p className="text-xs text-ink-muted mt-0.5">
+              Click badge to cycle: <span className="text-ink">Role default</span> → <span className="text-emerald-400">Force allow</span> → <span className="text-red-400">Force deny</span>
+            </p>
           </div>
-        ))}
+          <button onClick={onClose} className="text-ink-muted hover:text-ink text-sm font-semibold">✕</button>
+        </div>
 
-        <div className="mt-4 flex justify-end gap-2 border-t border-border-soft pt-3">
-          <button onClick={onClose} className="rounded bg-gray-100 px-3 py-1.5 text-sm text-ink">Close</button>
-          <button onClick={save} disabled={Object.keys(pending).length === 0} className="rounded bg-success px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-40">
-            Save Changes
-          </button>
+        <div className="p-5 overflow-y-auto space-y-4 flex-1">
+          {Object.entries(grouped).map(([module, perms]) => (
+            <div key={module} className="space-y-2">
+              <div className="text-xs font-bold uppercase tracking-wider text-indigo-400">{module}</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {perms.map((row) => {
+                  const override = currentOverride(row);
+                  const effective = override === null ? row.role_grants : override;
+                  let badgeLabel = 'Role Default';
+                  let badgeClass = 'bg-surface-subtle text-ink-muted border-border-soft';
+                  if (override === true) {
+                    badgeLabel = 'Force Allow';
+                    badgeClass = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
+                  }
+                  if (override === false) {
+                    badgeLabel = 'Force Deny';
+                    badgeClass = 'bg-red-500/20 text-red-300 border-red-500/40';
+                  }
+
+                  return (
+                    <div
+                      key={row.id}
+                      onClick={() => cycle(row)}
+                      className="p-2.5 rounded-lg border border-border-soft/60 hover:border-indigo-500/30 bg-surface-subtle/20 cursor-pointer flex items-center justify-between gap-2 transition"
+                    >
+                      <span className={`text-xs ${effective ? 'text-ink font-medium' : 'text-ink-muted'}`}>{row.label}</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${badgeClass}`}>
+                        {badgeLabel}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="p-4 border-t border-border-soft flex justify-end gap-2 bg-surface-subtle/30">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Close
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            onClick={save}
+            loading={saveMutation.isPending}
+            disabled={Object.keys(pending).length === 0}
+          >
+            Save Overrides
+          </Button>
         </div>
       </div>
     </div>
   );
 }
 
-export function StaffPermissions() {
-  const canManageAccounts = usePermission('staff.manage_accounts');
-  const canManagePermissions = usePermission('staff.manage_permissions');
-  const [selected, setSelected] = useState(null);
-  const [editing, setEditing] = useState(null);
-  const [statusEdits, setStatusEdits] = useState({});
-
-  const queryClient = useQueryClient();
-  const staffQuery = useQuery({ queryKey: ['staff'], queryFn: staffApi.list });
-  const statusMutation = useMutation({
-    mutationFn: ({ id, status }) => staffApi.update(id, { status }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['staff'] }),
-  });
-
-  const staff = staffQuery.data || [];
-
-  return (
-    <div>
-      <h1 className="mb-4 text-2xl font-bold text-ink">Staff &amp; Permissions</h1>
-
-      {canManageAccounts && <div className="mb-4"><CreateStaffForm /></div>}
-
-      <div className="card">
-        <div className="border-b border-border-soft px-4 py-3 font-semibold text-ink">Staff Accounts</div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border-soft text-left text-xs uppercase text-ink-muted">
-              <th className="px-4 py-2">Name</th><th className="px-4 py-2">Email</th><th className="px-4 py-2">Role</th>
-              <th className="px-4 py-2">Branch</th><th className="px-4 py-2">Status</th><th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {staff.map((u) => (
-              <tr key={u.id} className="border-b border-border-soft">
-                <td className="px-4 py-2 font-medium text-ink">{u.name}</td>
-                <td className="px-4 py-2">{u.email}</td>
-                <td className="px-4 py-2">{u.role_name}</td>
-                <td className="px-4 py-2 text-ink-muted">{u.branch_name || '-'}</td>
-                <td className="px-4 py-2">
-                  {canManageAccounts ? (
-                    <select
-                      value={u.status}
-                      onChange={(e) => statusMutation.mutate({ id: u.id, status: e.target.value })}
-                      className="rounded border border-gray-300 px-1 py-0.5 text-xs"
-                    >
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
-                    </select>
-                  ) : (
-                    <span className="capitalize">{u.status}</span>
-                  )}
-                </td>
-                <td className="px-4 py-2 text-right">
-                  <div className="flex items-center justify-end gap-3">
-                    {canManageAccounts && (
-                      <button title="Edit" onClick={() => setEditing(u)} className="text-ink-muted hover:text-ink">
-                        <Pencil size={15} />
-                      </button>
-                    )}
-                    {canManagePermissions && (
-                      <button onClick={() => setSelected(u)} className="text-xs font-medium text-gold hover:underline">
-                        Permissions
-                      </button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {staff.length === 0 && <tr><td colSpan={6} className="px-4 py-6 text-center text-ink-muted">No staff accounts.</td></tr>}
-          </tbody>
-        </table>
-      </div>
-
-      {selected && <PermissionsPanel user={selected} onClose={() => setSelected(null)} />}
-      {editing && <EditStaffModal user={editing} onClose={() => setEditing(null)} />}
-    </div>
-  );
-}

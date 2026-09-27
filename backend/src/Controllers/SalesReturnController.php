@@ -64,9 +64,12 @@ class SalesReturnController
         ];
 
         $canApprove = in_array('returns.approve_untraceable_return', (array) ($claims['permissions'] ?? []), true);
+        $refundAmount = isset($body['refund_amount']) && $body['refund_amount'] !== ''
+            ? (float) $body['refund_amount']
+            : null;
 
         try {
-            $id = $this->model->create($header, $body['items'], $canApprove);
+            $id = $this->model->create($header, $body['items'], $canApprove, $refundAmount);
         } catch (\Throwable $e) {
             Response::error($e->getMessage(), 422);
         }

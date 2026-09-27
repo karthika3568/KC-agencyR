@@ -82,6 +82,37 @@ class InvoiceModel
         return $invoice;
     }
 
+    /**
+     * Feeds Sale Return's "select invoice -> pick lines" flow: every line
+     * plus how much of it has already been returned (summed from
+     * sales_return_items rather than a maintained counter, so it can never
+     * drift) and what's left returnable. A rejected return never reserved
+     * any quantity, so it's excluded from the already-returned sum.
+     */
+    public function returnableItems(int $invoiceId): array
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT ii.id AS invoice_item_id, ii.item_id, ii.item_name_snapshot AS item_name, ii.hsn_snapshot,
+                    ii.qty AS original_qty, ii.rate, ii.mrp, ii.discount_percent, ii.discount_amount,
+                    ii.tax_percent, ii.tax_amount, ii.line_total, su.short_code AS unit_code,
+                    COALESCE(ret.returned_qty, 0) AS already_returned_qty,
+                    GREATEST(ii.qty - COALESCE(ret.returned_qty, 0), 0) AS remaining_qty
+             FROM invoice_items ii
+             JOIN stock_units su ON su.id = ii.unit_id
+             LEFT JOIN (
+                 SELECT sri.invoice_item_id, SUM(sri.qty) AS returned_qty
+                 FROM sales_return_items sri
+                 JOIN sales_returns sr ON sr.id = sri.sales_return_id
+                 WHERE sr.status <> 'rejected'
+                 GROUP BY sri.invoice_item_id
+             ) ret ON ret.invoice_item_id = ii.id
+             WHERE ii.invoice_id = :invoice_id
+             ORDER BY ii.id"
+        );
+        $stmt->execute(['invoice_id' => $invoiceId]);
+        return $stmt->fetchAll();
+    }
+
     // -----------------------------------------------------------------
     // Hold / edit / discard — no stock, credit, or numbering effects.
     // -----------------------------------------------------------------
@@ -94,11 +125,11 @@ class InvoiceModel
 
             $stmt = $this->pdo->prepare(
                 'INSERT INTO invoices
-                    (branch_id, customer_id, employee_id, bill_type, invoice_format, invoice_date,
+                    (branch_id, customer_id, employee_id, bill_type, price_type, invoice_format, invoice_date,
                      subtotal, discount_amount, taxable_value, cgst_amount, sgst_amount, igst_amount,
                      cess_amount, round_off, grand_total, vehicle_no, status)
                  VALUES
-                    (:branch_id, :customer_id, :employee_id, :bill_type, :invoice_format, CURDATE(),
+                    (:branch_id, :customer_id, :employee_id, :bill_type, :price_type, :invoice_format, CURDATE(),
                      :subtotal, :discount_amount, :taxable_value, :cgst_amount, :sgst_amount, :igst_amount,
                      :cess_amount, :round_off, :grand_total, :vehicle_no, \'held\')'
             );
@@ -107,6 +138,7 @@ class InvoiceModel
                 'customer_id' => $header['customer_id'],
                 'employee_id' => $header['employee_id'],
                 'bill_type' => $header['bill_type'],
+                'price_type' => $header['price_type'] ?? 'normal',
                 'invoice_format' => $header['invoice_format'],
                 'vehicle_no' => $header['vehicle_no'] ?? null,
                 ...$totals,
@@ -131,7 +163,7 @@ class InvoiceModel
 
             $stmt = $this->pdo->prepare(
                 'UPDATE invoices SET
-                    customer_id = :customer_id, bill_type = :bill_type, invoice_format = :invoice_format,
+                    customer_id = :customer_id, bill_type = :bill_type, price_type = :price_type, invoice_format = :invoice_format,
                     vehicle_no = :vehicle_no, subtotal = :subtotal, discount_amount = :discount_amount,
                     taxable_value = :taxable_value, cgst_amount = :cgst_amount, sgst_amount = :sgst_amount,
                     igst_amount = :igst_amount, cess_amount = :cess_amount, round_off = :round_off,
@@ -142,6 +174,7 @@ class InvoiceModel
                 'id' => $id,
                 'customer_id' => $header['customer_id'],
                 'bill_type' => $header['bill_type'],
+                'price_type' => $header['price_type'] ?? 'normal',
                 'invoice_format' => $header['invoice_format'],
                 'vehicle_no' => $header['vehicle_no'] ?? null,
                 ...$totals,
@@ -533,11 +566,24 @@ class InvoiceModel
      * catalog data. Called by the controller so validation errors (unknown
      * item, etc.) surface before any DB write starts.
      */
-    public function priceLine(array $item, array $input): array
+    /**
+     * $billType is the invoice-level GST/Non-GST choice, $priceType is the
+     * invoice-level Normal/Retail/Wholesale choice (Phase 14) — the two are
+     * completely independent: $billType only zeroes tax, $priceType only
+     * picks which rate resolveSellingPrice() returns. Neither ever touches
+     * the item master's own tax_code or NET_SRATE, and both always win over
+     * whatever the frontend sends, so a manipulated request can't sneak GST
+     * onto a Non-GST bill or a different rate onto a Retail/Wholesale line.
+     */
+    public function priceLine(array $item, array $input, string $billType = 'gst', string $priceType = 'normal'): array
     {
         $qty = (float) ($input['qty'] ?? 0);
         $freeQty = (float) ($input['free_qty'] ?? 0);
-        $rate = isset($input['rate']) ? (float) $input['rate'] : (float) $item['retail_price'];
+        $unitId = (int) ($input['unit_id'] ?? $item['base_unit_id']);
+        // resolveSellingPrice picks NET_SRATE/Retail/Wholesale for the unit
+        // actually being sold — never MRP, never NET_PURRATE (section 17).
+        $unitPricing = ItemModel::resolveSellingPrice($item, $unitId, $priceType);
+        $rate = isset($input['rate']) && $input['rate'] !== '' ? (float) $input['rate'] : $unitPricing['rate'];
 
         $gross = round($qty * $rate, 2);
         $discountPercent = (float) ($input['discount_percent'] ?? 0);
@@ -546,20 +592,26 @@ class InvoiceModel
             : round($gross * $discountPercent / 100, 2);
 
         $taxable = round($gross - $discountAmount, 2);
-        $taxPercent = (float) ($item['gst_percent'] ?? 0);
-        $taxAmount = round($taxable * $taxPercent / 100, 2);
-        $cessPercent = (float) ($item['cess_percent'] ?? 0);
-        $cessAmount = $cessPercent > 0 ? round($taxable * $cessPercent / 100, 2) : 0;
+        if ($billType === 'non_gst') {
+            $taxPercent = 0.0;
+            $taxAmount = 0.0;
+            $cessAmount = 0.0;
+        } else {
+            $taxPercent = (float) ($item['gst_percent'] ?? 0);
+            $taxAmount = round($taxable * $taxPercent / 100, 2);
+            $cessPercent = (float) ($item['cess_percent'] ?? 0);
+            $cessAmount = $cessPercent > 0 ? round($taxable * $cessPercent / 100, 2) : 0;
+        }
 
         return [
             'item_id' => (int) $item['id'],
-            'unit_id' => (int) ($input['unit_id'] ?? $item['base_unit_id']),
+            'unit_id' => $unitId,
             'item_name_snapshot' => $item['item_name'],
             'hsn_snapshot' => $item['hsn_code'],
             'qty' => $qty,
             'free_qty' => $freeQty,
             'rate' => $rate,
-            'mrp' => $item['mrp'],
+            'mrp' => isset($input['mrp']) && $input['mrp'] !== '' ? (float) $input['mrp'] : $unitPricing['mrp'],
             'discount_percent' => $discountPercent,
             'discount_amount' => $discountAmount,
             'tax_percent' => $taxPercent,

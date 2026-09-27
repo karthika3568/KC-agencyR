@@ -39,17 +39,62 @@ export const reportsApi = {
   nonGstRegister: async (params) => (await apiClient.get(reportUrl('non-gst-register', params))).data,
   purchaseRegister: async (params) => (await apiClient.get(reportUrl('purchase-register', params))).data,
   itemWiseSales: async (params) => (await apiClient.get(reportUrl('item-wise-sales', params))).data,
+  branchWiseSales: async (params) => (await apiClient.get(reportUrl('branch-wise-sales', params))).data,
+  routeWiseSales: async (params) => (await apiClient.get(reportUrl('route-wise-sales', params))).data,
+  customerWiseSales: async (params) => (await apiClient.get(reportUrl('customer-wise-sales', params))).data,
+  supplierWiseSales: async (params) => (await apiClient.get(reportUrl('supplier-wise-sales', params))).data,
+  brandWiseSales: async (params) => (await apiClient.get(reportUrl('brand-wise-sales', params))).data,
+  categoryWiseSales: async (params) => (await apiClient.get(reportUrl('category-wise-sales', params))).data,
+  brandCategoryWiseSales: async (params) => (await apiClient.get(reportUrl('brand-category-wise-sales', params))).data,
   creditOutstanding: async () => (await apiClient.get('/reports/credit-outstanding')).data,
   expenseIncome: async (params) => (await apiClient.get(reportUrl('expense-income', params))).data,
   profit: async (params) => (await apiClient.get(reportUrl('profit', params))).data,
   lowStock: async () => (await apiClient.get('/stock-hub/low-stock')).data,
 
+  /**
+   * responseType: 'blob' means even an ERROR response body (JSON) comes
+   * back as an unreadable Blob instead of parsed data — axios doesn't
+   * unwrap it. Read it back to text/JSON here so a real backend error
+   * (permission denied, bad date range, etc.) surfaces its actual message
+   * instead of failing opaquely or being read as if it were the file.
+   *
+   * `path` is normally a bare report slug (prefixed with /reports/ below),
+   * but a couple of exports — Low Stock — live under a different controller
+   * (/stock-hub/low-stock); pass those already-prefixed with a leading '/'
+   * to use the URL as-is instead of forcing the /reports/ prefix onto it.
+   */
   async downloadExport(path, params) {
-    const res = await apiClient.get(reportUrl(path, { ...params, export: 1 }), { responseType: 'blob' });
+    const requestUrl = path.startsWith('/')
+      ? `${path}${path.includes('?') ? '&' : '?'}${new URLSearchParams({ ...params, export: 1 }).toString()}`
+      : reportUrl(path, { ...params, export: 1 });
+    const downloadName = path.startsWith('/') ? path.split('/').filter(Boolean).pop() : path;
+
+    let res;
+    try {
+      res = await apiClient.get(requestUrl, { responseType: 'blob' });
+    } catch (err) {
+      if (err.response?.data instanceof Blob && err.response.data.type.includes('json')) {
+        const text = await err.response.data.text();
+        try {
+          err.response.data = JSON.parse(text);
+        } catch {
+          /* not JSON after all — leave the raw error as-is */
+        }
+      }
+      throw err;
+    }
+
+    const contentType = res.headers?.['content-type'] || '';
+    if (contentType.includes('json')) {
+      // Backend returned 200 with a JSON body instead of the expected .xlsx — treat as failure, never open the file dialog on it.
+      const text = await res.data.text();
+      throw new Error(JSON.parse(text)?.error || 'The server did not return a valid Excel file.');
+    }
+
     const url = URL.createObjectURL(res.data);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${path}.xlsx`;
+    a.download = `${downloadName}.xlsx`;
     document.body.appendChild(a);
     a.click();
     a.remove();

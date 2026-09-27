@@ -61,7 +61,15 @@ class PurchaseReturnController
             'reason' => $body['reason'] ?? null,
         ];
 
-        $id = $this->model->create($header, $body['items'], (int) $claims['sub']);
+        $refundAmount = isset($body['refund_amount']) && $body['refund_amount'] !== ''
+            ? (float) $body['refund_amount']
+            : null;
+
+        try {
+            $id = $this->model->create($header, $body['items'], (int) $claims['sub'], $refundAmount);
+        } catch (\Throwable $e) {
+            Response::error($e->getMessage(), 422);
+        }
         Response::json($this->model->find($id), 201);
     }
 }

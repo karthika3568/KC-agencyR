@@ -23,8 +23,18 @@ apiClient.interceptors.request.use(async (config) => {
   return config;
 });
 
-/** Maps any backend/network failure to one short, user-safe message — never the raw error. */
+/**
+ * Maps any backend/network failure to one short, user-safe message — never
+ * the raw error. Only axios requests (apiClient calls) can be genuine
+ * network/connectivity failures; a non-axios error (PDF generation, file
+ * writes, Excel building) reaching here is a real bug elsewhere and must
+ * surface its own message — mislabeling it "Cannot reach the server" hides
+ * the actual cause and sends the user chasing their wifi for nothing.
+ */
 export function friendlyErrorMessage(error) {
+  if (!error?.isAxiosError) {
+    return error?.message || 'Something went wrong. Please try again.';
+  }
   if (!error.response) {
     if (error.code === 'ECONNABORTED') return 'The server took too long to respond. Please try again.';
     return 'Cannot reach the server. Check your internet connection.';

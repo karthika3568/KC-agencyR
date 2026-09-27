@@ -1,19 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Search, ScanBarcode, Plus, UserPlus, Grid2x2, List, Minus, Trash2, Clock, Barcode, Image as ImageIcon, Camera, PackageX } from 'lucide-react';
+import { Search, ScanBarcode, Plus, UserPlus, User, Grid2x2, List, Minus, Trash2, Clock, Barcode, Image as ImageIcon, Camera, PackageX } from 'lucide-react';
 import { itemsApi, stockUnitsApi, categoriesApi } from '../api/catalog';
 import { customersApi } from '../api/parties';
 import { invoicesApi } from '../api/invoices';
 import { stockHubApi } from '../api/purchasing';
 import { usePermission } from '../hooks/usePermission';
-import { priceLine, computeCartTotals } from '../utils/pricing';
+import { priceLine, computeCartTotals, resolveUnitPricing, resolveSellingPrice } from '../utils/pricing';
 import { resolveImageUrl } from '../utils/media';
 import { Badge } from '../components/Badge.jsx';
 import { Card } from '../components/Card.jsx';
 import { Button } from '../components/Button.jsx';
 import { PrintPreviewModal } from '../components/PrintPreviewModal.jsx';
 import { ImageSearchModal } from '../components/ImageSearchModal.jsx';
+import { CustomerSelect } from '../components/CustomerSelect.jsx';
 
 const PAYMENT_METHODS = [
   { key: 'cash', label: 'Cash' },
@@ -37,7 +38,7 @@ function ProductThumb({ item, size = 'h-20', className = '' }) {
   );
 }
 
-function newLine(item) {
+function newLine(item, priceType = 'normal') {
   return {
     key: `${item.id}-${Date.now()}-${Math.random()}`,
     item,
@@ -47,12 +48,15 @@ function newLine(item) {
     discount_amount: '',
     discount_mode: 'percent',
     unit_id: item.base_unit_id,
-    rate: item.retail_price,
+    rate: resolveSellingPrice(item, item.base_unit_id, priceType).rate,
   };
 }
 
-function taxBadge(item) {
-  const pct = Number(item.gst_percent || 0);
+// billType overrides the item's own GST% for display — a Non-GST invoice
+// must never show a cart line as taxed, even though the item master keeps
+// its GST% untouched.
+function taxBadge(item, billType = 'gst') {
+  const pct = billType === 'non_gst' ? 0 : Number(item.gst_percent || 0);
   return pct > 0 ? <Badge variant="gst">GST {pct}%</Badge> : <Badge variant="non-gst">Non-GST</Badge>;
 }
 
@@ -66,9 +70,15 @@ export function POS() {
   const canViewStock = usePermission('inventory.view_stock');
 
   const [billType, setBillType] = useState(canGst ? 'gst' : 'non_gst');
+  // Independent from billType (section 16 of the pricing-tiers spec) — this
+  // only picks which rate resolveSellingPrice() returns, never whether GST
+  // is applied.
+  const [priceType, setPriceType] = useState('normal');
   const [customerId, setCustomerId] = useState('');
   const [vehicleNo, setVehicleNo] = useState('');
   const [cart, setCart] = useState([]);
+  const [billDiscount, setBillDiscount] = useState('');
+  const [billDiscountMode, setBillDiscountMode] = useState('amount');
   const [search, setSearch] = useState('');
   const [heldId, setHeldId] = useState(null);
   const [showHeldList, setShowHeldList] = useState(false);
@@ -120,13 +130,31 @@ export function POS() {
 
   const pricedLines = useMemo(
     () =>
-      cart.map((line) => ({
-        ...line,
-        priced: priceLine(line.item, line.discount_mode === 'amount' ? { ...line, discount_percent: 0 } : { ...line, discount_amount: '' }),
-      })),
-    [cart]
+      cart.map((line) => {
+        const priced = priceLine(
+          line.item,
+          line.discount_mode === 'amount' ? { ...line, discount_percent: 0 } : { ...line, discount_amount: '' },
+          billType,
+          priceType
+        );
+        return {
+          ...line,
+          priced,
+          gross: priced.gross,
+          discount_amount: priced.discount_amount,
+          tax_percent: priced.tax_percent,
+          cess_percent: priced.cess_percent,
+          tax_amount: priced.tax_amount,
+          cess_amount: priced.cess_amount,
+          line_total: priced.line_total,
+        };
+      }),
+    [cart, billType, priceType]
   );
-  const totals = useMemo(() => computeCartTotals(pricedLines.map((l) => l.priced)), [pricedLines]);
+  const totals = useMemo(
+    () => computeCartTotals(pricedLines, { amount: billDiscount, mode: billDiscountMode }),
+    [pricedLines, billDiscount, billDiscountMode]
+  );
   const uniformTaxPercent = pricedLines.length > 0 && pricedLines.every((l) => l.priced.tax_percent === pricedLines[0].priced.tax_percent)
     ? pricedLines[0].priced.tax_percent
     : null;
@@ -156,7 +184,7 @@ export function POS() {
       if (existing) {
         return prev.map((l) => (l.key === existing.key ? { ...l, qty: Number(l.qty) + 1 } : l));
       }
-      return [...prev, newLine(item)];
+      return [...prev, newLine(item, priceType)];
     });
     setSearch('');
   };
@@ -177,6 +205,24 @@ export function POS() {
   };
 
   const updateLine = (key, patch) => setCart((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
+  // Switching a line's unit (e.g. PCS -> BOX) re-prices it from that unit's
+  // own NET_SRATE/Retail/Wholesale rate (never the primary-unit rate) —
+  // mirrors ItemModel::resolveSellingPrice server-side.
+  const changeLineUnit = (line, unitId) => {
+    const pricing = resolveSellingPrice(line.item, unitId, priceType);
+    updateLine(line.key, { unit_id: unitId, rate: pricing.rate });
+  };
+  // The cart's `rate` field is a stored, user-editable value (so a manual
+  // price override at sale time sticks) — switching Normal/Retail/Wholesale
+  // must therefore explicitly re-price every existing line, not just flip a
+  // display flag, or the cart would silently keep showing the old rate
+  // (section 13). Only triggered by the user's own click, never on mount/
+  // resume, so resuming a held Retail/Wholesale bill keeps its actual
+  // snapshotted rate instead of being silently re-priced to Normal.
+  const changePriceType = (nextType) => {
+    setPriceType(nextType);
+    setCart((prev) => prev.map((line) => ({ ...line, rate: resolveSellingPrice(line.item, line.unit_id, nextType).rate })));
+  };
   const removeLine = (key) => setCart((prev) => prev.filter((l) => l.key !== key));
   const bumpQty = (line, delta) => {
     const next = Number(line.qty) + delta;
@@ -189,23 +235,24 @@ export function POS() {
     setCustomerId('');
     setVehicleNo('');
     setHeldId(null);
+    setBillDiscount('');
+    setBillDiscountMode('amount');
     setPayments([{ payment_method: 'cash', amount: 0, reference_no: '' }]);
     setSplitMode(false);
   };
 
   const buildPayload = () => ({
     bill_type: billType,
+    price_type: priceType,
     customer_id: customerId ? Number(customerId) : null,
     vehicle_no: vehicleNo || null,
-    items: cart.map((l) => ({
+    items: totals.updatedLines.map((l) => ({
       item_id: l.item.id,
       qty: Number(l.qty),
       free_qty: Number(l.free_qty || 0),
       unit_id: l.unit_id,
       ...(canDiscount
-        ? l.discount_mode === 'amount'
-          ? { discount_amount: Number(l.discount_amount || 0) }
-          : { discount_percent: Number(l.discount_percent || 0) }
+        ? { discount_amount: Number(l.combined_discount_amount ?? l.discount_amount ?? 0) }
         : {}),
       ...(canEditPrice ? { rate: Number(l.rate) } : {}),
     })),
@@ -244,6 +291,9 @@ export function POS() {
     const invoice = await invoicesApi.get(invoiceId);
     setHeldId(invoice.id);
     setBillType(invoice.bill_type);
+    // Restore the stored mode directly (never via changePriceType) so the
+    // held bill's already-snapshotted line rates aren't silently re-priced.
+    setPriceType(invoice.price_type || 'normal');
     setCustomerId(invoice.customer_id || '');
     setVehicleNo(invoice.vehicle_no || '');
     setCart(
@@ -296,6 +346,21 @@ export function POS() {
             Non-GST / Estimate
           </button>
         </div>
+        <div className="flex overflow-hidden rounded-lg border border-border-soft bg-white">
+          {[
+            { key: 'normal', label: 'Normal' },
+            { key: 'retail', label: 'Retail' },
+            { key: 'wholesale', label: 'Wholesale' },
+          ].map((opt) => (
+            <button
+              key={opt.key}
+              onClick={() => changePriceType(opt.key)}
+              className={`px-4 py-2 text-sm font-semibold transition-colors ${priceType === opt.key ? 'bg-navbar text-gold' : 'text-ink-muted'}`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
         <div className="flex items-center gap-2">
           {message && <span className="text-sm font-medium text-success">{message}</span>}
           <Button variant="secondary" onClick={() => setShowHeldList((v) => !v)}>
@@ -332,12 +397,29 @@ export function POS() {
         <div>
           <Card className="mb-4 p-3">
             <div className="flex flex-wrap items-center gap-3">
-              <select value={customerId} onChange={(e) => setCustomerId(e.target.value)} className="input w-52">
-                <option value="">Walk-in Customer</option>
-                {customers.map((c) => (
-                  <option key={c.id} value={c.id}>{c.ledger_name}</option>
-                ))}
-              </select>
+              {/* Walk-in Customer Quick Select Button */}
+              <button
+                type="button"
+                onClick={() => setCustomerId('')}
+                className={`h-9 px-3 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 shrink-0 ${
+                  !customerId
+                    ? 'bg-gold text-white shadow-sm font-semibold'
+                    : 'bg-white text-ink border border-border-soft hover:bg-page'
+                }`}
+                title="Select Walk-in Customer"
+              >
+                <User size={15} />
+                Walk-in
+              </button>
+
+              {/* Searchable Customer Dropdown */}
+              <CustomerSelect
+                customers={customers}
+                value={customerId}
+                onChange={(id) => setCustomerId(id)}
+                placeholder="Search customer by name or phone…"
+                className="w-64 sm:w-72"
+              />
               <Link to="/parties">
                 <Button variant="primary" size="sm" icon={<UserPlus size={14} />}>
                   Add Customer
@@ -364,7 +446,7 @@ export function POS() {
                         className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-page"
                       >
                         <span>{item.item_name} <span className="text-ink-muted">({item.item_code})</span></span>
-                        <span className="text-ink-muted">Rs. {item.retail_price}</span>
+                        <span className="text-ink-muted">Rs. {resolveSellingPrice(item, item.base_unit_id, priceType).rate.toFixed(2)}</span>
                       </button>
                     ))}
                   </div>
@@ -373,23 +455,17 @@ export function POS() {
               <button
                 onClick={() => searchInputRef.current?.focus()}
                 title="Focus search to scan a barcode"
-                className="flex h-9 w-9 items-center justify-center rounded-lg bg-gold text-white hover:bg-gold-soft"
+                className="flex h-9 w-9 items-center justify-center rounded-lg bg-gold text-white hover:bg-gold-soft shrink-0"
               >
                 <ScanBarcode size={16} />
               </button>
               <button
                 onClick={() => setShowImageSearch(true)}
                 title="Find an item from a photo"
-                className="flex h-9 w-9 items-center justify-center rounded-lg border border-border-soft bg-white text-ink-muted hover:bg-page"
+                className="flex h-9 w-9 items-center justify-center rounded-lg border border-border-soft bg-white text-ink-muted hover:bg-page shrink-0"
               >
                 <Camera size={16} />
               </button>
-              <input
-                placeholder="Vehicle no (optional)"
-                value={vehicleNo}
-                onChange={(e) => setVehicleNo(e.target.value)}
-                className="input w-36"
-              />
             </div>
           </Card>
 
@@ -448,7 +524,7 @@ export function POS() {
                       <span className="absolute right-2 top-2 rounded-full bg-warning px-2 py-0.5 text-[10px] font-semibold text-white">Low stock</span>
                     )}
                     <div className="truncate text-sm font-semibold text-ink">{item.item_name}</div>
-                    <div className="mb-1 font-bold text-ink">Rs. {item.retail_price}</div>
+                    <div className="mb-1 font-bold text-ink">Rs. {resolveSellingPrice(item, item.base_unit_id, priceType).rate.toFixed(2)}</div>
                     <div className="mb-1">{taxBadge(item)}</div>
                     <div className="flex items-center justify-between text-xs text-ink-muted">
                       <span>{canViewStock ? `Stock: ${stock}` : item.item_code}</span>
@@ -480,7 +556,7 @@ export function POS() {
                     <tr key={item.id} className="border-b border-border-soft last:border-0">
                       <td className="px-4 py-2"><ProductThumb item={item} size="h-9 w-9" /></td>
                       <td className="px-4 py-2 font-medium text-ink">{item.item_name}</td>
-                      <td className="px-4 py-2">Rs. {item.retail_price}</td>
+                      <td className="px-4 py-2">Rs. {resolveSellingPrice(item, item.base_unit_id, priceType).rate.toFixed(2)}</td>
                       <td className="px-4 py-2">{taxBadge(item)}</td>
                       <td className="px-4 py-2 text-ink-muted">{canViewStock ? stockByItemId[item.id] ?? 0 : item.item_code}</td>
                       <td className="px-4 py-2 text-right">
@@ -522,8 +598,13 @@ export function POS() {
                       <div className="min-w-0">
                         <div className="truncate text-sm font-semibold text-ink">{line.item.item_name}</div>
                         <div className="mt-0.5 flex items-center gap-1">
-                          {taxBadge(line.item)}
+                          {taxBadge(line.item, billType)}
                           {Number(line.free_qty) > 0 && <Badge variant="warning">Free: {line.free_qty}</Badge>}
+                          {!line.priced.price_configured && (
+                            <Badge variant="warning" title={`No ${priceType} price set — using Normal NET_SRATE`}>
+                              {priceType === 'retail' ? 'Retail' : 'Wholesale'} price not set
+                            </Badge>
+                          )}
                         </div>
                       </div>
                       <button onClick={() => removeLine(line.key)} className="shrink-0 text-ink-muted hover:text-danger">
@@ -546,15 +627,28 @@ export function POS() {
                         <button onClick={() => bumpQty(line, 1)} className="flex h-6 w-6 items-center justify-center rounded border border-border-soft text-ink-muted hover:bg-page">
                           <Plus size={12} />
                         </button>
-                        <span className="text-xs text-ink-muted">{units.find((u) => u.id === line.unit_id)?.short_code || ''}</span>
+                        {line.item.secondary_unit_id ? (
+                          <select
+                            value={line.unit_id}
+                            onChange={(e) => changeLineUnit(line, Number(e.target.value))}
+                            className="rounded border border-border-soft px-1 py-0.5 text-xs text-ink-muted"
+                          >
+                            {[line.item.base_unit_id, line.item.secondary_unit_id].map((id) => (
+                              <option key={id} value={id}>{units.find((u) => u.id === id)?.short_code || ''}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className="text-xs text-ink-muted">{units.find((u) => u.id === line.unit_id)?.short_code || ''}</span>
+                        )}
                       </div>
                       <div className="flex items-center gap-2 text-sm">
+                        <span className="text-xs text-ink-muted" title="MRP">MRP {Number(line.priced.mrp).toFixed(2)}</span>
                         <input
                           type="number"
                           step="any"
                           disabled={!canEditPrice}
                           value={line.rate}
-                          title="Rate"
+                          title="Net Rate"
                           onChange={(e) => updateLine(line.key, { rate: e.target.value })}
                           className="w-14 rounded border border-border-soft px-1 py-0.5 text-right disabled:bg-page"
                         />
@@ -617,7 +711,38 @@ export function POS() {
 
             <SummaryRow label="Subtotal" value={totals.subtotal} />
             <SummaryRow label={`GST Total${uniformTaxPercent ? ` (${uniformTaxPercent}%)` : ''}`} value={totals.cgst + totals.sgst + totals.cessAmount} />
-            <SummaryRow label="Discount" value={totals.discountAmount} />
+            {canDiscount && (
+              <div className="flex items-center justify-between py-1 text-sm text-ink-muted">
+                <span className="flex items-center gap-1.5 font-medium">
+                  Discount
+                  <div className="flex overflow-hidden rounded border border-border-soft text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setBillDiscountMode('amount')}
+                      className={`px-1.5 py-0.5 font-medium ${billDiscountMode === 'amount' ? 'bg-gold text-white' : 'bg-white text-ink-muted'}`}
+                    >
+                      Rs.
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBillDiscountMode('percent')}
+                      className={`px-1.5 py-0.5 font-medium ${billDiscountMode === 'percent' ? 'bg-gold text-white' : 'bg-white text-ink-muted'}`}
+                    >
+                      %
+                    </button>
+                  </div>
+                </span>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  placeholder="0"
+                  value={billDiscount}
+                  onChange={(e) => setBillDiscount(e.target.value)}
+                  className="w-20 rounded border border-border-soft px-2 py-0.5 text-right font-semibold text-ink"
+                />
+              </div>
+            )}
             <SummaryRow label="Round off" value={totals.roundOff} />
 
             <div className="mt-2 flex items-center justify-between rounded-lg bg-highlight px-3 py-2.5">
@@ -657,6 +782,11 @@ export function POS() {
           payments={payments}
           setPayments={setPayments}
           hasCustomer={!!customerId}
+          canDiscount={canDiscount}
+          billDiscount={billDiscount}
+          setBillDiscount={setBillDiscount}
+          billDiscountMode={billDiscountMode}
+          setBillDiscountMode={setBillDiscountMode}
           onBack={() => setShowPaymentModal(false)}
           onPay={() => completeMutation.mutate()}
           isPending={completeMutation.isPending}
@@ -675,7 +805,25 @@ export function POS() {
   );
 }
 
-function PaymentModal({ totals, customerName, itemCount, splitMode, setSplitMode, payments, setPayments, hasCustomer, onBack, onPay, isPending, error }) {
+function PaymentModal({
+  totals,
+  customerName,
+  itemCount,
+  splitMode,
+  setSplitMode,
+  payments,
+  setPayments,
+  hasCustomer,
+  canDiscount,
+  billDiscount,
+  setBillDiscount,
+  billDiscountMode,
+  setBillDiscountMode,
+  onBack,
+  onPay,
+  isPending,
+  error,
+}) {
   const grandTotal = totals.grandTotal;
   const paymentsTotal = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
   const remaining = Math.round((grandTotal - paymentsTotal) * 100) / 100;
@@ -723,6 +871,39 @@ function PaymentModal({ totals, customerName, itemCount, splitMode, setSplitMode
           <div className="text-lg font-semibold text-ink">Payment</div>
           <div className="text-xs text-ink-muted">{customerName || 'Walk-in Customer'} · {itemCount} item(s)</div>
         </div>
+
+        {canDiscount && (
+          <div className="mb-3 rounded-lg border border-border-soft bg-page p-2.5">
+            <div className="mb-1 flex items-center justify-between text-xs font-semibold text-ink-muted">
+              <span>Bill Discount</span>
+              <div className="flex overflow-hidden rounded border border-border-soft text-xs">
+                <button
+                  type="button"
+                  onClick={() => setBillDiscountMode('amount')}
+                  className={`px-2 py-0.5 font-medium ${billDiscountMode === 'amount' ? 'bg-gold text-white' : 'bg-white text-ink-muted'}`}
+                >
+                  Rs.
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBillDiscountMode('percent')}
+                  className={`px-2 py-0.5 font-medium ${billDiscountMode === 'percent' ? 'bg-gold text-white' : 'bg-white text-ink-muted'}`}
+                >
+                  %
+                </button>
+              </div>
+            </div>
+            <input
+              type="number"
+              min="0"
+              step="any"
+              placeholder="Enter discount amount..."
+              value={billDiscount}
+              onChange={(e) => setBillDiscount(e.target.value)}
+              className="input font-semibold text-ink"
+            />
+          </div>
+        )}
 
         <div className="mb-4 rounded-lg bg-highlight px-3 py-3 text-center">
           <div className="text-xs font-medium uppercase tracking-wide text-ink-muted">Total Payable</div>
@@ -782,6 +963,14 @@ function PaymentModal({ totals, customerName, itemCount, splitMode, setSplitMode
           </div>
         )}
 
+        <div className="mb-1 flex justify-between text-sm text-ink-muted">
+          <span>Subtotal</span><span>Rs. {totals.subtotal.toFixed(2)}</span>
+        </div>
+        {totals.discountAmount > 0 && (
+          <div className="mb-1 flex justify-between text-sm text-ink-muted">
+            <span>Discount</span><span className="text-danger font-medium">- Rs. {totals.discountAmount.toFixed(2)}</span>
+          </div>
+        )}
         <div className="mb-1 flex justify-between text-sm text-ink-muted">
           <span>Total Bill</span><span>Rs. {grandTotal.toFixed(2)}</span>
         </div>

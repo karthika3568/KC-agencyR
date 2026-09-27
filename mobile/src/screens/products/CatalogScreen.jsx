@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { categoriesApi, brandsApi, stockUnitsApi, taxCodesApi } from '../../api/catalog';
+import { categoriesApi, brandsApi, stockUnitsApi, taxCodesApi, productLinesApi } from '../../api/catalog';
 import { SegmentedTabs } from '../../components/SegmentedTabs';
 import { EntityListScreen } from '../../components/EntityListScreen';
 import { ProductsScreen } from './ProductsScreen';
@@ -19,6 +19,8 @@ export function CatalogScreen() {
           { key: 'categories', label: 'Categories' },
           { key: 'brands', label: 'Brands' },
           { key: 'units', label: 'Units' },
+          { key: 'product-lines', label: 'Product Lines' },
+          { key: 'tax-codes', label: 'Tax Codes' },
         ]}
         active={tab}
         onChange={setTab}
@@ -44,6 +46,49 @@ export function CatalogScreen() {
             queryKey="stock-units" api={stockUnitsApi} title="Unit" canManage={canManage}
             fields={[{ name: 'name', label: 'Unit name' }, { name: 'short_code', label: 'Short code' }]}
             renderTitle={(r) => `${r.name} (${r.short_code})`}
+          />
+        )}
+        {tab === 'product-lines' && (
+          <EntityListScreen
+            queryKey="product-lines" api={productLinesApi} title="Product Line" canManage={canManage}
+            fields={[
+              { name: 'name', label: 'Line Name' },
+              { name: 'code', label: 'Line Code' },
+              { name: 'is_active', label: 'Status', type: 'switch', default: 1 },
+            ]}
+            transformSubmit={(f) => ({ name: (f.name || '').trim(), code: (f.code || '').trim(), is_active: f.is_active ? 1 : 0 })}
+            renderTitle={(r) => r.name}
+            renderSubtitle={(r) => `${r.code || 'No code'}${Number(r.is_active) === 0 ? ' · Inactive' : ''}`}
+          />
+        )}
+        {tab === 'tax-codes' && (
+          <EntityListScreen
+            queryKey="tax-codes" api={taxCodesApi} title="Tax Code" canManage={canManage}
+            fields={[
+              { name: 'code', label: 'Code' },
+              { name: 'name', label: 'Name' },
+              { name: 'gst_percent', label: 'GST %', keyboardType: 'numeric' },
+              { name: 'cgst_percent', label: 'CGST % (blank = auto GST/2)', keyboardType: 'numeric' },
+              { name: 'sgst_percent', label: 'SGST % (blank = auto GST/2)', keyboardType: 'numeric' },
+              { name: 'igst_percent', label: 'IGST % (blank = auto = GST)', keyboardType: 'numeric' },
+              { name: 'cess_percent', label: 'Cess % (blank = 0)', keyboardType: 'numeric' },
+              { name: 'is_active', label: 'Status', type: 'switch', default: 1 },
+            ]}
+            transformSubmit={(f) => {
+              const gst = Number(f.gst_percent || 0);
+              return {
+                code: (f.code || '').trim(),
+                name: (f.name || '').trim(),
+                gst_percent: gst,
+                cgst_percent: f.cgst_percent !== '' ? Number(f.cgst_percent) : gst / 2,
+                sgst_percent: f.sgst_percent !== '' ? Number(f.sgst_percent) : gst / 2,
+                igst_percent: f.igst_percent !== '' ? Number(f.igst_percent) : gst,
+                cess_percent: f.cess_percent !== '' ? Number(f.cess_percent) : 0,
+                is_active: f.is_active ? 1 : 0,
+              };
+            }}
+            renderTitle={(r) => `${r.code} · ${r.name}`}
+            renderSubtitle={(r) => `GST ${r.gst_percent}%${Number(r.is_active) === 0 ? ' · Inactive' : ''}`}
           />
         )}
       </View>

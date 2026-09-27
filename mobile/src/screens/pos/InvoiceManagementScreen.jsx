@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, FlatList, Alert, StyleSheet, Share } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, FlatList, Alert, StyleSheet } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { invoicesApi } from '../../api/invoices';
 import { itemsApi } from '../../api/catalog';
@@ -7,51 +7,12 @@ import { customersApi } from '../../api/parties';
 import { friendlyErrorMessage } from '../../api/client';
 import { FormModal, formStyles } from '../../components/FormModal';
 import { SelectField } from '../../components/SelectField';
+import { Icon } from '../../components/Icon';
+import { ThermalReceiptModal } from './ThermalReceiptModal';
 import { usePermission } from '../../hooks/useAuth';
 import { colors } from '../../theme/colors';
 
 const STATUS_COLOR = { paid: colors.success, partial: colors.warning, credit: colors.gold, cancelled: colors.danger, returned: colors.danger };
-
-function buildShareText(inv) {
-  const lines = inv.items.map((l) => `${l.item_name_snapshot}  x${l.qty}  @${l.rate}  = ${l.line_total}`).join('\n');
-  return `AJ AGENCY\nInvoice ${inv.invoice_no || `#${inv.id}`}\nDate: ${inv.invoice_date}\nCustomer: ${inv.customer_name || 'Walk-in'}\n\n${lines}\n\nGrand Total: Rs. ${inv.grand_total}\nPayment: ${inv.payment_status}`;
-}
-
-function ViewModal({ id, onClose }) {
-  const { data } = useQuery({ queryKey: ['invoice', id], queryFn: () => invoicesApi.get(id) });
-  if (!data) return null;
-  return (
-    <FormModal
-      visible title={data.invoice_no || `Held #${data.id}`} onClose={onClose}
-      footer={
-        <>
-          <TouchableOpacity style={formStyles.secondaryBtn} onPress={onClose}><Text style={formStyles.secondaryBtnText}>Close</Text></TouchableOpacity>
-          <TouchableOpacity style={formStyles.primaryBtn} onPress={() => Share.share({ message: buildShareText(data) })}>
-            <Text style={formStyles.primaryBtnText}>Share / Print</Text>
-          </TouchableOpacity>
-        </>
-      }
-    >
-      <Text style={styles.meta}>{data.customer_name || 'Walk-in'} · {data.invoice_date} · Billed by {data.employee_name}</Text>
-      {data.items.map((l) => (
-        <View key={l.id} style={styles.lineRow}>
-          <Text style={styles.lineName} numberOfLines={1}>{l.item_name_snapshot}</Text>
-          <Text style={styles.lineQty}>{l.qty} {l.unit_code}</Text>
-          <Text style={styles.lineTotal}>Rs. {l.line_total}</Text>
-        </View>
-      ))}
-      <View style={styles.grandRow}>
-        <Text style={styles.grandLabel}>Grand Total</Text>
-        <Text style={styles.grandValue}>Rs. {data.grand_total}</Text>
-      </View>
-      {data.status === 'cancelled' && (
-        <View style={styles.cancelledBox}>
-          <Text style={styles.cancelledText}>Cancelled by {data.cancelled_by_name || 'user'} on {data.cancelled_at}{data.cancel_reason ? ` — ${data.cancel_reason}` : ''}</Text>
-        </View>
-      )}
-    </FormModal>
-  );
-}
 
 function EditModal({ id, onClose }) {
   const queryClient = useQueryClient();
@@ -166,7 +127,7 @@ export function InvoiceManagementScreen() {
   const canEdit = usePermission('pos.edit_completed_invoice');
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
-  const [viewingId, setViewingId] = useState(null);
+  const [thermalInvoice, setThermalInvoice] = useState(null);
   const [editingId, setEditingId] = useState(null);
 
   const listQuery = useQuery({ queryKey: ['invoices'], queryFn: () => invoicesApi.list() });
@@ -182,6 +143,15 @@ export function InvoiceManagementScreen() {
     if (!q) return rows;
     return rows.filter((r) => (r.invoice_no || '').toLowerCase().includes(q) || (r.customer_name || '').toLowerCase().includes(q));
   }, [rows, search]);
+
+  const openViewThermal = async (inv) => {
+    try {
+      const full = await invoicesApi.get(inv.id);
+      setThermalInvoice(full);
+    } catch (_e) {
+      setThermalInvoice(inv);
+    }
+  };
 
   const confirmCancel = (inv) => {
     Alert.prompt
@@ -200,27 +170,45 @@ export function InvoiceManagementScreen() {
         contentContainerStyle={{ padding: 12 }}
         ListEmptyComponent={<Text style={styles.empty}>No invoices found.</Text>}
         renderItem={({ item: r }) => (
-          <TouchableOpacity style={styles.card} onPress={() => setViewingId(r.id)}>
+          <View style={styles.card}>
             <View style={styles.cardHeader}>
               <Text style={styles.cardTitle}>{r.invoice_no || `Held #${r.id}`}</Text>
               <Text style={[styles.status, { color: STATUS_COLOR[r.payment_status] || colors.inkMuted }]}>{r.payment_status || r.status}</Text>
             </View>
             <Text style={styles.cardMeta}>{r.customer_name || 'Walk-in'} · {r.invoice_date}</Text>
             <Text style={styles.cardTotal}>Rs. {r.grand_total}</Text>
-            {r.status === 'completed' && (
-              <View style={styles.actionsRow}>
-                {canEdit && (
-                  <TouchableOpacity onPress={() => setEditingId(r.id)}><Text style={styles.actionLink}>Edit</Text></TouchableOpacity>
-                )}
-                {canCancel && (
-                  <TouchableOpacity onPress={() => confirmCancel(r)}><Text style={styles.actionLinkDanger}>Cancel</Text></TouchableOpacity>
-                )}
-              </View>
-            )}
-          </TouchableOpacity>
+
+            {/* Explicit CRUD Action Buttons: View, Edit, Cancel */}
+            <View style={styles.actionsRow}>
+              <TouchableOpacity onPress={() => openViewThermal(r)} style={styles.actionBtnView}>
+                <Icon name="view" size={14} color={colors.ink} style={{ marginRight: 4 }} />
+                <Text style={styles.actionBtnViewText}>View / Print</Text>
+              </TouchableOpacity>
+
+              {r.status === 'completed' && canEdit && (
+                <TouchableOpacity onPress={() => setEditingId(r.id)} style={styles.actionBtnEdit}>
+                  <Icon name="edit" size={14} color={colors.gold} style={{ marginRight: 4 }} />
+                  <Text style={styles.actionBtnEditText}>Edit</Text>
+                </TouchableOpacity>
+              )}
+
+              {r.status === 'completed' && canCancel && (
+                <TouchableOpacity onPress={() => confirmCancel(r)} style={styles.actionBtnDanger}>
+                  <Icon name="delete" size={14} color={colors.danger} style={{ marginRight: 4 }} />
+                  <Text style={styles.actionBtnDangerText}>Cancel</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
         )}
       />
-      {viewingId && <ViewModal id={viewingId} onClose={() => setViewingId(null)} />}
+
+      <ThermalReceiptModal
+        visible={!!thermalInvoice}
+        invoice={thermalInvoice}
+        onClose={() => setThermalInvoice(null)}
+      />
+
       {editingId && <EditModal id={editingId} onClose={() => setEditingId(null)} />}
     </View>
   );
@@ -236,19 +224,13 @@ const styles = StyleSheet.create({
   status: { fontWeight: '700', fontSize: 11, textTransform: 'uppercase' },
   cardMeta: { color: colors.inkMuted, fontSize: 12, marginTop: 4 },
   cardTotal: { fontWeight: '700', color: colors.ink, marginTop: 6 },
-  actionsRow: { flexDirection: 'row', gap: 16, marginTop: 8 },
-  actionLink: { color: colors.gold, fontWeight: '700', fontSize: 12 },
-  actionLinkDanger: { color: colors.danger, fontWeight: '700', fontSize: 12 },
-  meta: { color: colors.inkMuted, fontSize: 12, marginBottom: 10 },
-  lineRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.borderSoft },
-  lineName: { flex: 1, color: colors.ink, fontSize: 13 },
-  lineQty: { width: 60, textAlign: 'center', color: colors.inkMuted, fontSize: 12 },
-  lineTotal: { width: 70, textAlign: 'right', fontWeight: '600', color: colors.ink, fontSize: 13 },
-  grandRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12, backgroundColor: colors.highlight, borderRadius: 8, padding: 10 },
-  grandLabel: { fontWeight: '700', color: colors.ink },
-  grandValue: { fontWeight: '700', color: colors.ink },
-  cancelledBox: { marginTop: 12, backgroundColor: '#FEF2F2', borderRadius: 8, padding: 10 },
-  cancelledText: { color: colors.danger, fontSize: 12 },
+  actionsRow: { flexDirection: 'row', gap: 8, marginTop: 12, borderTopWidth: 1, borderTopColor: colors.borderSoft, paddingTop: 10 },
+  actionBtnView: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, backgroundColor: colors.page, borderWidth: 1, borderColor: colors.borderSoft },
+  actionBtnViewText: { color: colors.ink, fontWeight: '600', fontSize: 12 },
+  actionBtnEdit: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, backgroundColor: '#FDF8EC', borderWidth: 1, borderColor: colors.gold },
+  actionBtnEditText: { color: colors.gold, fontWeight: '700', fontSize: 12 },
+  actionBtnDanger: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: colors.danger },
+  actionBtnDangerText: { color: colors.danger, fontWeight: '700', fontSize: 12 },
   warnText: { fontSize: 12, color: colors.inkMuted, marginBottom: 8 },
   editLine: { borderWidth: 1, borderColor: colors.borderSoft, borderRadius: 10, padding: 10, marginTop: 10, backgroundColor: colors.card },
   editLineName: { fontWeight: '700', color: colors.ink, marginBottom: 6 },

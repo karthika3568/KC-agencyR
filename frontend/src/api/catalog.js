@@ -63,6 +63,13 @@ export const itemsApi = {
   },
 };
 
+// Retail / Wholesale price management (Phase 14) — `type` is 'retail' or
+// 'wholesale', matching the invoice-level price_type values one-to-one.
+export const pricingApi = {
+  list: async (type, search = '') => (await apiClient.get('/items/pricing', { params: { type, search } })).data,
+  bulkSave: async (type, items) => (await apiClient.put('/items/pricing', { pricing_type: type, items })).data,
+};
+
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

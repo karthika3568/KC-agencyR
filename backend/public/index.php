@@ -124,6 +124,8 @@ $router->get('/api/items/export', fn () => $itemController->exportExcel());
 $router->get('/api/items/import/template', fn () => $itemController->importTemplate());
 $router->post('/api/items/import/preview', fn () => $itemController->importPreview());
 $router->post('/api/items/import/commit', fn () => $itemController->importCommit());
+$router->get('/api/items/pricing', fn () => $itemController->pricingList());
+$router->put('/api/items/pricing', fn () => $itemController->pricingBulkUpdate());
 $router->get('/api/items', fn () => $itemController->index());
 $router->post('/api/items', fn () => $itemController->store());
 $router->get('/api/items/{id}', fn ($id) => $itemController->show($id));
@@ -235,6 +237,7 @@ $router->post('/api/invoices/{id}/complete', fn ($id) => $invoiceController->com
 $router->put('/api/invoices/{id}/edit', fn ($id) => $invoiceController->editCompleted($id));
 $router->post('/api/invoices/{id}/cancel', fn ($id) => $invoiceController->cancel($id));
 $router->get('/api/invoices/{id}/print', fn ($id) => $invoiceController->print($id));
+$router->get('/api/invoices/{id}/returnable-items', fn ($id) => $invoiceController->returnableItems($id));
 
 // ---------------------------------------------------------------
 // Purchasing & Inventory Ops (Phase 4)
@@ -263,6 +266,7 @@ $purchases = new PurchaseController($pdo);
 $router->get('/api/purchases', fn () => $purchases->index());
 $router->post('/api/purchases', fn () => $purchases->store());
 $router->get('/api/purchases/{id}', fn ($id) => $purchases->show($id));
+$router->get('/api/purchases/{id}/returnable-items', fn ($id) => $purchases->returnableItems($id));
 $router->put('/api/purchases/{id}', fn ($id) => $purchases->update($id));
 $router->delete('/api/purchases/{id}', fn ($id) => $purchases->destroy($id));
 
@@ -372,6 +376,13 @@ $router->get('/api/reports/item-wise-sales', fn () => $reports->itemWiseSales())
 $router->get('/api/reports/credit-outstanding', fn () => $reports->creditOutstanding());
 $router->get('/api/reports/expense-income', fn () => $reports->expenseIncome());
 $router->get('/api/reports/profit', fn () => $reports->profitReport());
+$router->get('/api/reports/branch-wise-sales', fn () => $reports->branchWiseSales());
+$router->get('/api/reports/route-wise-sales', fn () => $reports->routeWiseSales());
+$router->get('/api/reports/customer-wise-sales', fn () => $reports->customerWiseSales());
+$router->get('/api/reports/supplier-wise-sales', fn () => $reports->supplierWiseSales());
+$router->get('/api/reports/brand-wise-sales', fn () => $reports->brandWiseSales());
+$router->get('/api/reports/category-wise-sales', fn () => $reports->categoryWiseSales());
+$router->get('/api/reports/brand-category-wise-sales', fn () => $reports->brandCategoryWiseSales());
 
 $branches = new BranchController($pdo);
 $router->get('/api/branches', fn () => $branches->index());

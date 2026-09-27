@@ -1,22 +1,109 @@
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { colors } from '../theme/colors';
 
+/**
+ * Equal-width tabs fill the bar as before for 2-4 tabs.
+ * Beyond 4 tabs (e.g. Catalog's 6 sub-tabs), it switches to a horizontally-scrolling row.
+ * Uses strict maxHeight and flex-none controls to prevent horizontal ScrollView from stretching vertically.
+ */
 export function SegmentedTabs({ tabs, active, onChange }) {
-  return (
-    <View style={styles.wrap}>
-      {tabs.map((t) => (
-        <TouchableOpacity key={t.key} style={[styles.tab, active === t.key && styles.tabActive]} onPress={() => onChange(t.key)}>
-          <Text style={active === t.key ? styles.textActive : styles.text} numberOfLines={1}>{t.label}</Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
+  const scrollable = tabs.length > 4;
+
+  const renderTab = (t) => {
+    const isActive = active === t.key;
+    return (
+      <TouchableOpacity
+        key={t.key}
+        style={[
+          styles.tab,
+          scrollable && styles.tabScrollable,
+          isActive && styles.tabActive,
+        ]}
+        onPress={() => onChange(t.key)}
+        activeOpacity={0.75}
+      >
+        <Text style={isActive ? styles.textActive : styles.text} numberOfLines={1}>
+          {t.label}
+        </Text>
+      </TouchableOpacity>
+    );
+  };
+
+  if (scrollable) {
+    return (
+      <View style={styles.scrollOuter}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.scrollWrap}
+          contentContainerStyle={styles.scrollContent}
+        >
+          {tabs.map(renderTab)}
+        </ScrollView>
+      </View>
+    );
+  }
+
+  return <View style={styles.wrap}>{tabs.map(renderTab)}</View>;
 }
 
 const styles = StyleSheet.create({
-  wrap: { flexDirection: 'row', backgroundColor: colors.page, borderRadius: 10, padding: 4, marginHorizontal: 12, marginTop: 12 },
-  tab: { flex: 1, paddingVertical: 9, borderRadius: 8, alignItems: 'center' },
-  tabActive: { backgroundColor: colors.card },
-  text: { color: colors.inkMuted, fontSize: 12, fontWeight: '600' },
-  textActive: { color: colors.ink, fontSize: 12, fontWeight: '700' },
+  scrollOuter: {
+    height: 42,
+    marginHorizontal: 12,
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  scrollWrap: {
+    backgroundColor: '#e2e8f0',
+    borderRadius: 10,
+    padding: 3,
+    height: 42,
+  },
+  scrollContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  wrap: {
+    flexDirection: 'row',
+    backgroundColor: '#e2e8f0',
+    borderRadius: 10,
+    padding: 3,
+    marginHorizontal: 12,
+    marginTop: 10,
+    marginBottom: 4,
+    height: 42,
+    alignItems: 'center',
+  },
+  tab: {
+    flex: 1,
+    height: 36,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabScrollable: {
+    flex: 0,
+    paddingHorizontal: 16,
+    height: 36,
+  },
+  tabActive: {
+    backgroundColor: colors.card,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  text: {
+    color: '#64748b',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  textActive: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: '700',
+  },
 });
