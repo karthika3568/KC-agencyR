@@ -67,3 +67,12 @@ Thumbs.db
 .vscode/
 .idea/
 .claude/
+
+# =====================================================================
+# Deployment scripts & scratch (never commit secrets)
+# =====================================================================
+deploy.py
+deploy_all.py
+scratch/
+db_backups/
+

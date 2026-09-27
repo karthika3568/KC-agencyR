@@ -2,8 +2,11 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/../vendor/autoload.php';
-require_once __DIR__ . '/../config/database.php';
+$autoload = file_exists(__DIR__ . '/../vendor/autoload.php') ? __DIR__ . '/../vendor/autoload.php' : __DIR__ . '/vendor/autoload.php';
+require_once $autoload;
+
+$dbConfig = file_exists(__DIR__ . '/../config/database.php') ? __DIR__ . '/../config/database.php' : __DIR__ . '/config/database.php';
+require_once $dbConfig;
 
 use App\Controllers\AuthController;
 use App\Controllers\BranchController;
@@ -42,6 +45,9 @@ $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?? '/';
 $scriptDir = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'])), '/');
 if ($scriptDir !== '' && str_starts_with($uri, $scriptDir)) {
     $uri = substr($uri, strlen($scriptDir)) ?: '/';
+}
+if (!str_starts_with($uri, '/api') && $uri !== '/') {
+    $uri = '/api' . (str_starts_with($uri, '/') ? $uri : '/' . $uri);
 }
 
 $pdo = get_pdo();
@@ -401,7 +407,8 @@ $router->put('/api/settings/sequences/{id}', fn ($id) => $settings->updateSequen
 try {
     $router->dispatch($method, $uri);
 } catch (\Throwable $e) {
-    $config = require __DIR__ . '/../config/config.php';
+    $cfgPath = file_exists(__DIR__ . '/../config/config.php') ? __DIR__ . '/../config/config.php' : __DIR__ . '/config/config.php';
+    $config = require $cfgPath;
     Response::json([
         'error' => 'Server error',
         'detail' => $config['app']['debug'] ? $e->getMessage() : null,
