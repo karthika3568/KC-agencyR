@@ -15,7 +15,129 @@ const STATUS_VARIANT = {
   paid: 'success', partial: 'warning', credit: 'gold', cancelled: 'danger', returned: 'danger',
 };
 
+const GST_STATUS_VARIANT = {
+  not_generated: 'neutral', generated: 'success', failed: 'danger', cancelled: 'danger',
+};
+const GST_STATUS_LABEL = {
+  not_generated: 'Not Generated', generated: 'Generated', failed: 'Failed', cancelled: 'Cancelled',
+};
+
+/**
+ * E-Invoice (IRN) / E-Way Bill panel (section 10) — every action here calls
+ * the real backend endpoints in App\Services\GstEInvoiceService. When no
+ * GSP (GST Suvidha Provider) account is configured (GST_API_ENABLED=false
+ * in backend/.env, the shipped default), Generate always comes back with
+ * a real "not configured" error naming the exact env vars to set — never a
+ * fake IRN/EWB number. This panel just displays whatever the backend
+ * actually returns.
+ */
+function GstFilingPanel({ invoice, canManage }) {
+  const queryClient = useQueryClient();
+  const [transportOpen, setTransportOpen] = useState(false);
+  const [transporterName, setTransporterName] = useState(invoice.transporter_name || '');
+  const [transporterGstin, setTransporterGstin] = useState(invoice.transporter_gstin || '');
+  const [distance, setDistance] = useState(invoice.transport_distance_km || '');
+  const [vehicleNo, setVehicleNo] = useState(invoice.vehicle_no || '');
+  const [actionError, setActionError] = useState('');
+  const [busy, setBusy] = useState('');
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['invoice', invoice.id] });
+
+  const runAction = async (key, fn) => {
+    setActionError('');
+    setBusy(key);
+    try {
+      await fn();
+      invalidate();
+    } catch (err) {
+      setActionError(err?.response?.data?.result?.error || err?.response?.data?.error || err?.message || 'Request failed.');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const saveTransport = () => runAction('transport', async () => {
+    await invoicesApi.updateTransport(invoice.id, {
+      transporter_name: transporterName || null,
+      transporter_gstin: transporterGstin || null,
+      transport_distance_km: distance ? Number(distance) : null,
+      vehicle_no: vehicleNo || null,
+    });
+    setTransportOpen(false);
+  });
+
+  return (
+    <div className="mb-3 rounded-lg border border-border-soft p-3">
+      <div className="mb-2 text-xs font-semibold uppercase text-ink-muted">GST Filing</div>
+
+      <div className="mb-2 flex items-center justify-between">
+        <div className="text-sm text-ink">
+          E-Invoice (IRN) <Badge variant={GST_STATUS_VARIANT[invoice.einvoice_status]}>{GST_STATUS_LABEL[invoice.einvoice_status]}</Badge>
+        </div>
+        {canManage && (
+          invoice.einvoice_status === 'generated' ? (
+            <Button size="sm" variant="danger" disabled={busy === 'einvoice_cancel'} onClick={() => runAction('einvoice_cancel', () => invoicesApi.cancelEInvoice(invoice.id, 'Cancelled from Invoice Management'))}>
+              {busy === 'einvoice_cancel' ? 'Cancelling…' : 'Cancel E-Invoice'}
+            </Button>
+          ) : (
+            <Button size="sm" disabled={busy === 'einvoice'} onClick={() => runAction('einvoice', () => invoicesApi.generateEInvoice(invoice.id))}>
+              {busy === 'einvoice' ? 'Generating…' : 'Generate E-Invoice'}
+            </Button>
+          )
+        )}
+      </div>
+      {invoice.irn && <div className="mb-1 text-xs text-ink-muted">IRN: {invoice.irn} · Ack# {invoice.ack_no} · {invoice.ack_date}</div>}
+      {invoice.einvoice_status === 'failed' && invoice.einvoice_error && (
+        <div className="mb-2 rounded bg-red-50 px-2 py-1 text-xs text-danger">{invoice.einvoice_error}</div>
+      )}
+
+      <div className="mb-2 mt-3 flex items-center justify-between">
+        <div className="text-sm text-ink">
+          E-Way Bill <Badge variant={GST_STATUS_VARIANT[invoice.eway_bill_status]}>{GST_STATUS_LABEL[invoice.eway_bill_status]}</Badge>
+        </div>
+        {canManage && (
+          <div className="flex gap-1.5">
+            <Button size="sm" variant="secondary" onClick={() => setTransportOpen((v) => !v)}>Transport Details</Button>
+            {invoice.eway_bill_status === 'generated' ? (
+              <Button size="sm" variant="danger" disabled={busy === 'eway_cancel'} onClick={() => runAction('eway_cancel', () => invoicesApi.cancelEWayBill(invoice.id, 'Cancelled from Invoice Management'))}>
+                {busy === 'eway_cancel' ? 'Cancelling…' : 'Cancel'}
+              </Button>
+            ) : (
+              <Button size="sm" disabled={busy === 'eway'} onClick={() => runAction('eway', () => invoicesApi.generateEWayBill(invoice.id))}>
+                {busy === 'eway' ? 'Generating…' : 'Generate E-Way Bill'}
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+      {invoice.eway_bill_no && (
+        <div className="mb-1 text-xs text-ink-muted">
+          EWB# {invoice.eway_bill_no} · Valid until {invoice.eway_bill_valid_until || '-'}
+        </div>
+      )}
+      {invoice.eway_bill_status === 'failed' && invoice.eway_bill_error && (
+        <div className="mb-2 rounded bg-red-50 px-2 py-1 text-xs text-danger">{invoice.eway_bill_error}</div>
+      )}
+
+      {transportOpen && (
+        <div className="mt-2 grid grid-cols-2 gap-2 rounded bg-page p-2">
+          <input className="input" placeholder="Transporter name" value={transporterName} onChange={(e) => setTransporterName(e.target.value)} />
+          <input className="input" placeholder="Transporter GSTIN" value={transporterGstin} onChange={(e) => setTransporterGstin(e.target.value)} />
+          <input className="input" type="number" placeholder="Distance (km)" value={distance} onChange={(e) => setDistance(e.target.value)} />
+          <input className="input" placeholder="Vehicle No" value={vehicleNo} onChange={(e) => setVehicleNo(e.target.value)} />
+          <div className="col-span-2 flex justify-end">
+            <Button size="sm" disabled={busy === 'transport'} onClick={saveTransport}>{busy === 'transport' ? 'Saving…' : 'Save Transport Details'}</Button>
+          </div>
+        </div>
+      )}
+
+      {actionError && <div className="mt-2 rounded bg-red-50 px-2 py-1 text-xs text-danger">{actionError}</div>}
+    </div>
+  );
+}
+
 function ViewModal({ id, onClose }) {
+  const canManageGst = usePermission('pos.manage_gst_filing');
   const { data } = useQuery({ queryKey: ['invoice', id], queryFn: () => invoicesApi.get(id) });
   if (!data) return null;
   return (
@@ -41,12 +163,15 @@ function ViewModal({ id, onClose }) {
                 <td className="py-1">{line.item_name_snapshot}</td>
                 <td className="py-1">{line.qty} {line.unit_code}</td>
                 <td className="py-1">{line.rate}</td>
-                <td className="py-1">{line.line_total}</td>
+                <td className="py-1">{line.net_amount ?? line.line_total}</td>
               </tr>
             ))}
           </tbody>
         </table>
         <div className="mb-3 flex justify-end text-sm font-semibold text-ink">Grand Total: Rs. {data.grand_total}</div>
+        {data.bill_type === 'gst' && data.status === 'completed' && (
+          <GstFilingPanel invoice={data} canManage={canManageGst} />
+        )}
         {data.status === 'cancelled' && (
           <div className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-danger">
             Cancelled by {data.cancelled_by_name || 'user'} on {data.cancelled_at}{data.cancel_reason ? ` — ${data.cancel_reason}` : ''}

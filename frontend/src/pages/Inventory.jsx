@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Package, Search, Plus, Trash2, CheckCircle2, AlertTriangle, Truck, SlidersHorizontal, X } from 'lucide-react';
+import { Package, Search, Plus, Trash2, CheckCircle2, AlertTriangle, Truck, SlidersHorizontal, X, FileSpreadsheet, FileDown } from 'lucide-react';
 import { itemsApi } from '../api/catalog';
 import { usersApi } from '../api/users';
-import { stockAdjustmentsApi, stockHubApi, vanStockApi } from '../api/purchasing';
+import { stockAdjustmentsApi, stockHubApi, vanStockApi, vanStockIssuesApi } from '../api/purchasing';
 import { Tabs } from '../components/Tabs';
 import { usePermission } from '../hooks/usePermission';
 import { Button } from '../components/Button.jsx';
+import { downloadReportPdf, downloadVanIssuePdf } from '../utils/reportPdf';
 
 function StockHubPanel() {
   const [ownerType, setOwnerType] = useState('');
@@ -28,6 +29,44 @@ function StockHubPanel() {
       r.owner_name?.toLowerCase().includes(searchQuery.toLowerCase())
     );
   });
+
+  const [exportError, setExportError] = useState('');
+  const [exportingExcel, setExportingExcel] = useState(false);
+
+  // Excel export goes server-side with the same owner_type filter (a fresh,
+  // authoritative re-fetch); PDF is built client-side from filteredRows so
+  // it also honors the live search box, which the server-side export can't
+  // see. Both only ever include what's currently in view, never a full dump.
+  const handleExportExcel = async () => {
+    setExportError('');
+    setExportingExcel(true);
+    try {
+      await stockHubApi.downloadExport(ownerType ? { owner_type: ownerType } : {});
+    } catch (err) {
+      setExportError(err?.response?.data?.error || err?.message || 'Unable to generate the Excel file. Please try again.');
+    } finally {
+      setExportingExcel(false);
+    }
+  };
+
+  const handleExportPdf = () => {
+    setExportError('');
+    try {
+      downloadReportPdf({
+        title: 'Van / Salesman Stock',
+        filtersText: ownerType ? `Owner type: ${ownerType}${searchQuery ? ` · Search: "${searchQuery}"` : ''}` : (searchQuery ? `Search: "${searchQuery}"` : 'All locations/owners'),
+        columns: {
+          item_name: 'Item', item_code: 'SKU', barcode: 'Barcode', unit_code: 'Unit', quantity_on_hand: 'Quantity',
+          cost_price: 'Cost Price', selling_price: 'Selling Price', stock_value: 'Stock Value',
+          owner_name: 'Van/Salesman', branch_name: 'Branch',
+        },
+        rows: filteredRows,
+        filename: `van_salesman_stock_${new Date().toISOString().slice(0, 10)}.pdf`,
+      });
+    } catch (err) {
+      setExportError(err?.message || 'Unable to generate the PDF. Please try again.');
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -87,8 +126,19 @@ function StockHubPanel() {
                 className="input pl-9 w-full text-xs"
               />
             </div>
-            <span className="text-xs text-ink-muted">{filteredRows.length} item(s) in view</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-ink-muted">{filteredRows.length} item(s) in view</span>
+              <button onClick={handleExportExcel} disabled={exportingExcel} className="flex items-center gap-1.5 rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
+                <FileSpreadsheet className="h-3.5 w-3.5" />
+                {exportingExcel ? 'Exporting…' : 'Export Excel'}
+              </button>
+              <button onClick={handleExportPdf} disabled={filteredRows.length === 0} className="flex items-center gap-1.5 rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
+                <FileDown className="h-3.5 w-3.5" />
+                Export PDF
+              </button>
+            </div>
           </div>
+          {exportError && <div className="text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{exportError}</div>}
 
           <div className="card overflow-hidden">
             <div className="px-5 py-4 border-b border-border-soft flex items-center justify-between">
@@ -402,6 +452,9 @@ function VanStockPanel({ canManage }) {
   const [lines, setLines] = useState([{ item_id: '', qty: 1 }]);
   const [formError, setFormError] = useState('');
   const [message, setMessage] = useState('');
+  const [selectedItemIds, setSelectedItemIds] = useState([]);
+  const [exportError, setExportError] = useState('');
+  const [exporting, setExporting] = useState(false);
 
   const usersQuery = useQuery({ queryKey: ['users'], queryFn: usersApi.list });
   const itemsQuery = useQuery({ queryKey: ['items', ''], queryFn: () => itemsApi.list('') });
@@ -410,11 +463,16 @@ function VanStockPanel({ canManage }) {
     queryFn: () => vanStockApi.pending(employeeId),
     enabled: !!employeeId,
   });
+  const issuesQuery = useQuery({
+    queryKey: ['van-issues', employeeId],
+    queryFn: () => vanStockIssuesApi.list(employeeId || undefined),
+  });
 
   const mutation = useMutation({
     mutationFn: (payload) => (mode === 'issue' ? vanStockApi.issue(payload) : vanStockApi.returnStock(payload)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['van-pending', employeeId] });
+      queryClient.invalidateQueries({ queryKey: ['van-issues'] });
       queryClient.invalidateQueries({ queryKey: ['stock-hub'] });
       setLines([{ item_id: '', qty: 1 }]);
       setMessage(mode === 'issue' ? 'Stock issued to salesman successfully!' : 'Van stock return recorded.');
@@ -452,6 +510,166 @@ function VanStockPanel({ canManage }) {
   const users = usersQuery.data || [];
   const items = itemsQuery.data || [];
   const pending = pendingQuery.data || [];
+  const issues = issuesQuery.data || [];
+  const selectedEmployee = users.find((u) => String(u.id) === String(employeeId));
+
+  const handleSelectEmployee = (value) => {
+    setEmployeeId(value);
+    setSelectedItemIds([]); // never carry a selection across salesmen (section 8)
+  };
+
+  const toggleSelectItem = (itemId) => setSelectedItemIds((prev) => (
+    prev.includes(itemId) ? prev.filter((x) => x !== itemId) : [...prev, itemId]
+  ));
+  const toggleSelectAll = () => setSelectedItemIds((prev) => (
+    prev.length === pending.length ? [] : pending.map((p) => p.item_id)
+  ));
+
+  const handleExportExcel = async () => {
+    setExportError('');
+    setExporting(true);
+    try {
+      await vanStockApi.downloadExport(employeeId, selectedItemIds);
+    } catch (err) {
+      setExportError(err?.response?.data?.error || err?.message || 'Unable to generate the Excel file. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportSelectedExcel = async () => {
+    if (selectedItemIds.length === 0) {
+      setExportError('Please select at least one record to export.');
+      return;
+    }
+    await handleExportExcel();
+  };
+
+  const vanStockPdfRows = () => (selectedItemIds.length > 0 ? pending.filter((p) => selectedItemIds.includes(p.item_id)) : pending);
+
+  const handleExportPdf = () => {
+    setExportError('');
+    if (pending.length === 0) {
+      setExportError('No van stock data to export for this salesman.');
+      return;
+    }
+    try {
+      downloadReportPdf({
+        title: 'Van / Salesman Stock Report',
+        filtersText: `Salesman: ${selectedEmployee?.name || employeeId}${selectedItemIds.length > 0 ? ` · ${selectedItemIds.length} row(s) selected` : ''}`,
+        columns: {
+          item_name: 'Item', item_code: 'SKU', barcode: 'Barcode', unit_code: 'Unit',
+          quantity_on_hand: 'On-hand Qty', cost_price: 'Cost Price', selling_price: 'Selling Price', stock_value: 'Stock Value',
+        },
+        rows: vanStockPdfRows(),
+        filename: `Van_Stock_${(selectedEmployee?.name || employeeId).replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`,
+      });
+    } catch (err) {
+      setExportError(err?.message || 'Unable to generate the PDF. Please try again.');
+    }
+  };
+
+  const handlePrint = () => {
+    setExportError('');
+    const rows = vanStockPdfRows();
+    if (rows.length === 0) {
+      setExportError('No van stock data to print for this salesman.');
+      return;
+    }
+    const win = window.open('', '_blank', 'width=800,height=900');
+    if (!win) {
+      setExportError('Could not open the print window — check your browser\'s popup blocker.');
+      return;
+    }
+    const tableRows = rows.map((r) => `
+      <tr>
+        <td>${r.item_name}</td><td>${r.item_code || '-'}</td><td>${r.unit_code || '-'}</td>
+        <td style="text-align:right">${r.quantity_on_hand}</td>
+      </tr>`).join('');
+    win.document.write(`
+      <html><head><title>Van Stock — ${selectedEmployee?.name || ''}</title>
+      <style>
+        body { font-family: Arial, sans-serif; padding: 20px; color: #111; }
+        h1 { font-size: 18px; margin-bottom: 4px; }
+        .meta { color: #555; font-size: 12px; margin-bottom: 16px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #ccc; padding: 6px 8px; font-size: 12px; text-align: left; }
+        th { background: #f1f5f9; }
+      </style></head>
+      <body>
+        <h1>SALESMAN VAN STOCK REPORT</h1>
+        <div class="meta">Salesman: ${selectedEmployee?.name || employeeId}<br/>Date: ${new Date().toLocaleDateString()}</div>
+        <table>
+          <thead><tr><th>Item</th><th>SKU</th><th>Unit</th><th>Qty</th></tr></thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+      </body></html>
+    `);
+    win.document.close();
+    win.focus();
+    win.print();
+  };
+
+  // Issue TRANSACTIONS (section 19-21) — distinct from the item-balance
+  // table above: exporting a selected transaction pulls every item line it
+  // contains, never just one item of it.
+  const [selectedIssueIds, setSelectedIssueIds] = useState([]);
+  const [issueExportError, setIssueExportError] = useState('');
+  const [issueExporting, setIssueExporting] = useState(false);
+
+  const toggleSelectIssue = (id) => setSelectedIssueIds((prev) => (
+    prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+  ));
+  const toggleSelectAllIssues = () => setSelectedIssueIds((prev) => (
+    prev.length === issues.length ? [] : issues.map((i) => i.id)
+  ));
+
+  const handleExportIssuesExcel = async () => {
+    setIssueExportError('');
+    setIssueExporting(true);
+    try {
+      await vanStockIssuesApi.downloadExport(selectedIssueIds.length > 0 ? selectedIssueIds : issues.map((i) => i.id));
+    } catch (err) {
+      setIssueExportError(err?.response?.data?.error || err?.message || 'Unable to generate the Excel file. Please try again.');
+    } finally {
+      setIssueExporting(false);
+    }
+  };
+
+  const handleExportSelectedIssuesExcel = async () => {
+    if (selectedIssueIds.length === 0) {
+      setIssueExportError('Please select at least one issue transaction to export.');
+      return;
+    }
+    await handleExportIssuesExcel();
+  };
+
+  const handleIssuesPdfOrPrint = async (print) => {
+    setIssueExportError('');
+    const ids = selectedIssueIds.length > 0 ? selectedIssueIds : issues.map((i) => i.id);
+    if (ids.length === 0) {
+      setIssueExportError('No issue transactions to export.');
+      return;
+    }
+    setIssueExporting(true);
+    try {
+      const detailRows = await vanStockIssuesApi.detail(ids);
+      if (detailRows.length === 0) {
+        setIssueExportError('No issue transactions to export.');
+        return;
+      }
+      const singleIssueNo = ids.length === 1 ? detailRows[0]?.issue_no : null;
+      downloadVanIssuePdf(
+        detailRows,
+        singleIssueNo ? `${singleIssueNo}.pdf` : `Van_Stock_Issues_${new Date().toISOString().slice(0, 10)}.pdf`,
+        { print }
+      );
+    } catch (err) {
+      setIssueExportError(err?.response?.data?.error || err?.message || 'Unable to generate the PDF. Please try again.');
+    } finally {
+      setIssueExporting(false);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -502,7 +720,7 @@ function VanStockPanel({ canManage }) {
                   <select
                     required
                     value={employeeId}
-                    onChange={(e) => setEmployeeId(e.target.value)}
+                    onChange={(e) => handleSelectEmployee(e.target.value)}
                     className="input w-full"
                   >
                     <option value="">-- Select Salesman --</option>
@@ -578,31 +796,119 @@ function VanStockPanel({ canManage }) {
         {/* Right Column Table */}
         <div className="lg:col-span-7 space-y-4">
           <div className="card overflow-hidden">
-            <div className="px-5 py-4 border-b border-border-soft flex items-center justify-between">
+            <div className="px-5 py-4 border-b border-border-soft flex flex-wrap items-center justify-between gap-2">
               <h3 className="font-semibold text-ink text-sm">Salesman Active Van Stock</h3>
               <span className="text-xs text-ink-muted">
-                {employeeId ? `Salesman #${employeeId}` : 'Select salesman to view live balance'}
+                {selectedEmployee ? `Salesman: ${selectedEmployee.name}` : 'Select salesman to view live balance'}
               </span>
             </div>
+            {employeeId && (
+              <div className="px-5 py-3 border-b border-border-soft flex flex-wrap items-center gap-2 bg-surface-subtle/20">
+                <button onClick={handlePrint} className="rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200">Print</button>
+                <button onClick={handleExportPdf} className="rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200">Download PDF</button>
+                <button onClick={handleExportExcel} disabled={exporting} className="rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
+                  {exporting ? 'Exporting…' : 'Export Excel'}
+                </button>
+                <button onClick={handleExportSelectedExcel} disabled={exporting} className="rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
+                  Export Selected
+                </button>
+                {selectedItemIds.length > 0 && (
+                  <span className="text-xs text-ink-muted">{selectedItemIds.length} selected</span>
+                )}
+              </div>
+            )}
+            {exportError && <div className="mx-5 mt-3 text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{exportError}</div>}
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-border-soft bg-surface-subtle/30 text-ink-muted font-medium">
-                    <th className="px-4 py-3">Item ID</th>
+                    <th className="w-8 px-4 py-3">
+                      {pending.length > 0 && (
+                        <input type="checkbox" checked={selectedItemIds.length === pending.length} onChange={toggleSelectAll} />
+                      )}
+                    </th>
+                    <th className="px-4 py-3">Item</th>
+                    <th className="px-4 py-3">SKU</th>
+                    <th className="px-4 py-3">Unit</th>
                     <th className="px-4 py-3">Salesman On-hand Qty</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border-soft/60">
                   {pending.map((p) => (
                     <tr key={p.item_id} className="hover:bg-surface-subtle/20 transition">
-                      <td className="px-4 py-3 font-mono font-medium text-ink">Item #{p.item_id}</td>
+                      <td className="px-4 py-3">
+                        <input type="checkbox" checked={selectedItemIds.includes(p.item_id)} onChange={() => toggleSelectItem(p.item_id)} />
+                      </td>
+                      <td className="px-4 py-3 font-medium text-ink">{p.item_name}</td>
+                      <td className="px-4 py-3 text-ink-muted">{p.item_code || '-'}</td>
+                      <td className="px-4 py-3 text-ink-muted">{p.unit_code || '-'}</td>
                       <td className="px-4 py-3 font-semibold text-emerald-400">{p.quantity_on_hand}</td>
                     </tr>
                   ))}
                   {(!employeeId || pending.length === 0) && (
                     <tr>
-                      <td colSpan={2} className="px-4 py-8 text-center text-ink-muted text-xs">
+                      <td colSpan={5} className="px-4 py-8 text-center text-ink-muted text-xs">
                         {employeeId ? 'No active van stock assigned to this salesman.' : 'Select a salesman on the left form.'}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="card overflow-hidden">
+            <div className="px-5 py-4 border-b border-border-soft flex flex-wrap items-center justify-between gap-2">
+              <h3 className="font-semibold text-ink text-sm">Issue Transactions</h3>
+              <span className="text-xs text-ink-muted">
+                {selectedEmployee ? `Salesman: ${selectedEmployee.name}` : 'All salesmen'}
+              </span>
+            </div>
+            <div className="px-5 py-3 border-b border-border-soft flex flex-wrap items-center gap-2 bg-surface-subtle/20">
+              <button onClick={() => handleIssuesPdfOrPrint(true)} className="rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200">Print</button>
+              <button onClick={() => handleIssuesPdfOrPrint(false)} className="rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200">Download PDF</button>
+              <button onClick={handleExportIssuesExcel} disabled={issueExporting} className="rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
+                {issueExporting ? 'Exporting…' : 'Export Excel'}
+              </button>
+              <button onClick={handleExportSelectedIssuesExcel} disabled={issueExporting} className="rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
+                Export Selected
+              </button>
+              {selectedIssueIds.length > 0 && <span className="text-xs text-ink-muted">{selectedIssueIds.length} selected</span>}
+            </div>
+            {issueExportError && <div className="mx-5 mt-3 text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{issueExportError}</div>}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-border-soft bg-surface-subtle/30 text-ink-muted font-medium">
+                    <th className="w-8 px-4 py-3">
+                      {issues.length > 0 && (
+                        <input type="checkbox" checked={selectedIssueIds.length === issues.length} onChange={toggleSelectAllIssues} />
+                      )}
+                    </th>
+                    <th className="px-4 py-3">Issue #</th>
+                    <th className="px-4 py-3">Salesman</th>
+                    <th className="px-4 py-3">Date</th>
+                    <th className="px-4 py-3">Items</th>
+                    <th className="px-4 py-3">Total Qty</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border-soft/60">
+                  {issues.map((i) => (
+                    <tr key={i.id} className="hover:bg-surface-subtle/20 transition">
+                      <td className="px-4 py-3">
+                        <input type="checkbox" checked={selectedIssueIds.includes(i.id)} onChange={() => toggleSelectIssue(i.id)} />
+                      </td>
+                      <td className="px-4 py-3 font-mono font-medium text-ink">{i.issue_no}</td>
+                      <td className="px-4 py-3 text-ink">{i.employee_name}</td>
+                      <td className="px-4 py-3 text-ink-muted">{i.issued_at}</td>
+                      <td className="px-4 py-3 text-ink-muted">{i.item_count}</td>
+                      <td className="px-4 py-3 font-semibold text-ink">{i.total_qty}</td>
+                    </tr>
+                  ))}
+                  {issues.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-8 text-center text-ink-muted text-xs">
+                        No issue transactions found.
                       </td>
                     </tr>
                   )}

@@ -8,6 +8,7 @@ import { Tabs } from '../components/Tabs';
 import { Button } from '../components/Button.jsx';
 import { usePermission } from '../hooks/usePermission';
 import { resolveUnitPricing } from '../utils/pricing';
+import { downloadReportPdf, downloadGrnPdf } from '../utils/reportPdf';
 
 function priceGrnLine(line) {
   const qty = Number(line.qty || 0);
@@ -468,6 +469,9 @@ function GrnPanel({ canManage, canEdit, canViewCost, canDelete }) {
   const [editingGrn, setEditingGrn] = useState(undefined);
   const [unitsByItemId, setUnitsByItemId] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [exportError, setExportError] = useState('');
+  const [exporting, setExporting] = useState(false);
 
   const purchasesQuery = useQuery({ queryKey: ['purchases'], queryFn: purchasesApi.list });
   const itemsQuery = useQuery({ queryKey: ['items', ''], queryFn: () => itemsApi.list('') });
@@ -507,6 +511,89 @@ function GrnPanel({ canManage, canEdit, canViewCost, canDelete }) {
     );
   });
 
+  const toggleSelect = (id) => setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  const toggleSelectAll = () => setSelectedIds((prev) => (
+    prev.length === filteredPurchases.length ? [] : filteredPurchases.map((p) => p.id)
+  ));
+
+  // Export always honors the current search filter — "selected" narrows
+  // further to just the checked rows within that filtered set (section 16).
+  const handleExportExcel = async () => {
+    setExportError('');
+    setExporting(true);
+    try {
+      await purchasesApi.downloadExport(filteredPurchases.map((p) => p.id));
+    } catch (err) {
+      setExportError(err?.response?.data?.error || err?.message || 'Unable to generate the Excel file. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  };
+  const handleExportSelectedExcel = async () => {
+    if (selectedIds.length === 0) {
+      setExportError('Please select at least one record to export.');
+      return;
+    }
+    setExportError('');
+    setExporting(true);
+    try {
+      await purchasesApi.downloadExport(selectedIds);
+    } catch (err) {
+      setExportError(err?.response?.data?.error || err?.message || 'Unable to generate the Excel file. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // Download PDF / Print both build a real item-level GRN document (one
+  // page per GRN, with supplier + item + totals detail) from the backend's
+  // flattened line rows — never a header-only summary table.
+  const handleExportPdf = async () => {
+    setExportError('');
+    const ids = selectedIds.length > 0 ? selectedIds : filteredPurchases.map((p) => p.id);
+    if (ids.length === 0) {
+      setExportError('No GRN records to export.');
+      return;
+    }
+    setExporting(true);
+    try {
+      const detailRows = await purchasesApi.detail(ids);
+      if (detailRows.length === 0) {
+        setExportError('No GRN records to export.');
+        return;
+      }
+      const singleGrnNo = ids.length === 1 ? detailRows[0]?.grn_no : null;
+      downloadGrnPdf(detailRows, singleGrnNo ? `${singleGrnNo}.pdf` : `GRN_Purchases_${new Date().toISOString().slice(0, 10)}.pdf`, { print: false });
+    } catch (err) {
+      setExportError(err?.response?.data?.error || err?.message || 'Unable to generate the PDF. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handlePrint = async () => {
+    setExportError('');
+    const ids = selectedIds.length > 0 ? selectedIds : filteredPurchases.map((p) => p.id);
+    if (ids.length === 0) {
+      setExportError('No GRN records to print.');
+      return;
+    }
+    setExporting(true);
+    try {
+      const detailRows = await purchasesApi.detail(ids);
+      if (detailRows.length === 0) {
+        setExportError('No GRN records to print.');
+        return;
+      }
+      const singleGrnNo = ids.length === 1 ? detailRows[0]?.grn_no : null;
+      downloadGrnPdf(detailRows, singleGrnNo ? `${singleGrnNo}.pdf` : `GRN_Purchases_${new Date().toISOString().slice(0, 10)}.pdf`, { print: true });
+    } catch (err) {
+      setExportError(err?.response?.data?.error || err?.message || 'Unable to generate the PDF. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
       {/* Left Column Form */}
@@ -540,13 +627,30 @@ function GrnPanel({ canManage, canEdit, canViewCost, canDelete }) {
         </div>
 
         <div className="card overflow-hidden">
-          <div className="px-5 py-4 border-b border-border-soft flex items-center justify-between">
+          <div className="px-5 py-4 border-b border-border-soft flex flex-wrap items-center justify-between gap-2">
             <h3 className="font-semibold text-ink text-sm">GRN Register</h3>
+            <div className="flex flex-wrap items-center gap-2">
+              <button onClick={handlePrint} className="rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200">Print</button>
+              <button onClick={handleExportPdf} className="rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200">Download PDF</button>
+              <button onClick={handleExportExcel} disabled={exporting} className="rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
+                {exporting ? 'Exporting…' : 'Export Excel'}
+              </button>
+              <button onClick={handleExportSelectedExcel} disabled={exporting} className="rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
+                Export Selected
+              </button>
+              {selectedIds.length > 0 && <span className="text-xs text-ink-muted">{selectedIds.length} selected</span>}
+            </div>
           </div>
+          {exportError && <div className="mx-5 mt-3 text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{exportError}</div>}
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-border-soft bg-surface-subtle/30 text-ink-muted font-medium">
+                  <th className="w-8 px-4 py-3">
+                    {filteredPurchases.length > 0 && (
+                      <input type="checkbox" checked={selectedIds.length === filteredPurchases.length} onChange={toggleSelectAll} />
+                    )}
+                  </th>
                   <th className="px-4 py-3">GRN #</th>
                   <th className="px-4 py-3">Supplier</th>
                   {canViewCost && <th className="px-4 py-3">Grand Total</th>}
@@ -563,6 +667,9 @@ function GrnPanel({ canManage, canEdit, canViewCost, canDelete }) {
                       p.status === 'cancelled' ? 'opacity-50 line-through' : ''
                     }`}
                   >
+                    <td className="px-4 py-3">
+                      <input type="checkbox" checked={selectedIds.includes(p.id)} onChange={() => toggleSelect(p.id)} />
+                    </td>
                     <td className="px-4 py-3 font-mono font-medium text-ink">
                       {p.grn_no}
                       {p.supplier_invoice_no && <div className="text-[10px] text-ink-muted font-mono">{p.supplier_invoice_no}</div>}
@@ -615,7 +722,7 @@ function GrnPanel({ canManage, canEdit, canViewCost, canDelete }) {
                 ))}
                 {filteredPurchases.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-ink-muted text-xs">
+                    <td colSpan={7} className="px-4 py-8 text-center text-ink-muted text-xs">
                       No GRN records found.
                     </td>
                   </tr>
@@ -638,6 +745,9 @@ function SupplierPaymentsPanel({ canManage }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedPaymentIds, setSelectedPaymentIds] = useState([]);
+  const [exportError, setExportError] = useState('');
+  const [exporting, setExporting] = useState(false);
 
   const suppliersQuery = useQuery({ queryKey: ['suppliers'], queryFn: suppliersApi.list });
   const unpaidQuery = useQuery({
@@ -696,6 +806,104 @@ function SupplierPaymentsPanel({ canManage }) {
       p.reference_no?.toLowerCase().includes(searchQuery.toLowerCase())
     );
   });
+
+  const togglePaymentSelect = (id) => setSelectedPaymentIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  const togglePaymentSelectAll = () => setSelectedPaymentIds((prev) => (
+    prev.length === filteredPayments.length ? [] : filteredPayments.map((p) => p.id)
+  ));
+
+  const handlePaymentsExportExcel = async () => {
+    setExportError('');
+    setExporting(true);
+    try {
+      await supplierPaymentsApi.downloadExport(filteredPayments.map((p) => p.id));
+    } catch (err) {
+      setExportError(err?.response?.data?.error || err?.message || 'Unable to generate the Excel file. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  };
+  const handlePaymentsExportSelectedExcel = async () => {
+    if (selectedPaymentIds.length === 0) {
+      setExportError('Please select at least one record to export.');
+      return;
+    }
+    setExportError('');
+    setExporting(true);
+    try {
+      await supplierPaymentsApi.downloadExport(selectedPaymentIds);
+    } catch (err) {
+      setExportError(err?.response?.data?.error || err?.message || 'Unable to generate the Excel file. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const paymentsPdfColumns = {
+    payment_code: 'Payment ID', paid_at: 'Date', supplier_name: 'Supplier', payment_mode: 'Payment Mode',
+    amount: 'Amount', reference_no: 'Reference No',
+  };
+
+  const handlePaymentsExportPdf = () => {
+    setExportError('');
+    const rows = selectedPaymentIds.length > 0 ? filteredPayments.filter((p) => selectedPaymentIds.includes(p.id)) : filteredPayments;
+    if (rows.length === 0) {
+      setExportError('No supplier payment records to export.');
+      return;
+    }
+    try {
+      downloadReportPdf({
+        title: 'Supplier Payments Register',
+        filtersText: searchQuery ? `Search: "${searchQuery}"` : `${selectedPaymentIds.length > 0 ? `${rows.length} selected` : 'All'} payment records`,
+        columns: paymentsPdfColumns,
+        rows,
+        filename: `Supplier_Payments_${new Date().toISOString().slice(0, 10)}.pdf`,
+      });
+    } catch (err) {
+      setExportError(err?.message || 'Unable to generate the PDF. Please try again.');
+    }
+  };
+
+  const handlePaymentsPrint = () => {
+    setExportError('');
+    const rows = selectedPaymentIds.length > 0 ? filteredPayments.filter((p) => selectedPaymentIds.includes(p.id)) : filteredPayments;
+    if (rows.length === 0) {
+      setExportError('No supplier payment records to print.');
+      return;
+    }
+    const win = window.open('', '_blank', 'width=900,height=900');
+    if (!win) {
+      setExportError('Could not open the print window — check your browser\'s popup blocker.');
+      return;
+    }
+    const tableRows = rows.map((p) => `
+      <tr>
+        <td>${p.payment_code}</td><td>${p.paid_at}</td><td>${p.supplier_name}</td>
+        <td>${p.payment_mode?.replace('_', ' ')}</td><td style="text-align:right">${Number(p.amount).toFixed(2)}</td><td>${p.reference_no || '-'}</td>
+      </tr>`).join('');
+    win.document.write(`
+      <html><head><title>Supplier Payments</title>
+      <style>
+        body { font-family: Arial, sans-serif; padding: 20px; color: #111; }
+        h1 { font-size: 18px; margin-bottom: 4px; }
+        .meta { color: #555; font-size: 12px; margin-bottom: 16px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #ccc; padding: 6px 8px; font-size: 12px; text-align: left; }
+        th { background: #f1f5f9; }
+      </style></head>
+      <body>
+        <h1>SUPPLIER PAYMENTS REGISTER</h1>
+        <div class="meta">Generated: ${new Date().toLocaleString()}${selectedPaymentIds.length > 0 ? ` · ${rows.length} selected record(s)` : ''}</div>
+        <table>
+          <thead><tr><th>Payment ID</th><th>Date</th><th>Supplier</th><th>Mode</th><th>Amount</th><th>Reference</th></tr></thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+      </body></html>
+    `);
+    win.document.close();
+    win.focus();
+    win.print();
+  };
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
@@ -838,13 +1046,30 @@ function SupplierPaymentsPanel({ canManage }) {
         </div>
 
         <div className="card overflow-hidden">
-          <div className="px-5 py-4 border-b border-border-soft flex items-center justify-between">
+          <div className="px-5 py-4 border-b border-border-soft flex flex-wrap items-center justify-between gap-2">
             <h3 className="font-semibold text-ink text-sm">Supplier Payment Register</h3>
+            <div className="flex flex-wrap items-center gap-2">
+              <button onClick={handlePaymentsPrint} className="rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200">Print</button>
+              <button onClick={handlePaymentsExportPdf} className="rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200">Download PDF</button>
+              <button onClick={handlePaymentsExportExcel} disabled={exporting} className="rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
+                {exporting ? 'Exporting…' : 'Export Excel'}
+              </button>
+              <button onClick={handlePaymentsExportSelectedExcel} disabled={exporting} className="rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
+                Export Selected
+              </button>
+              {selectedPaymentIds.length > 0 && <span className="text-xs text-ink-muted">{selectedPaymentIds.length} selected</span>}
+            </div>
           </div>
+          {exportError && <div className="mx-5 mt-3 text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{exportError}</div>}
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-border-soft bg-surface-subtle/30 text-ink-muted font-medium">
+                  <th className="w-8 px-4 py-3">
+                    {filteredPayments.length > 0 && (
+                      <input type="checkbox" checked={selectedPaymentIds.length === filteredPayments.length} onChange={togglePaymentSelectAll} />
+                    )}
+                  </th>
                   <th className="px-4 py-3">Code</th>
                   <th className="px-4 py-3">Supplier</th>
                   <th className="px-4 py-3">Mode</th>
@@ -856,6 +1081,9 @@ function SupplierPaymentsPanel({ canManage }) {
               <tbody className="divide-y divide-border-soft/60">
                 {filteredPayments.map((p) => (
                   <tr key={p.id} className="hover:bg-surface-subtle/20 transition">
+                    <td className="px-4 py-3">
+                      <input type="checkbox" checked={selectedPaymentIds.includes(p.id)} onChange={() => togglePaymentSelect(p.id)} />
+                    </td>
                     <td className="px-4 py-3 font-mono font-medium text-ink">{p.payment_code}</td>
                     <td className="px-4 py-3 font-medium text-ink">{p.supplier_name}</td>
                     <td className="px-4 py-3">
@@ -870,7 +1098,7 @@ function SupplierPaymentsPanel({ canManage }) {
                 ))}
                 {filteredPayments.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-ink-muted text-xs">
+                    <td colSpan={7} className="px-4 py-8 text-center text-ink-muted text-xs">
                       No supplier payment records logged yet.
                     </td>
                   </tr>

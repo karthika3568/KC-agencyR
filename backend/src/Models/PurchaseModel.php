@@ -29,8 +29,12 @@ class PurchaseModel
     public function all(int $branchId): array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT p.*, s.name AS supplier_name
-             FROM purchases p JOIN suppliers s ON s.id = p.supplier_id
+            'SELECT p.*, s.name AS supplier_name, s.phone AS supplier_phone, s.address AS supplier_address,
+                    s.gstin AS supplier_gstin, b.branch_name, u.name AS created_by_name
+             FROM purchases p
+             JOIN suppliers s ON s.id = p.supplier_id
+             LEFT JOIN branches b ON b.id = p.branch_id
+             LEFT JOIN users u ON u.id = p.created_by
              WHERE p.branch_id = :branch_id
              ORDER BY p.id DESC LIMIT 200'
         );
@@ -41,8 +45,12 @@ class PurchaseModel
     public function find(int $id): ?array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT p.*, s.name AS supplier_name
-             FROM purchases p JOIN suppliers s ON s.id = p.supplier_id
+            'SELECT p.*, s.name AS supplier_name, s.phone AS supplier_phone, s.address AS supplier_address,
+                    s.gstin AS supplier_gstin, b.branch_name, u.name AS created_by_name
+             FROM purchases p
+             JOIN suppliers s ON s.id = p.supplier_id
+             LEFT JOIN branches b ON b.id = p.branch_id
+             LEFT JOIN users u ON u.id = p.created_by
              WHERE p.id = :id'
         );
         $stmt->execute(['id' => $id]);
@@ -51,18 +59,35 @@ class PurchaseModel
             return null;
         }
 
+        $purchase['items'] = $this->lineItemsFor($id);
+
+        return $purchase;
+    }
+
+    /**
+     * Full item-line detail for one GRN — gross_amount/net_amount are
+     * derived the exact same way PurchaseModel::priceLine() and
+     * aggregateTotals() already compute them (gross = qty*rate before
+     * discount; net = taxable line_total + tax_amount), never a separate
+     * export-only calculation. Shared by find() (single-GRN view/print) and
+     * PurchaseController's multi-GRN Excel/PDF export, so both always agree.
+     */
+    public function lineItemsFor(int $purchaseId): array
+    {
         $stmt = $this->pdo->prepare(
-            'SELECT pi.*, i.item_name, i.item_code, su.short_code AS unit_code,
-                    (pi.qty + pi.free_qty) AS total_qty
+            'SELECT pi.*, i.item_name, i.item_code, i.hsn_code, su.short_code AS unit_code,
+                    (pi.qty + pi.free_qty) AS total_qty,
+                    ROUND(pi.qty * pi.rate, 2) AS gross_amount,
+                    pi.line_total AS taxable_amount,
+                    ROUND(pi.line_total + pi.tax_amount, 2) AS net_amount
              FROM purchase_items pi
              JOIN items i ON i.id = pi.item_id
              LEFT JOIN stock_units su ON su.id = pi.unit_id
-             WHERE pi.purchase_id = :id'
+             WHERE pi.purchase_id = :id
+             ORDER BY pi.id'
         );
-        $stmt->execute(['id' => $id]);
-        $purchase['items'] = $stmt->fetchAll();
-
-        return $purchase;
+        $stmt->execute(['id' => $purchaseId]);
+        return $stmt->fetchAll();
     }
 
     /** Feeds Purchase Return's "select GRN -> pick lines" flow — see InvoiceModel::returnableItems() for the same pattern on the sales side. */

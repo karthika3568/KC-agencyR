@@ -520,4 +520,68 @@ class ReportsController
 
         Response::json($result);
     }
+
+    /**
+     * Invoice-wise Profit/Loss — the "B" mode alongside profitReport()'s
+     * date-wise summary ("A" mode), same Reports > Profits section, same
+     * reports.view_profit permission. One row per invoice line (item-level
+     * detail), invoice-level fields (paid/credit/customer) repeated on every
+     * line of that invoice — the standard flattened shape every other report
+     * in this file already uses (see SALES_AGGREGATE_SQL), not a nested
+     * per-invoice structure.
+     *
+     * Profit is NOT paid_amount minus cost — a credit invoice's profit is
+     * recognized at the completed sale (rule 23/H), same as revenue; later
+     * collecting the credit doesn't touch this report at all (collections
+     * only move paid_amount/balance_due on the invoice, and this query reads
+     * qty/rate/discount/line_total straight from invoice_items, none of
+     * which a payment collection ever writes to). GST is excluded from
+     * profit (line_total is post-discount, pre-tax) — the same rule 5 basis
+     * profitReport() already uses. COGS uses each item's *current*
+     * cost_price, the same documented approximation profitReport() uses
+     * (invoice_items has no cost snapshot) — see README assumptions.
+     */
+    public function invoiceWiseProfitReport(): void
+    {
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::require($claims, 'reports.view_profit');
+        [$from, $to] = $this->dateRange();
+        $branchId = $this->resolveBranchId($claims);
+
+        $stmt = $this->pdo->prepare(
+            "SELECT
+                inv.invoice_no, inv.invoice_date, COALESCE(c.ledger_name, 'Walk-in') AS customer_name,
+                i.item_name, ii.qty,
+                i.cost_price AS cost_price,
+                ROUND(ii.qty * i.cost_price, 2) AS cost_amount,
+                ii.rate AS selling_price,
+                ROUND(ii.qty * ii.rate, 2) AS gross_amount,
+                ii.discount_amount AS discount,
+                ii.tax_amount AS gst,
+                ii.line_total AS taxable_amount,
+                ROUND(ii.line_total + ii.tax_amount + ii.cess_amount, 2) AS net_amount,
+                inv.paid_amount AS invoice_paid_amount,
+                inv.balance_due AS invoice_credit_amount,
+                ROUND(ii.line_total - (ii.qty * i.cost_price), 2) AS profit_loss
+             FROM invoice_items ii
+             JOIN invoices inv ON inv.id = ii.invoice_id
+             JOIN items i ON i.id = ii.item_id
+             LEFT JOIN customers c ON c.id = inv.customer_id
+             WHERE inv.branch_id = :b AND inv.status = 'completed' AND inv.invoice_date BETWEEN :from AND :to
+             ORDER BY inv.invoice_date, inv.id, ii.id
+             LIMIT " . self::LIST_REPORT_ROW_CAP
+        );
+        $stmt->execute(['b' => $branchId, 'from' => $from, 'to' => $to]);
+        $rows = $stmt->fetchAll();
+
+        $this->output($claims, [
+            'invoice_no' => 'Invoice #', 'invoice_date' => 'Date', 'customer_name' => 'Customer',
+            'item_name' => 'Item', 'qty' => 'Qty',
+            'cost_price' => 'Cost Price', 'cost_amount' => 'Cost Amount',
+            'selling_price' => 'Selling Price', 'gross_amount' => 'Gross Amount',
+            'discount' => 'Discount', 'gst' => 'GST', 'net_amount' => 'Net Amount',
+            'invoice_paid_amount' => 'Paid Amount', 'invoice_credit_amount' => 'Credit Amount',
+            'profit_loss' => 'Profit / Loss',
+        ], $rows, 'invoice_wise_profit.xlsx');
+    }
 }

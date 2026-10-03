@@ -113,6 +113,11 @@ function CollectModal({ customer, onClose }) {
                 </tbody>
               </table>
             </div>
+            {remaining > 0 && Number(amount) > 0 && (
+              <div className="mb-3 rounded bg-indigo-50 border border-indigo-200 p-2 text-xs text-indigo-700 font-medium">
+                Note: Rs. {remaining.toFixed(2)} extra amount will be credited to customer's advance balance and recorded in revenue/collections.
+              </div>
+            )}
           </>
         ) : (
           <>

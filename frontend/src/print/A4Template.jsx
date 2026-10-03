@@ -1,6 +1,7 @@
 export function A4Template({ data }) {
   const { invoice, branch, tax_slabs: taxSlabs, amount_in_words: amountInWords, customer_outstanding: outstanding } = data;
   const isOutstation = invoice.invoice_format === 'outstation';
+  const showFreeQtyCol = !isOutstation || (invoice.items || []).some((item) => Number(item.free_qty) > 0);
   // Non-GST bills carry tax_percent/tax_amount = 0 on every line (enforced
   // server-side in InvoiceModel::priceLine) — hide the GST-specific columns
   // and slab breakdown entirely so the customer never sees GST implied.
@@ -47,7 +48,7 @@ export function A4Template({ data }) {
         <thead>
           <tr>
             <th>HSN</th><th>Particulars</th><th>MRP</th><th>Qty</th><th>Unit</th>
-            {!isOutstation && <th>Free</th>}
+            {showFreeQtyCol && <th>Free</th>}
             <th>NET RATE</th><th>Disc</th>
             {isGst && (<><th>GST%</th><th>GST AMT</th></>)}
             <th>NET AMT</th>
@@ -61,11 +62,11 @@ export function A4Template({ data }) {
               <td>{item.mrp}</td>
               <td>{item.qty}</td>
               <td>{item.unit_code}</td>
-              {!isOutstation && <td>{item.free_qty}</td>}
+              {showFreeQtyCol && <td>{item.free_qty}</td>}
               <td>{item.rate}</td>
               <td>{item.discount_amount}</td>
               {isGst && (<><td>{item.tax_percent}</td><td>{item.tax_amount}</td></>)}
-              <td>{item.line_total}</td>
+              <td>{item.net_amount ?? item.line_total}</td>
             </tr>
           ))}
         </tbody>

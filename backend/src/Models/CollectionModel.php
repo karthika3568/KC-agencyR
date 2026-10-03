@@ -85,20 +85,9 @@ class CollectionModel
             $byId = array_column($unpaid, null, 'id');
             $ledger = new CreditLedgerService($this->pdo);
 
-            // Section 30: a collection must never exceed the customer's total
-            // pending credit — reject up front rather than silently
-            // truncating the allocation to whatever fits. The ledger's
-            // running balance is the true total (it also includes an
-            // opening balance that isn't tied to any invoice), not just
-            // what's left unpaid across actual invoices.
-            $totalOutstanding = $ledger->currentOutstanding($customerId);
-            if ($amount > $totalOutstanding + 0.009) {
-                throw new \RuntimeException(sprintf(
-                    'Payment amount (%.2f) exceeds this customer\'s total pending credit of %.2f',
-                    $amount,
-                    $totalOutstanding
-                ));
-            }
+            // Allow collection of any positive amount ($amount > 0.009).
+            // If amount exceeds outstanding invoice balance, the full amount is collected,
+            // recorded into revenue/collections/handover, and stored as advance credit on the customer's ledger.
 
             $allocations = [];
             if ($manualAllocations !== null) {

@@ -38,7 +38,7 @@ export function ThermalTemplate({ data }) {
               <td></td>
               <td>{item.qty} {item.unit_code}</td>
               <td>{item.rate}</td>
-              <td style={{ textAlign: 'right' }}>{item.line_total}</td>
+              <td style={{ textAlign: 'right' }}>{item.net_amount ?? item.line_total}</td>
             </tr>
           ))}
         </tbody>

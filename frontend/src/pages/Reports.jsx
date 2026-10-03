@@ -858,7 +858,52 @@ function ExpenseIncomePanel({ canExport }) {
   );
 }
 
+const INVOICE_WISE_PROFIT_REPORT = {
+  key: 'profit_invoice_wise', label: 'Invoice-wise Profit/Loss', apiPath: 'profit/invoice-wise',
+  fetch: reportsApi.profitInvoiceWise, rowKey: '_key',
+  columns: {
+    invoice_no: 'Invoice #', invoice_date: 'Date', customer_name: 'Customer', item_name: 'Item', qty: 'Qty',
+    cost_price: 'Cost Price', cost_amount: 'Cost Amount', selling_price: 'Selling Price', gross_amount: 'Gross Amount',
+    discount: 'Discount', gst: 'GST', net_amount: 'Net Amount',
+    invoice_paid_amount: 'Paid Amount', invoice_credit_amount: 'Credit Amount', profit_loss: 'Profit / Loss',
+  },
+  searchable: ['invoice_no', 'customer_name', 'item_name'],
+};
+
+/**
+ * Two modes in one Profits section (section 5 of the reporting
+ * requirements): "Date-wise / Summary" is the existing revenue/COGS/expense
+ * roll-up; "Invoice-wise" reuses SalesWiseReportPanel — the exact same
+ * generic table/search/export machinery every other sales-by-X report
+ * already uses — against the new /reports/profit/invoice-wise endpoint,
+ * rather than a bespoke table component.
+ */
 function ProfitPanel({ canExport }) {
+  const [mode, setMode] = useState('summary'); // 'summary' | 'invoice_wise'
+  return (
+    <div>
+      <div className="mb-3 flex gap-2 rounded-lg border border-border-soft bg-white p-1 w-fit">
+        {[['summary', 'Date-wise / Summary'], ['invoice_wise', 'Invoice-wise Profit/Loss']].map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setMode(key)}
+            className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${
+              mode === key ? 'bg-navbar text-gold' : 'text-ink-muted hover:bg-page'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {mode === 'summary'
+        ? <ProfitSummaryPanel canExport={canExport} />
+        : <SalesWiseReportPanel report={INVOICE_WISE_PROFIT_REPORT} canExport={canExport} />}
+    </div>
+  );
+}
+
+function ProfitSummaryPanel({ canExport }) {
   const { from, to, setFrom, setTo, appliedFrom, appliedTo, applyFilters, resetFilters } = useDateRange();
   const query = useQuery({ queryKey: ['report-profit', appliedFrom, appliedTo], queryFn: () => reportsApi.profit({ from: appliedFrom, to: appliedTo }) });
   const p = query.data;

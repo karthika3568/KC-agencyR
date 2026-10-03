@@ -21,7 +21,10 @@ export const categoryBrandsApi = {
 };
 
 export const itemsApi = {
-  list: async (search = '') => (await apiClient.get('/items', { params: { search } })).data,
+  // status: 'active' (default — Billing/POS always calls list() with no
+  // status, so it only ever gets sellable items), 'inactive', or 'all' —
+  // used by the Items screen's Active/Deactivated toggle.
+  list: async (search = '', status = undefined) => (await apiClient.get('/items', { params: { search, status } })).data,
   get: async (id) => (await apiClient.get(`/items/${id}`)).data,
   create: async (data) => (await apiClient.post('/items', data)).data,
   update: async (id, data) => (await apiClient.put(`/items/${id}`, data)).data,

@@ -11,6 +11,7 @@ use App\Controllers\BranchScopedCrudController;
 use App\Controllers\CashHandoverController;
 use App\Controllers\CollectionController;
 use App\Controllers\CrudController;
+use App\Controllers\CustomerController;
 use App\Controllers\CustomerPrebookingController;
 use App\Controllers\DashboardController;
 use App\Controllers\InvoiceController;
@@ -176,8 +177,8 @@ $router->delete('/api/cities/{id}', fn ($id) => $cities->destroy($id));
 
 $customers = new BranchScopedCrudController(
     $pdo, 'customers',
-    ['branch_id', 'city_id', 'route_id', 'ledger_name', 'print_name', 'phone', 'gstin', 'address',
-     'credit_limit', 'opening_balance', 'is_local_customer', 'status'],
+    ['branch_id', 'city_id', 'route_id', 'ledger_name', 'print_name', 'customer_group', 'phone', 'gstin', 'address',
+     'doj', 'dob', 'pricing_type', 'credit_limit', 'opening_balance', 'is_local_customer', 'status'],
     'parties.manage_customers',
     onCreated: function ($id, $saved, $claims) use ($pdo) {
         // opening_balance is just a number on the row until it's actually
@@ -196,6 +197,12 @@ $router->get('/api/customers', fn () => $customers->index());
 $router->post('/api/customers', fn () => $customers->store());
 $router->put('/api/customers/{id}', fn ($id) => $customers->update($id));
 $router->delete('/api/customers/{id}', fn ($id) => $customers->destroy($id));
+
+$customerImport = new CustomerController($pdo);
+$router->get('/api/customers/export', fn () => $customerImport->exportExcel());
+$router->get('/api/customers/import/template', fn () => $customerImport->importTemplate());
+$router->post('/api/customers/import/preview', fn () => $customerImport->importPreview());
+$router->post('/api/customers/import/commit', fn () => $customerImport->importCommit());
 
 $suppliers = new BranchScopedCrudController(
     $pdo, 'suppliers',
@@ -237,6 +244,11 @@ $router->post('/api/invoices/{id}/complete', fn ($id) => $invoiceController->com
 $router->put('/api/invoices/{id}/edit', fn ($id) => $invoiceController->editCompleted($id));
 $router->post('/api/invoices/{id}/cancel', fn ($id) => $invoiceController->cancel($id));
 $router->get('/api/invoices/{id}/print', fn ($id) => $invoiceController->print($id));
+$router->put('/api/invoices/{id}/transport', fn ($id) => $invoiceController->updateTransportDetails($id));
+$router->post('/api/invoices/{id}/einvoice/generate', fn ($id) => $invoiceController->generateEInvoice($id));
+$router->post('/api/invoices/{id}/einvoice/cancel', fn ($id) => $invoiceController->cancelEInvoice($id));
+$router->post('/api/invoices/{id}/ewaybill/generate', fn ($id) => $invoiceController->generateEWayBill($id));
+$router->post('/api/invoices/{id}/ewaybill/cancel', fn ($id) => $invoiceController->cancelEWayBill($id));
 $router->get('/api/invoices/{id}/returnable-items', fn ($id) => $invoiceController->returnableItems($id));
 
 // ---------------------------------------------------------------
@@ -282,6 +294,8 @@ $router->post('/api/stock-adjustments', fn () => $stockAdjustments->store());
 $vanStock = new VanStockController($pdo);
 $router->post('/api/van-stock/issue', fn () => $vanStock->issue());
 $router->post('/api/van-stock/return', fn () => $vanStock->returnStock());
+$router->get('/api/van-stock/issues', fn () => $vanStock->issues());
+$router->get('/api/van-stock/issues/{id}', fn ($id) => $vanStock->showIssue($id));
 $router->get('/api/van-stock/{employeeId}', fn ($employeeId) => $vanStock->pending($employeeId));
 
 $stockHub = new StockHubController($pdo);
@@ -376,6 +390,7 @@ $router->get('/api/reports/item-wise-sales', fn () => $reports->itemWiseSales())
 $router->get('/api/reports/credit-outstanding', fn () => $reports->creditOutstanding());
 $router->get('/api/reports/expense-income', fn () => $reports->expenseIncome());
 $router->get('/api/reports/profit', fn () => $reports->profitReport());
+$router->get('/api/reports/profit/invoice-wise', fn () => $reports->invoiceWiseProfitReport());
 $router->get('/api/reports/branch-wise-sales', fn () => $reports->branchWiseSales());
 $router->get('/api/reports/route-wise-sales', fn () => $reports->routeWiseSales());
 $router->get('/api/reports/customer-wise-sales', fn () => $reports->customerWiseSales());
@@ -395,6 +410,8 @@ $router->get('/api/settings/branch', fn () => $settings->branchProfile());
 $router->put('/api/settings/branch', fn () => $settings->updateBranchProfile());
 $router->get('/api/settings/print', fn () => $settings->printSettings());
 $router->put('/api/settings/print', fn () => $settings->updatePrintSettings());
+$router->get('/api/settings/free-qty', fn () => $settings->freeQtySettings());
+$router->put('/api/settings/free-qty', fn () => $settings->updateFreeQtySettings());
 $router->get('/api/settings/sequences', fn () => $settings->sequences());
 $router->put('/api/settings/sequences/{id}', fn ($id) => $settings->updateSequence($id));
 

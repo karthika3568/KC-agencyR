@@ -6,6 +6,8 @@ import { itemsApi, stockUnitsApi, categoriesApi } from '../api/catalog';
 import { customersApi } from '../api/parties';
 import { invoicesApi } from '../api/invoices';
 import { stockHubApi } from '../api/purchasing';
+import { settingsApi } from '../api/admin';
+import { useBranchStore } from '../store/branchStore';
 import { usePermission } from '../hooks/usePermission';
 import { priceLine, computeCartTotals, resolveUnitPricing, resolveSellingPrice } from '../utils/pricing';
 import { resolveImageUrl } from '../utils/media';
@@ -70,9 +72,7 @@ export function POS() {
   const canViewStock = usePermission('inventory.view_stock');
 
   const [billType, setBillType] = useState(canGst ? 'gst' : 'non_gst');
-  // Independent from billType (section 16 of the pricing-tiers spec) — this
-  // only picks which rate resolveSellingPrice() returns, never whether GST
-  // is applied.
+  const [billingFormat, setBillingFormat] = useState('local');
   const [priceType, setPriceType] = useState('normal');
   const [customerId, setCustomerId] = useState('');
   const [vehicleNo, setVehicleNo] = useState('');
@@ -80,10 +80,16 @@ export function POS() {
   const [billDiscount, setBillDiscount] = useState('');
   const [billDiscountMode, setBillDiscountMode] = useState('amount');
   const [search, setSearch] = useState('');
+  const [selectedIndex, setSelectedIndex] = useState(-1);
+  const [selectedGridIndex, setSelectedGridIndex] = useState(-1);
   const [heldId, setHeldId] = useState(null);
   const [showHeldList, setShowHeldList] = useState(false);
   const [splitMode, setSplitMode] = useState(false);
-  const [payments, setPayments] = useState([{ payment_method: 'cash', amount: 0, reference_no: '' }]);
+  // Payment method defaults to Credit every time (section 7 of the billing
+  // requirements) — a completed credit invoice is still a completed sale;
+  // revenue/profit are recognized immediately (see InvoiceModel::complete),
+  // this default only changes what the payment modal shows pre-selected.
+  const [payments, setPayments] = useState([{ payment_method: 'credit', amount: 0, reference_no: '' }]);
   const [message, setMessage] = useState('');
   const [printingInvoiceId, setPrintingInvoiceId] = useState(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -92,28 +98,88 @@ export function POS() {
   const [showImageSearch, setShowImageSearch] = useState(false);
   const searchInputRef = useRef(null);
 
+  const selectedBranchId = useBranchStore((state) => state.selectedBranchId);
   const itemsQuery = useQuery({ queryKey: ['items', ''], queryFn: () => itemsApi.list('') });
   const customersQuery = useQuery({ queryKey: ['customers'], queryFn: customersApi.list });
   const unitsQuery = useQuery({ queryKey: ['stock-units'], queryFn: stockUnitsApi.list });
   const categoriesQuery = useQuery({ queryKey: ['categories'], queryFn: categoriesApi.list });
   const heldQuery = useQuery({ queryKey: ['invoices', 'held'], queryFn: () => invoicesApi.list('held') });
-  const stockQuery = useQuery({ queryKey: ['stock-hub', 'branch'], queryFn: () => stockHubApi.list({ owner_type: 'branch' }), enabled: canViewStock });
+  const stockQuery = useQuery({ queryKey: ['stock-hub', 'branch', selectedBranchId], queryFn: () => stockHubApi.list({ owner_type: 'branch' }), enabled: canViewStock });
+  const freeQtyQuery = useQuery({ queryKey: ['settings-free-qty'], queryFn: settingsApi.getFreeQty });
 
-  const items = itemsQuery.data || [];
+  const items = useMemo(() => (Array.isArray(itemsQuery.data) ? itemsQuery.data : (itemsQuery.data?.items || [])), [itemsQuery.data]);
   const customers = customersQuery.data || [];
   const units = unitsQuery.data || [];
   const categories = categoriesQuery.data || [];
   const heldInvoices = heldQuery.data || [];
+
+  const selectedCustomer = useMemo(() => customers.find((c) => String(c.id) === String(customerId)), [customers, customerId]);
+  
+  useEffect(() => {
+    if (selectedCustomer) {
+      setBillingFormat(Number(selectedCustomer.is_local_customer) === 1 ? 'local' : 'outstation');
+    }
+  }, [selectedCustomer]);
+
+  // Selecting a customer auto-applies their configured pricing type
+  // (Normal/Retail/Wholesale — section 4 of the customer requirements) so
+  // the cashier doesn't have to remember to switch the mode by hand. This
+  // only fires when the customer actually changes, so if the cashier then
+  // manually picks a different price tab for this bill, nothing here
+  // overwrites that choice again until a different customer is selected.
+  useEffect(() => {
+    if (selectedCustomer?.pricing_type) {
+      setPriceType(selectedCustomer.pricing_type);
+    }
+  }, [selectedCustomer]);
+
+  const isLocalBilling = billingFormat === 'local';
+  const allowLocalFree = freeQtyQuery.data ? Number(freeQtyQuery.data.allow_local_free_qty) === 1 : true;
+  const allowDistanceFree = freeQtyQuery.data ? Number(freeQtyQuery.data.allow_distance_free_qty) === 1 : false;
+  const isFreeQtyAllowed = isLocalBilling ? allowLocalFree : allowDistanceFree;
+
+  useEffect(() => {
+    if (!isFreeQtyAllowed) {
+      setCart((prev) => {
+        if (prev.some((l) => Number(l.free_qty) > 0)) {
+          return prev.map((l) => ({ ...l, free_qty: 0 }));
+        }
+        return prev;
+      });
+    }
+  }, [isFreeQtyAllowed]);
+
   const stockByItemId = useMemo(() => {
     const map = {};
-    for (const row of stockQuery.data || []) map[row.item_id] = row.quantity_on_hand;
+    const rows = Array.isArray(stockQuery.data) ? stockQuery.data : [];
+    for (const row of rows) {
+      if (row && row.item_id !== undefined) map[row.item_id] = row.quantity_on_hand;
+    }
     return map;
   }, [stockQuery.data]);
+
+  const activeCategories = useMemo(
+    () => categories.filter((c) => c.is_active === undefined || c.is_active === null || Number(c.is_active) === 1),
+    [categories]
+  );
+
+  const activeCategoryIds = useMemo(
+    () => new Set(activeCategories.map((c) => String(c.id))),
+    [activeCategories]
+  );
+
+  const activeItems = useMemo(() => {
+    return items.filter((i) => {
+      const isItemActive = i.is_active === undefined || i.is_active === null || Number(i.is_active) === 1;
+      const isCatActive = !i.category_id || activeCategoryIds.has(String(i.category_id));
+      return isItemActive && isCatActive;
+    });
+  }, [items, activeCategoryIds]);
 
   const filteredItems = useMemo(() => {
     const term = search.trim().toLowerCase();
     if (!term) return [];
-    return items
+    return activeItems
       .filter(
         (i) =>
           i.item_name.toLowerCase().includes(term) ||
@@ -121,12 +187,12 @@ export function POS() {
           (i.barcode || '').toLowerCase() === term
       )
       .slice(0, 8);
-  }, [items, search]);
+  }, [activeItems, search]);
 
   const gridItems = useMemo(() => {
-    if (activeCategory === 'all') return items;
-    return items.filter((i) => i.category_id === activeCategory);
-  }, [items, activeCategory]);
+    if (activeCategory === 'all') return activeItems;
+    return activeItems.filter((i) => String(i.category_id) === String(activeCategory));
+  }, [activeItems, activeCategory]);
 
   const pricedLines = useMemo(
     () =>
@@ -172,11 +238,44 @@ export function POS() {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
         if (cart.length > 0) setShowPaymentModal(true);
+        return;
+      }
+
+      const activeTag = document.activeElement?.tagName?.toLowerCase();
+      const isInput = activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select';
+
+      if (isInput && document.activeElement !== searchInputRef.current) {
+        return;
+      }
+
+      if (e.key === 'ArrowRight') {
+        if (gridItems.length > 0 && filteredItems.length === 0) {
+          e.preventDefault();
+          setSelectedGridIndex((prev) => (prev < gridItems.length - 1 ? prev + 1 : 0));
+        }
+      } else if (e.key === 'ArrowLeft') {
+        if (gridItems.length > 0 && filteredItems.length === 0) {
+          e.preventDefault();
+          setSelectedGridIndex((prev) => (prev > 0 ? prev - 1 : gridItems.length - 1));
+        }
+      } else if (e.key === 'Enter' && !isInput) {
+        if (selectedGridIndex >= 0 && selectedGridIndex < gridItems.length) {
+          e.preventDefault();
+          addItem(gridItems[selectedGridIndex]);
+        }
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [cart.length]);
+  }, [cart.length, gridItems, filteredItems.length, selectedGridIndex]);
+
+  useEffect(() => {
+    setSelectedIndex(-1);
+  }, [search]);
+
+  useEffect(() => {
+    setSelectedGridIndex(-1);
+  }, [activeCategory, search]);
 
   const addItem = (item) => {
     setCart((prev) => {
@@ -187,20 +286,62 @@ export function POS() {
       return [...prev, newLine(item, priceType)];
     });
     setSearch('');
+    setSelectedIndex(-1);
   };
 
   const handleSearchKeyDown = (e) => {
-    if (e.key !== 'Enter') return;
-    e.preventDefault();
-    const term = search.trim().toLowerCase();
-    if (!term) return;
-    const exact = items.find((i) => (i.barcode || '').toLowerCase() === term || (i.item_code || '').toLowerCase() === term);
-    if (exact) {
-      addItem(exact);
-      return;
-    }
-    if (filteredItems.length === 1) {
-      addItem(filteredItems[0]);
+    if (e.key === 'ArrowDown') {
+      if (filteredItems.length > 0) {
+        e.preventDefault();
+        setSelectedIndex((prev) => (prev < filteredItems.length - 1 ? prev + 1 : 0));
+      } else if (gridItems.length > 0) {
+        e.preventDefault();
+        setSelectedGridIndex((prev) => (prev < gridItems.length - 1 ? prev + 1 : 0));
+      }
+    } else if (e.key === 'ArrowUp') {
+      if (filteredItems.length > 0) {
+        e.preventDefault();
+        setSelectedIndex((prev) => (prev > 0 ? prev - 1 : filteredItems.length - 1));
+      } else if (gridItems.length > 0) {
+        e.preventDefault();
+        setSelectedGridIndex((prev) => (prev > 0 ? prev - 1 : gridItems.length - 1));
+      }
+    } else if (e.key === 'ArrowRight') {
+      if (filteredItems.length === 0 && gridItems.length > 0) {
+        e.preventDefault();
+        setSelectedGridIndex((prev) => (prev < gridItems.length - 1 ? prev + 1 : 0));
+      }
+    } else if (e.key === 'ArrowLeft') {
+      if (filteredItems.length === 0 && gridItems.length > 0) {
+        e.preventDefault();
+        setSelectedGridIndex((prev) => (prev > 0 ? prev - 1 : gridItems.length - 1));
+      }
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (selectedIndex >= 0 && selectedIndex < filteredItems.length) {
+        addItem(filteredItems[selectedIndex]);
+        return;
+      }
+      const term = search.trim().toLowerCase();
+      if (term) {
+        const exact = items.find((i) => (i.barcode || '').toLowerCase() === term || (i.item_code || '').toLowerCase() === term);
+        if (exact) {
+          addItem(exact);
+          return;
+        }
+        if (filteredItems.length === 1) {
+          addItem(filteredItems[0]);
+          return;
+        }
+      }
+      if (selectedGridIndex >= 0 && selectedGridIndex < gridItems.length) {
+        addItem(gridItems[selectedGridIndex]);
+        return;
+      }
+    } else if (e.key === 'Escape') {
+      setSearch('');
+      setSelectedIndex(-1);
+      setSelectedGridIndex(-1);
     }
   };
 
@@ -237,7 +378,7 @@ export function POS() {
     setHeldId(null);
     setBillDiscount('');
     setBillDiscountMode('amount');
-    setPayments([{ payment_method: 'cash', amount: 0, reference_no: '' }]);
+    setPayments([{ payment_method: 'credit', amount: 0, reference_no: '' }]);
     setSplitMode(false);
   };
 
@@ -249,7 +390,7 @@ export function POS() {
     items: totals.updatedLines.map((l) => ({
       item_id: l.item.id,
       qty: Number(l.qty),
-      free_qty: Number(l.free_qty || 0),
+      free_qty: isFreeQtyAllowed ? Number(l.free_qty || 0) : 0,
       unit_id: l.unit_id,
       ...(canDiscount
         ? { discount_amount: Number(l.combined_discount_amount ?? l.discount_amount ?? 0) }
@@ -347,6 +488,20 @@ export function POS() {
           </button>
         </div>
         <div className="flex overflow-hidden rounded-lg border border-border-soft bg-white">
+          <button
+            onClick={() => setBillingFormat('local')}
+            className={`px-4 py-2 text-sm font-semibold transition-colors ${billingFormat === 'local' ? 'bg-navbar text-gold' : 'text-ink-muted'}`}
+          >
+            Local Billing
+          </button>
+          <button
+            onClick={() => setBillingFormat('outstation')}
+            className={`px-4 py-2 text-sm font-semibold transition-colors ${billingFormat === 'outstation' ? 'bg-navbar text-gold' : 'text-ink-muted'}`}
+          >
+            Distance Billing
+          </button>
+        </div>
+        <div className="flex overflow-hidden rounded-lg border border-border-soft bg-white">
           {[
             { key: 'normal', label: 'Normal' },
             { key: 'retail', label: 'Retail' },
@@ -439,16 +594,27 @@ export function POS() {
                 />
                 {filteredItems.length > 0 && (
                   <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-64 overflow-auto rounded-lg border border-border-soft bg-white shadow-lg">
-                    {filteredItems.map((item) => (
-                      <button
-                        key={item.id}
-                        onClick={() => addItem(item)}
-                        className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-page"
-                      >
-                        <span>{item.item_name} <span className="text-ink-muted">({item.item_code})</span></span>
-                        <span className="text-ink-muted">Rs. {resolveSellingPrice(item, item.base_unit_id, priceType).rate.toFixed(2)}</span>
-                      </button>
-                    ))}
+                    {filteredItems.map((item, index) => {
+                      const isHighlighted = index === selectedIndex;
+                      return (
+                        <button
+                          key={item.id}
+                          ref={(el) => {
+                            if (isHighlighted && el) {
+                              el.scrollIntoView({ block: 'nearest' });
+                            }
+                          }}
+                          onClick={() => addItem(item)}
+                          onMouseEnter={() => setSelectedIndex(index)}
+                          className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors ${
+                            isHighlighted ? 'bg-gold/15 text-gold-dark font-semibold' : 'hover:bg-page'
+                          }`}
+                        >
+                          <span>{item.item_name} <span className="text-ink-muted">({item.item_code})</span></span>
+                          <span className="text-ink-muted">Rs. {resolveSellingPrice(item, item.base_unit_id, priceType).rate.toFixed(2)}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -476,7 +642,7 @@ export function POS() {
             >
               All
             </button>
-            {categories.map((c) => (
+            {activeCategories.map((c) => (
               <button
                 key={c.id}
                 onClick={() => setActiveCategory(c.id)}
@@ -506,15 +672,29 @@ export function POS() {
 
           {viewMode === 'grid' ? (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-              {gridItems.map((item) => {
+              {gridItems.map((item, index) => {
                 const stock = stockByItemId[item.id] ?? 0;
                 const outOfStock = canViewStock && stock <= 0;
                 const lowStock = canViewStock && stock > 0 && stock <= Number(item.min_stock_threshold || 0);
+                const isSelected = index === selectedGridIndex;
                 return (
                   <button
                     key={item.id}
-                    onClick={() => addItem(item)}
-                    className="card group relative flex flex-col p-3 text-left transition-all hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 active:shadow-sm"
+                    ref={(el) => {
+                      if (isSelected && el) {
+                        el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                      }
+                    }}
+                    onClick={() => {
+                      addItem(item);
+                      setSelectedGridIndex(index);
+                    }}
+                    onMouseEnter={() => setSelectedGridIndex(index)}
+                    className={`card group relative flex flex-col p-3 text-left transition-all ${
+                      isSelected
+                        ? 'ring-2 ring-gold border-gold bg-gold/5 shadow-md -translate-y-0.5'
+                        : 'hover:-translate-y-0.5 hover:shadow-md'
+                    } active:translate-y-0 active:shadow-sm`}
                   >
                     <ProductThumb item={item} size="h-20" className="mb-2" />
                     {outOfStock && (
@@ -530,7 +710,7 @@ export function POS() {
                       <span>{canViewStock ? `Stock: ${stock}` : item.item_code}</span>
                       {item.barcode && <Barcode size={14} />}
                     </div>
-                    <div className="pointer-events-none absolute inset-0 rounded-xl border-2 border-gold opacity-0 transition-opacity group-active:opacity-100" />
+                    <div className={`pointer-events-none absolute inset-0 rounded-xl border-2 border-gold transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0 group-active:opacity-100'}`} />
                   </button>
                 );
               })}
@@ -552,20 +732,47 @@ export function POS() {
                   </tr>
                 </thead>
                 <tbody>
-                  {gridItems.map((item) => (
-                    <tr key={item.id} className="border-b border-border-soft last:border-0">
-                      <td className="px-4 py-2"><ProductThumb item={item} size="h-9 w-9" /></td>
-                      <td className="px-4 py-2 font-medium text-ink">{item.item_name}</td>
-                      <td className="px-4 py-2">Rs. {resolveSellingPrice(item, item.base_unit_id, priceType).rate.toFixed(2)}</td>
-                      <td className="px-4 py-2">{taxBadge(item)}</td>
-                      <td className="px-4 py-2 text-ink-muted">{canViewStock ? stockByItemId[item.id] ?? 0 : item.item_code}</td>
-                      <td className="px-4 py-2 text-right">
-                        <Button size="sm" variant="secondary" icon={<Plus size={14} />} onClick={() => addItem(item)}>
-                          Add
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
+                  {gridItems.map((item, index) => {
+                    const isSelected = index === selectedGridIndex;
+                    return (
+                      <tr
+                        key={item.id}
+                        ref={(el) => {
+                          if (isSelected && el) {
+                            el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                          }
+                        }}
+                        onClick={() => {
+                          addItem(item);
+                          setSelectedGridIndex(index);
+                        }}
+                        onMouseEnter={() => setSelectedGridIndex(index)}
+                        className={`border-b border-border-soft last:border-0 transition-colors cursor-pointer ${
+                          isSelected ? 'bg-gold/15 font-semibold text-gold-dark' : 'hover:bg-page'
+                        }`}
+                      >
+                        <td className="px-4 py-2"><ProductThumb item={item} size="h-9 w-9" /></td>
+                        <td className="px-4 py-2 font-medium text-ink">{item.item_name}</td>
+                        <td className="px-4 py-2">Rs. {resolveSellingPrice(item, item.base_unit_id, priceType).rate.toFixed(2)}</td>
+                        <td className="px-4 py-2">{taxBadge(item)}</td>
+                        <td className="px-4 py-2 text-ink-muted">{canViewStock ? stockByItemId[item.id] ?? 0 : item.item_code}</td>
+                        <td className="px-4 py-2 text-right">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            icon={<Plus size={14} />}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              addItem(item);
+                              setSelectedGridIndex(index);
+                            }}
+                          >
+                            Add
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                   {gridItems.length === 0 && (
                     <tr><td colSpan={6} className="px-4 py-8 text-center text-ink-muted">No products in this category.</td></tr>
                   )}
@@ -599,7 +806,7 @@ export function POS() {
                         <div className="truncate text-sm font-semibold text-ink">{line.item.item_name}</div>
                         <div className="mt-0.5 flex items-center gap-1">
                           {taxBadge(line.item, billType)}
-                          {Number(line.free_qty) > 0 && <Badge variant="warning">Free: {line.free_qty}</Badge>}
+                          {Number(line.free_qty) > 0 && isFreeQtyAllowed && <Badge variant="warning">Free: {line.free_qty}</Badge>}
                           {!line.priced.price_configured && (
                             <Badge variant="warning" title={`No ${priceType} price set — using Normal NET_SRATE`}>
                               {priceType === 'retail' ? 'Retail' : 'Wholesale'} price not set
@@ -687,15 +894,19 @@ export function POS() {
                             className="w-14 rounded border border-border-soft px-1 py-0.5"
                           />
                         )}
-                        <span className="ml-2">Free qty</span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="any"
-                          value={line.free_qty}
-                          onChange={(e) => updateLine(line.key, { free_qty: e.target.value })}
-                          className="w-14 rounded border border-border-soft px-1 py-0.5"
-                        />
+                        {isFreeQtyAllowed && (
+                          <>
+                            <span className="ml-2">Free qty</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              value={line.free_qty}
+                              onChange={(e) => updateLine(line.key, { free_qty: e.target.value })}
+                              className="w-14 rounded border border-border-soft px-1 py-0.5"
+                            />
+                          </>
+                        )}
                       </div>
                     )}
                   </div>
@@ -831,9 +1042,9 @@ function PaymentModal({
   const toggleSplit = (next) => {
     setSplitMode(next);
     if (next) {
-      setPayments(PAYMENT_METHODS.map((m) => ({ payment_method: m.key, amount: m.key === 'cash' ? grandTotal : 0, reference_no: '' })));
+      setPayments(PAYMENT_METHODS.map((m) => ({ payment_method: m.key, amount: m.key === 'credit' ? grandTotal : 0, reference_no: '' })));
     } else {
-      setPayments([{ payment_method: 'cash', amount: grandTotal, reference_no: '' }]);
+      setPayments([{ payment_method: 'credit', amount: grandTotal, reference_no: '' }]);
     }
   };
 

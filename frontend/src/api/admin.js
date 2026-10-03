@@ -25,6 +25,8 @@ export const settingsApi = {
   updateBranch: async (data) => (await apiClient.put('/settings/branch', data)).data,
   getPrint: async () => (await apiClient.get('/settings/print')).data,
   updatePrint: async (data) => (await apiClient.put('/settings/print', data)).data,
+  getFreeQty: async () => (await apiClient.get('/settings/free-qty')).data,
+  updateFreeQty: async (data) => (await apiClient.put('/settings/free-qty', data)).data,
   getSequences: async () => (await apiClient.get('/settings/sequences')).data,
   updateSequence: async (id, prefix) => (await apiClient.put(`/settings/sequences/${id}`, { prefix })).data,
 };
@@ -49,6 +51,7 @@ export const reportsApi = {
   creditOutstanding: async () => (await apiClient.get('/reports/credit-outstanding')).data,
   expenseIncome: async (params) => (await apiClient.get(reportUrl('expense-income', params))).data,
   profit: async (params) => (await apiClient.get(reportUrl('profit', params))).data,
+  profitInvoiceWise: async (params) => (await apiClient.get(reportUrl('profit/invoice-wise', params))).data,
   lowStock: async () => (await apiClient.get('/stock-hub/low-stock')).data,
 
   /**
@@ -67,7 +70,10 @@ export const reportsApi = {
     const requestUrl = path.startsWith('/')
       ? `${path}${path.includes('?') ? '&' : '?'}${new URLSearchParams({ ...params, export: 1 }).toString()}`
       : reportUrl(path, { ...params, export: 1 });
-    const downloadName = path.startsWith('/') ? path.split('/').filter(Boolean).pop() : path;
+    // Always the last path segment — a multi-segment report slug like
+    // "profit/invoice-wise" must not end up as a literal slash in the
+    // downloaded filename.
+    const downloadName = path.split('/').filter(Boolean).pop();
 
     let res;
     try {

@@ -29,4 +29,15 @@ return [
         'env' => $_ENV['APP_ENV'] ?? 'local',
         'debug' => filter_var($_ENV['APP_DEBUG'] ?? true, FILTER_VALIDATE_BOOLEAN),
     ],
+    'gst_api' => [
+        'enabled' => filter_var($_ENV['GST_API_ENABLED'] ?? false, FILTER_VALIDATE_BOOLEAN),
+        'env' => $_ENV['GST_API_ENV'] ?? 'sandbox',
+        'provider' => $_ENV['GST_API_PROVIDER'] ?? '',
+        'base_url' => $_ENV['GST_API_BASE_URL'] ?? '',
+        'username' => $_ENV['GST_API_USERNAME'] ?? '',
+        'password' => $_ENV['GST_API_PASSWORD'] ?? '',
+        'client_id' => $_ENV['GST_API_CLIENT_ID'] ?? '',
+        'client_secret' => $_ENV['GST_API_CLIENT_SECRET'] ?? '',
+        'seller_gstin' => $_ENV['GST_API_SELLER_GSTIN'] ?? '',
+    ],
 ];

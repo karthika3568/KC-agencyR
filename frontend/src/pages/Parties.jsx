@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Users, Truck, MapPin, Building2, CheckCircle2, Power, Edit2, Trash2, Search, Plus, Phone, CreditCard, Tag
@@ -27,11 +27,23 @@ function CustomersPanel({ canManage }) {
   const [creditLimit, setCreditLimit] = useState('0');
   const [isLocalCustomer, setIsLocalCustomer] = useState('1');
   const [isActive, setIsActive] = useState(true);
+  const [gstin, setGstin] = useState('');
+  const [address, setAddress] = useState('');
+  const [customerGroup, setCustomerGroup] = useState('');
+  const [openingBalance, setOpeningBalance] = useState('0');
+  const [doj, setDoj] = useState('');
+  const [dob, setDob] = useState('');
+  const [pricingType, setPricingType] = useState('normal');
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [formError, setFormError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+
+  const [importOpen, setImportOpen] = useState(false);
+  const [importFile, setImportFile] = useState(null);
+  const [importResult, setImportResult] = useState(null);
+  const fileInputRef = useRef(null);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['customers'] });
 
@@ -70,6 +82,13 @@ function CustomersPanel({ canManage }) {
     setCreditLimit('0');
     setIsLocalCustomer('1');
     setIsActive(true);
+    setGstin('');
+    setAddress('');
+    setCustomerGroup('');
+    setOpeningBalance('0');
+    setDoj('');
+    setDob('');
+    setPricingType('normal');
     setFormError('');
   };
 
@@ -87,13 +106,27 @@ function CustomersPanel({ canManage }) {
     setCreditLimit(String(item.credit_limit ?? '0'));
     setIsLocalCustomer(String(item.is_local_customer ?? '1'));
     setIsActive(item.status === 'inactive' || item.is_active === 0 || item.is_active === false ? false : true);
+    setGstin(item.gstin || '');
+    setAddress(item.address || '');
+    setCustomerGroup(item.customer_group || '');
+    setOpeningBalance(String(item.opening_balance ?? '0'));
+    setDoj(item.doj || '');
+    setDob(item.dob || '');
+    setPricingType(item.pricing_type || 'normal');
     setFormError('');
   };
+
+  const GSTIN_PATTERN = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!ledgerName.trim()) {
       setFormError('Customer name is required.');
+      return;
+    }
+    const trimmedGstin = gstin.trim().toUpperCase();
+    if (trimmedGstin && !GSTIN_PATTERN.test(trimmedGstin)) {
+      setFormError('Invalid GSTIN format.');
       return;
     }
     const payload = {
@@ -102,9 +135,16 @@ function CustomersPanel({ canManage }) {
       route_id: routeId ? Number(routeId) : null,
       city_id: cityId ? Number(cityId) : null,
       credit_limit: Number(creditLimit || 0),
+      opening_balance: Number(openingBalance || 0),
       is_local_customer: Number(isLocalCustomer ?? 1),
       is_active: isActive ? 1 : 0,
       status: isActive ? 'active' : 'inactive',
+      gstin: trimmedGstin || null,
+      address: address.trim() || null,
+      customer_group: customerGroup.trim() || null,
+      doj: doj || null,
+      dob: dob || null,
+      pricing_type: pricingType,
     };
 
     if (editingId) {
@@ -219,11 +259,95 @@ function CustomersPanel({ canManage }) {
               </div>
 
               <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Opening Balance (Rs.)</label>
+                <input
+                  type="number"
+                  value={openingBalance}
+                  onChange={(e) => setOpeningBalance(e.target.value)}
+                  placeholder="0"
+                  disabled={!canManage}
+                  className="input w-full"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Customer Type</label>
                 <select value={isLocalCustomer} onChange={(e) => setIsLocalCustomer(e.target.value)} disabled={!canManage} className="input w-full">
                   <option value="1">Local Customer</option>
                   <option value="0">Outstation Customer</option>
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Pricing Type</label>
+                <select value={pricingType} onChange={(e) => setPricingType(e.target.value)} disabled={!canManage} className="input w-full">
+                  <option value="normal">Normal</option>
+                  <option value="retail">Retail</option>
+                  <option value="wholesale">Wholesale</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">GST No / GSTIN</label>
+                <input
+                  type="text"
+                  value={gstin}
+                  onChange={(e) => setGstin(e.target.value)}
+                  placeholder="e.g., 33AAAAA0000A1Z5"
+                  disabled={!canManage}
+                  className="input w-full"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Group</label>
+                <input
+                  type="text"
+                  value={customerGroup}
+                  onChange={(e) => setCustomerGroup(e.target.value)}
+                  placeholder="e.g., Wholesaler"
+                  disabled={!canManage}
+                  className="input w-full"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Address</label>
+              <textarea
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                rows={2}
+                placeholder="Full address"
+                disabled={!canManage}
+                className="input w-full"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Date of Joining</label>
+                <input
+                  type="date"
+                  value={doj}
+                  onChange={(e) => setDoj(e.target.value)}
+                  disabled={!canManage}
+                  className="input w-full"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Date of Birth</label>
+                <input
+                  type="date"
+                  value={dob}
+                  onChange={(e) => setDob(e.target.value)}
+                  disabled={!canManage}
+                  className="input w-full"
+                />
               </div>
             </div>
 
@@ -298,8 +422,69 @@ function CustomersPanel({ canManage }) {
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
               </select>
+              {canManage && (
+                <>
+                  <Button variant="secondary" size="sm" onClick={() => customersApi.downloadExport()}>Export Excel</Button>
+                  <Button variant="secondary" size="sm" onClick={() => setImportOpen((v) => !v)}>Import Excel</Button>
+                </>
+              )}
             </div>
           </div>
+
+          {importOpen && (
+            <div className="border-b border-border-soft bg-slate-50/60 p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="secondary" size="sm" onClick={() => customersApi.downloadImportTemplate()}>Download Template</Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={(e) => { setImportFile(e.target.files[0] || null); setImportResult(null); }}
+                  className="text-xs"
+                />
+                <Button
+                  size="sm"
+                  disabled={!importFile}
+                  onClick={async () => { setImportResult(await customersApi.importPreview(importFile)); }}
+                >
+                  Preview
+                </Button>
+                {importResult && !importResult.committed && (
+                  <Button
+                    size="sm"
+                    disabled={importResult.valid_rows === 0}
+                    onClick={async () => {
+                      const result = await customersApi.importCommit(importFile);
+                      setImportResult(result);
+                      invalidate();
+                      if (result.invalid_rows === 0 && (result.inserted > 0 || result.updated > 0)) {
+                        showSuccess(`Import successful — ${result.inserted} added, ${result.updated} updated.`);
+                      }
+                    }}
+                  >
+                    Commit Import ({importResult.valid_rows} valid rows)
+                  </Button>
+                )}
+              </div>
+              {importResult && (
+                <div className="mt-3 text-xs">
+                  <div className="font-semibold text-slate-700">
+                    Total: {importResult.total_rows} · Valid: {importResult.valid_rows} · Invalid: {importResult.invalid_rows}
+                    {importResult.committed && ` · Inserted: ${importResult.inserted} · Updated: ${importResult.updated}`}
+                  </div>
+                  {importResult.rows.filter((r) => r.errors.length > 0).length > 0 && (
+                    <div className="mt-2 max-h-40 overflow-y-auto rounded-lg border border-red-200 bg-red-50 p-2">
+                      {importResult.rows.filter((r) => r.errors.length > 0).map((r) => (
+                        <div key={r.row} className="text-red-800">
+                          Row {r.row} ({r.customer || 'unnamed'}): {r.errors.join(', ')}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
@@ -309,6 +494,8 @@ function CustomersPanel({ canManage }) {
                   <th className="px-4 py-3">Customer Name</th>
                   <th className="px-4 py-3">Phone</th>
                   <th className="px-4 py-3">Route / City</th>
+                  <th className="px-4 py-3">GSTIN</th>
+                  <th className="px-4 py-3">Pricing Type</th>
                   <th className="px-4 py-3">Credit Limit</th>
                   <th className="px-4 py-3">Status</th>
                   {canManage && <th className="px-4 py-3 text-right">Actions</th>}
@@ -324,6 +511,12 @@ function CustomersPanel({ canManage }) {
                       <td className="px-4 py-3 font-medium text-slate-600">{r.phone || '-'}</td>
                       <td className="px-4 py-3 font-medium text-slate-600">
                         {routeMap.get(r.route_id) || 'No Route'} {cityMap.get(r.city_id) ? `(${cityMap.get(r.city_id)})` : ''}
+                      </td>
+                      <td className="px-4 py-3 font-medium text-slate-600">{r.gstin || '-'}</td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold capitalize text-slate-700">
+                          {r.pricing_type || 'normal'}
+                        </span>
                       </td>
                       <td className="px-4 py-3 font-bold text-indigo-600">Rs. {Number(r.credit_limit || 0).toLocaleString()}</td>
                       <td className="px-4 py-3">
@@ -347,7 +540,7 @@ function CustomersPanel({ canManage }) {
                   );
                 })}
                 {filtered.length === 0 && (
-                  <tr><td colSpan={canManage ? 7 : 6} className="px-4 py-8 text-center text-slate-400 font-medium">No customers found.</td></tr>
+                  <tr><td colSpan={canManage ? 9 : 8} className="px-4 py-8 text-center text-slate-400 font-medium">No customers found.</td></tr>
                 )}
               </tbody>
             </table>

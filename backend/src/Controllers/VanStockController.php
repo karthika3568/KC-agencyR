@@ -70,10 +70,130 @@ class VanStockController
         Response::json(['return_id' => $id], 201);
     }
 
-    /** GET /api/van-stock/{employeeId} — what's currently out with this salesman. */
+    /**
+     * GET /api/van-stock/{employeeId} — what's currently out with this
+     * salesman. ?export=1 streams the same, currently-filtered rows as
+     * .xlsx instead of JSON; ?item_ids=1,2,3 narrows to just those items
+     * (the "Export Selected" case — selection always narrows the same
+     * query that's already scoped to this one salesman, never a different
+     * salesman's data).
+     */
     public function pending(string $employeeId): void
     {
+        $claims = JwtAuthMiddleware::authenticate();
+        $rows = $this->model->pendingForEmployee((int) $employeeId);
+
+        if (!empty($_GET['item_ids'])) {
+            $wanted = array_map('intval', explode(',', (string) $_GET['item_ids']));
+            $rows = array_values(array_filter($rows, fn ($r) => in_array((int) $r['item_id'], $wanted, true)));
+        }
+
+        if (!empty($_GET['export'])) {
+            PermissionMiddleware::require($claims, 'reports.export_excel');
+            $stmt = $this->pdo->prepare('SELECT name FROM users WHERE id = :id');
+            $stmt->execute(['id' => (int) $employeeId]);
+            $employeeName = $stmt->fetchColumn() ?: "employee-{$employeeId}";
+            $safeName = preg_replace('/[^A-Za-z0-9]+/', '_', $employeeName);
+            $suffix = !empty($_GET['item_ids']) ? 'Selected' : 'All';
+
+            \App\Helpers\TableExporter::export([
+                'item_id' => 'Item ID', 'item_name' => 'Item Name', 'item_code' => 'SKU', 'barcode' => 'Barcode',
+                'unit_code' => 'Unit', 'quantity_on_hand' => 'On-hand Qty', 'cost_price' => 'Purchase/Cost Price',
+                'selling_price' => 'Selling Price', 'stock_value' => 'Stock Value',
+            ], $rows, "Van_Stock_{$suffix}_{$safeName}_" . date('Y-m-d') . '.xlsx');
+        }
+
+        Response::json($rows);
+    }
+
+    /**
+     * GET /api/van-stock/issues — issue TRANSACTIONS for this branch (one
+     * row per Issue Stock action, section 19), not the flattened item
+     * balance pending() returns. ?employee_id narrows to one salesman.
+     * ?detail=1 returns flattened item-line rows (all lines of every listed
+     * transaction) for building a client-side PDF; ?export=1 streams the
+     * same flattened rows as .xlsx. ?ids=1,2,3 narrows to specific issue
+     * transactions (the "Export Selected" case) — selecting one multi-item
+     * transaction still exports every item line it contains together.
+     */
+    public function issues(): void
+    {
+        $claims = JwtAuthMiddleware::authenticate();
+        $branchId = $this->resolveBranchId($claims);
+        $employeeId = !empty($_GET['employee_id']) ? (int) $_GET['employee_id'] : null;
+        $rows = $this->model->listIssues($branchId, $employeeId);
+
+        if (!empty($_GET['ids'])) {
+            $wanted = array_map('intval', explode(',', (string) $_GET['ids']));
+            $rows = array_values(array_filter($rows, fn ($r) => in_array((int) $r['id'], $wanted, true)));
+        }
+
+        if (!empty($_GET['detail'])) {
+            Response::json($this->flattenedIssueLines($rows));
+            return;
+        }
+
+        if (!empty($_GET['export'])) {
+            PermissionMiddleware::require($claims, 'reports.export_excel');
+            $this->exportIssuesExcel($rows, !empty($_GET['ids']));
+        }
+
+        Response::json($rows);
+    }
+
+    /** GET /api/van-stock/issues/{id} — one issue transaction with all its item lines. */
+    public function showIssue(string $id): void
+    {
         JwtAuthMiddleware::authenticate();
-        Response::json($this->model->pendingForEmployee((int) $employeeId));
+        $issue = $this->model->findIssue((int) $id);
+        if (!$issue) {
+            Response::error('Not found', 404);
+        }
+        Response::json($issue);
+    }
+
+    /** One row per issue-transaction line — header fields repeated per item, same convention as the GRN export. */
+    private function flattenedIssueLines(array $issues): array
+    {
+        $rows = [];
+        foreach ($issues as $issue) {
+            foreach ($this->model->issueLines((int) $issue['id']) as $line) {
+                $rows[] = [
+                    'issue_no' => $issue['issue_no'],
+                    'issued_at' => $issue['issued_at'],
+                    'employee_name' => $issue['employee_name'],
+                    'route_name' => $issue['route_name'],
+                    'issued_by_name' => $issue['issued_by_name'],
+                    'notes' => $issue['notes'],
+                    'item_name' => $line['item_name'],
+                    'item_code' => $line['item_code'],
+                    'qty' => $line['qty'],
+                    'unit_code' => $line['unit_code'],
+                ];
+            }
+        }
+        return $rows;
+    }
+
+    private function exportIssuesExcel(array $issues, bool $isSelected): void
+    {
+        $singleIssueNo = (count($issues) === 1) ? $issues[0]['issue_no'] : null;
+
+        if (empty($issues)) {
+            \App\Helpers\TableExporter::export(['issue_no' => 'Issue #'], [], 'Van_Stock_Issues_' . ($isSelected ? 'Selected' : 'All') . '_' . date('Y-m-d') . '.xlsx');
+            return;
+        }
+
+        $rows = $this->flattenedIssueLines($issues);
+        $columns = [
+            'issue_no' => 'Issue Number', 'issued_at' => 'Issue Date', 'employee_name' => 'Salesman',
+            'route_name' => 'Route', 'item_code' => 'SKU', 'item_name' => 'Item Name',
+            'qty' => 'Qty', 'unit_code' => 'Unit', 'issued_by_name' => 'Issued By', 'notes' => 'Notes',
+        ];
+
+        $filename = $singleIssueNo !== null
+            ? "{$singleIssueNo}.xlsx"
+            : 'Van_Stock_Issues_' . ($isSelected ? 'Selected' : 'All') . '_' . date('Y-m-d') . '.xlsx';
+        \App\Helpers\TableExporter::export($columns, $rows, $filename);
     }
 }

@@ -81,7 +81,11 @@ class ItemController
         $claims = JwtAuthMiddleware::authenticate();
         $search = $_GET['search'] ?? null;
         $branchId = $this->resolveBranchId($claims);
-        Response::json($this->items->all($search, $branchId));
+        // Default is 'active' — every caller that doesn't explicitly ask
+        // for the Items screen's Deactivated/All filter (Billing/POS
+        // included) only ever sees sellable items.
+        $status = in_array($_GET['status'] ?? '', ['active', 'inactive', 'all'], true) ? $_GET['status'] : 'active';
+        Response::json($this->items->all($search, $branchId, $status));
     }
 
     public function show(string $id): void
@@ -100,7 +104,7 @@ class ItemController
         PermissionMiddleware::require($claims, 'catalog.manage_items');
 
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
-        $errors = $this->validate($body);
+        $errors = $this->validate($body, null);
         if (!empty($errors)) {
             Response::json(['errors' => $errors], 422);
         }
@@ -134,6 +138,14 @@ class ItemController
         }
 
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        // update() previously skipped validate() entirely — a duplicate
+        // barcode (or a negative price) went straight to the database and
+        // surfaced as a raw SQL constraint error / generic 500 instead of a
+        // clean message (section 8 of the barcode-save-error investigation).
+        $errors = $this->validate($body, (int) $id);
+        if (!empty($errors)) {
+            Response::json(['errors' => $errors], 422);
+        }
         $this->items->update((int) $id, $body, $body['unit_conversions'] ?? null, $body['branch_ids'] ?? null);
         Response::json($this->items->find((int) $id));
     }
@@ -146,8 +158,8 @@ class ItemController
         if (!$this->items->find((int) $id)) {
             Response::error('Not found', 404);
         }
-        $this->items->delete((int) $id);
-        Response::json(['deleted' => true]);
+        $result = $this->items->delete((int) $id);
+        Response::json($result);
     }
 
     /** POST /api/items/{id}/image — multipart upload, replaces any existing image. */
@@ -322,13 +334,22 @@ class ItemController
         return '';
     }
 
-    private function validate(array $body): array
+    /**
+     * @param int|null $excludeItemId null on create (every required field
+     * must be present), or the item's own id on an update — update() is a
+     * partial PATCH-style body, so item_name/base_unit_id are only checked
+     * when the caller actually touches them (an edit that only sends
+     * {"barcode": "..."} must not be rejected for "missing" fields it never
+     * intended to change).
+     */
+    private function validate(array $body, ?int $excludeItemId): array
     {
+        $isCreate = $excludeItemId === null;
         $errors = [];
-        if (trim((string) ($body['item_name'] ?? '')) === '') {
+        if (($isCreate || array_key_exists('item_name', $body)) && trim((string) ($body['item_name'] ?? '')) === '') {
             $errors[] = 'item_name is required';
         }
-        if (empty($body['base_unit_id'])) {
+        if (($isCreate || array_key_exists('base_unit_id', $body)) && empty($body['base_unit_id'])) {
             $errors[] = 'base_unit_id is required';
         }
         // MRP, NET_SRATE and NET_PURRATE are independent values (never
@@ -342,6 +363,23 @@ class ItemController
                 $errors[] = "{$field} cannot be negative";
             }
         }
+
+        // Duplicate barcode used to reach the database's UNIQUE constraint
+        // unchecked and surface as a raw "Server error" (SQLSTATE 23000) —
+        // caught here instead, with the actual conflicting item named, same
+        // as every other business-rule error in this validator. A blank
+        // barcode is never a duplicate (normalizeBarcode() stores it as
+        // NULL, and MySQL's UNIQUE index allows any number of NULLs).
+        if (array_key_exists('barcode', $body) && trim((string) $body['barcode']) !== '') {
+            $barcode = trim((string) $body['barcode']);
+            $stmt = $this->pdo->prepare('SELECT id, item_name FROM items WHERE barcode = :barcode LIMIT 1');
+            $stmt->execute(['barcode' => $barcode]);
+            $owner = $stmt->fetch();
+            if ($owner && (int) $owner['id'] !== $excludeItemId) {
+                $errors[] = "Barcode '{$barcode}' is already assigned to item '{$owner['item_name']}'.";
+            }
+        }
+
         return $errors;
     }
 
@@ -365,7 +403,8 @@ class ItemController
         $sheet->setTitle('Items');
         $sheet->fromArray(array_values($columns), null, 'A1');
 
-        $rows = $this->items->all();
+        $status = in_array($_GET['status'] ?? '', ['active', 'inactive', 'all'], true) ? $_GET['status'] : 'active';
+        $rows = $this->items->all(null, null, $status);
         $rowIndex = 2;
         foreach ($rows as $item) {
             $rowData = [];
@@ -442,6 +481,14 @@ class ItemController
         $lookups = $this->buildLookups();
         $pendingBrands = [];
         $pendingCategories = [];
+        // Same auto-create-on-import behavior as Brand/Category, extended to
+        // every other item-master field that can legitimately be missing on
+        // a fresh import: Product Line, Unit Type (base + secondary), and GST
+        // (tax code). Each has its own pending map because each materializes
+        // into a different table with different required columns.
+        $pendingProductLines = [];
+        $pendingUnits = [];
+        $pendingTaxCodes = [];
 
         $results = [];
         $toInsert = [];
@@ -452,7 +499,15 @@ class ItemController
             }
 
             $record = array_combine($header, array_pad($row, count($header), null));
-            [$mapped, $rowErrors] = $this->mapImportRow($record, $lookups, $pendingBrands, $pendingCategories);
+            [$mapped, $rowErrors] = $this->mapImportRow(
+                $record,
+                $lookups,
+                $pendingBrands,
+                $pendingCategories,
+                $pendingProductLines,
+                $pendingUnits,
+                $pendingTaxCodes
+            );
 
             $results[] = [
                 'row' => $rowNumber + 2, // +1 for 0-index, +1 for header row
@@ -469,16 +524,23 @@ class ItemController
         $inserted = 0;
         $updated = 0;
         if ($commit) {
-            // Create each newly-seen Brand/Category exactly once (deduped
-            // across every row in this file via $pendingBrands/$pendingCategories),
-            // before any item row references its id.
+            // Create each newly-seen master exactly once (deduped across
+            // every row in this file via the $pending* maps), before any
+            // item row references its id.
             $createdBrandIds = $this->materializePendingMasters('brands', $pendingBrands);
             $createdCategoryIds = $this->materializePendingMasters('categories', $pendingCategories);
+            $createdProductLineIds = $this->materializePendingMasters('product_lines', $pendingProductLines);
+            $createdUnitIds = $this->materializePendingUnits($pendingUnits);
+            $createdTaxCodeIds = $this->materializePendingTaxCodes($pendingTaxCodes);
 
             foreach ($toInsert as $mapped) {
                 ['item' => $itemData, 'branch_ids' => $branchIds, 'existing_item_id' => $existingItemId] = $mapped;
                 $itemData['brand_id'] = $this->resolvePendingMasterId($itemData['brand_id'], $createdBrandIds);
                 $itemData['category_id'] = $this->resolvePendingMasterId($itemData['category_id'], $createdCategoryIds);
+                $itemData['product_line_id'] = $this->resolvePendingMasterId($itemData['product_line_id'], $createdProductLineIds);
+                $itemData['base_unit_id'] = $this->resolvePendingMasterId($itemData['base_unit_id'], $createdUnitIds);
+                $itemData['secondary_unit_id'] = $this->resolvePendingMasterId($itemData['secondary_unit_id'], $createdUnitIds);
+                $itemData['tax_code_id'] = $this->resolvePendingMasterId($itemData['tax_code_id'], $createdTaxCodeIds);
                 // A blank NET_SRATE/NET_PURRATE/MRP/etc. cell means "leave
                 // unchanged" (never "clear this out") on both paths — on
                 // create there's nothing to preserve, so the omitted NOT
@@ -508,6 +570,9 @@ class ItemController
             // either way, only whether materializePendingMasters() runs differs.
             'new_brands' => array_values($pendingBrands),
             'new_categories' => array_values($pendingCategories),
+            'new_product_lines' => array_values($pendingProductLines),
+            'new_units' => array_values(array_column($pendingUnits, 'short_code')),
+            'new_tax_codes' => array_values(array_column($pendingTaxCodes, 'code')),
             'rows' => $results,
         ]);
     }
@@ -594,8 +659,15 @@ class ItemController
     }
 
     /** @return array{0: array{item: array, branch_ids: array}, 1: string[]} */
-    private function mapImportRow(array $record, array &$lookups, array &$pendingBrands, array &$pendingCategories): array
-    {
+    private function mapImportRow(
+        array $record,
+        array &$lookups,
+        array &$pendingBrands,
+        array &$pendingCategories,
+        array &$pendingProductLines,
+        array &$pendingUnits,
+        array &$pendingTaxCodes
+    ): array {
         $errors = [];
         $itemName = trim((string) ($record['item_name'] ?? ''));
         if ($itemName === '') {
@@ -617,21 +689,26 @@ class ItemController
             $errors[] = "barcode '{$barcode}' already belongs to a different item";
         }
 
-        $baseUnitId = $this->resolveLookup($lookups['base_unit'], $record['base_unit'] ?? null);
+        // Unit Type is auto-created exactly like Brand/Category (section 1 of
+        // the master-data-auto-create requirement) — a base_unit is required
+        // on every item, so an unknown one is staged and created, never
+        // rejected. The Excel cell is used as both the new unit's display
+        // name and its short_code (stock_units.short_code is VARCHAR(10) and
+        // UNIQUE, so it's truncated defensively — real unit codes like "PCS"/
+        // "BOX"/"KG" are always well under that limit).
+        $baseUnitId = $this->resolveOrStageUnit($lookups['base_unit'], $pendingUnits, $record['base_unit'] ?? null);
         if ($baseUnitId === null) {
-            $errors[] = "unknown base_unit '" . ($record['base_unit'] ?? '') . "'";
+            $errors[] = "base_unit is required";
         }
-        $secondaryUnitId = $this->resolveLookup($lookups['base_unit'], $record['secondary_unit'] ?? null);
-        if (!empty($record['secondary_unit']) && $secondaryUnitId === null) {
-            $errors[] = "unknown secondary_unit '{$record['secondary_unit']}'";
-        }
+        $secondaryUnitId = $this->resolveOrStageUnit($lookups['base_unit'], $pendingUnits, $record['secondary_unit'] ?? null);
 
-        // Brand/Category are auto-created on import rather than rejected —
-        // resolveOrStageMaster() matches case/space-insensitively against
-        // what's already loaded, or stages a new one (deduped across rows
-        // in this same file) to be created when the import actually commits.
+        // Brand/Category/Product Line are auto-created on import rather than
+        // rejected — resolveOrStageMaster() matches case/space-insensitively
+        // against what's already loaded, or stages a new one (deduped across
+        // rows in this same file) to be created when the import actually commits.
         $categoryId = $this->resolveOrStageMaster($lookups['category'], $pendingCategories, $record['category'] ?? null);
         $brandId = $this->resolveOrStageMaster($lookups['brand'], $pendingBrands, $record['brand'] ?? null);
+        $productLineId = $this->resolveOrStageMaster($lookups['product_line'], $pendingProductLines, $record['product_line'] ?? null);
         // The category/brand mapping restriction only applies when both
         // already exist for real — a brand-new category has no mappings
         // configured yet, which is already "no restriction" (opt-in feature).
@@ -644,18 +721,18 @@ class ItemController
             $errors[] = "unknown supplier '{$record['supplier']}'";
         }
 
-        $taxCodeId = $this->resolveLookup($lookups['tax_code'], $record['tax_code'] ?? null);
-        if (!empty($record['tax_code']) && $taxCodeId === null) {
-            $errors[] = "unknown tax_code '{$record['tax_code']}'";
-        }
-        // No explicit tax_code column, but a GST% number was given directly
-        // (the legacy format's own column) — resolve by matching percent.
-        if ($taxCodeId === null && empty($record['tax_code']) && ($record['gst'] ?? null) !== null && $record['gst'] !== '') {
-            $taxCodeId = $lookups['gst_percent'][number_format((float) $record['gst'], 2)] ?? null;
-            if ($taxCodeId === null) {
-                $errors[] = "no tax code configured for GST {$record['gst']}%";
-            }
-        }
+        // GST/tax code is auto-created the same way — either an unrecognized
+        // tax_code label, or a bare GST% with no matching tax code yet, stages
+        // a new tax_codes row (code, gst_percent, and an even CGST/SGST split,
+        // the same convention every other tax code in this system already
+        // uses) instead of failing the row.
+        $taxCodeId = $this->resolveOrStageTaxCode(
+            $lookups['tax_code'],
+            $lookups['gst_percent'],
+            $pendingTaxCodes,
+            $record['tax_code'] ?? null,
+            $record['gst'] ?? null
+        );
 
         $branchIds = [];
         $branchNames = array_filter(array_map('trim', explode(',', (string) ($record['branches'] ?? ''))));
@@ -702,6 +779,7 @@ class ItemController
             'item_name' => $itemName,
             'category_id' => $categoryId,
             'brand_id' => $brandId,
+            'product_line_id' => $productLineId,
             'supplier_id' => $supplierId,
             'hsn_code' => $record['hsn_code'] ?? null,
             'barcode' => $barcode ?: null,
@@ -788,7 +866,7 @@ class ItemController
         return "NEW:{$normalized}";
     }
 
-    /** Creates the brand/category rows staged in $pending (once each), returning normalized-name => new id. */
+    /** Creates the brand/category/product_line rows staged in $pending (once each), returning normalized-name => new id. */
     private function materializePendingMasters(string $table, array $pending): array
     {
         $createdIds = [];
@@ -806,6 +884,130 @@ class ItemController
             }
             $stmt = $this->pdo->prepare("INSERT INTO {$table} (name) VALUES (:name)");
             $stmt->execute(['name' => $displayName]);
+            $createdIds[$normalized] = (int) $this->pdo->lastInsertId();
+        }
+        return $createdIds;
+    }
+
+    /**
+     * Resolves a Unit Type (base or secondary) against the already-loaded
+     * short_code lookup; stages a new stock_units row if unseen. Mirrors
+     * resolveOrStageMaster() but keyed/materialized differently because
+     * stock_units has no plain "name-only" shape — short_code is the actual
+     * unique/lookup column, and the Excel cell is the only value we have, so
+     * it becomes both the new unit's name and its short_code.
+     */
+    private function resolveOrStageUnit(array &$lookup, array &$pending, mixed $rawValue): int|string|null
+    {
+        if ($rawValue === null || trim((string) $rawValue) === '') {
+            return null;
+        }
+        $display = trim((string) $rawValue);
+        $normalized = $this->normalizeMasterName($display);
+        if (isset($lookup[$normalized])) {
+            return $lookup[$normalized];
+        }
+        if (!isset($pending[$normalized])) {
+            // short_code is VARCHAR(10) UNIQUE — real unit codes (PCS, BOX,
+            // KG, CTN, ...) are always well under this; truncate defensively
+            // rather than let an oversized cell fail the whole import.
+            $pending[$normalized] = ['name' => $display, 'short_code' => substr($display, 0, 10)];
+        }
+        return "NEW:{$normalized}";
+    }
+
+    /** Creates the stock_units rows staged by resolveOrStageUnit(), returning normalized-name => new id. */
+    private function materializePendingUnits(array $pending): array
+    {
+        $createdIds = [];
+        foreach ($pending as $normalized => $unit) {
+            $stmt = $this->pdo->prepare('SELECT id FROM stock_units WHERE LOWER(TRIM(short_code)) = :sc LIMIT 1');
+            $stmt->execute(['sc' => strtolower($unit['short_code'])]);
+            $existing = $stmt->fetchColumn();
+            if ($existing) {
+                $createdIds[$normalized] = (int) $existing;
+                continue;
+            }
+            $stmt = $this->pdo->prepare('INSERT INTO stock_units (name, short_code, is_decimal) VALUES (:name, :short_code, 0)');
+            $stmt->execute(['name' => $unit['name'], 'short_code' => $unit['short_code']]);
+            $createdIds[$normalized] = (int) $this->pdo->lastInsertId();
+        }
+        return $createdIds;
+    }
+
+    /**
+     * Resolves GST against the tax_code lookup (by code) or the gst_percent
+     * lookup (by percentage number), staging a new tax_codes row when
+     * neither matches — an unrecognized tax_code label, or a bare GST% with
+     * no existing tax code at that rate, both auto-create instead of failing
+     * the row. New tax codes use an even CGST/SGST split (IGST = full rate),
+     * the same convention every seeded tax code already follows.
+     */
+    private function resolveOrStageTaxCode(array &$codeLookup, array &$percentLookup, array &$pending, mixed $taxCodeValue, mixed $gstValue): int|string|null
+    {
+        $codeText = trim((string) ($taxCodeValue ?? ''));
+        $gstPercent = ($gstValue !== null && $gstValue !== '') ? (float) $gstValue : null;
+
+        if ($codeText !== '') {
+            $normalized = strtolower($codeText);
+            if (isset($codeLookup[$normalized])) {
+                return $codeLookup[$normalized];
+            }
+            if (!isset($pending[$normalized])) {
+                $percent = $gstPercent ?? 0.0;
+                $pending[$normalized] = [
+                    'code' => $codeText,
+                    'name' => $codeText,
+                    'gst_percent' => $percent,
+                ];
+            }
+            return "NEW:{$normalized}";
+        }
+
+        if ($gstPercent !== null) {
+            $percentKey = number_format($gstPercent, 2);
+            if (isset($percentLookup[$percentKey])) {
+                return $percentLookup[$percentKey];
+            }
+            $normalized = 'gst' . $percentKey;
+            if (!isset($pending[$normalized])) {
+                $pending[$normalized] = [
+                    'code' => 'GST' . rtrim(rtrim(number_format($gstPercent, 2), '0'), '.'),
+                    'name' => 'GST ' . rtrim(rtrim(number_format($gstPercent, 2), '0'), '.') . '%',
+                    'gst_percent' => $gstPercent,
+                ];
+            }
+            return "NEW:{$normalized}";
+        }
+
+        return null; // no tax_code and no gst% given — item is saved with no tax code, same as before.
+    }
+
+    /** Creates the tax_codes rows staged by resolveOrStageTaxCode(), returning normalized-key => new id. */
+    private function materializePendingTaxCodes(array $pending): array
+    {
+        $createdIds = [];
+        foreach ($pending as $normalized => $taxCode) {
+            $stmt = $this->pdo->prepare('SELECT id FROM tax_codes WHERE LOWER(TRIM(code)) = :c LIMIT 1');
+            $stmt->execute(['c' => strtolower($taxCode['code'])]);
+            $existing = $stmt->fetchColumn();
+            if ($existing) {
+                $createdIds[$normalized] = (int) $existing;
+                continue;
+            }
+            $half = round($taxCode['gst_percent'] / 2, 2);
+            $stmt = $this->pdo->prepare(
+                'INSERT INTO tax_codes (code, name, gst_percent, cgst_percent, sgst_percent, igst_percent)
+                 VALUES (:code, :name, :gst, :cgst, :sgst, :igst)'
+            );
+            $stmt->execute([
+                'code' => $taxCode['code'],
+                'name' => $taxCode['name'],
+                'gst' => $taxCode['gst_percent'],
+                'cgst' => $half,
+                'sgst' => $half,
+                'igst' => $taxCode['gst_percent'],
+            ]);
             $createdIds[$normalized] = (int) $this->pdo->lastInsertId();
         }
         return $createdIds;

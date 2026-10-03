@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Image as ImageIcon, Pencil, Trash2, Upload, X, Plus } from 'lucide-react';
+import { Image as ImageIcon, Pencil, Trash2, Upload, X, Plus, RotateCcw } from 'lucide-react';
 import { categoriesApi, brandsApi, productLinesApi, taxCodesApi, stockUnitsApi, itemsApi, categoryBrandsApi } from '../api/catalog';
 import { suppliersApi } from '../api/parties';
 import { branchesApi } from '../api/branches';
@@ -382,6 +382,7 @@ const PAGE_SIZE = 10;
 export function ItemsPanel({ canManage }) {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('active'); // active | inactive | all
   const [page, setPage] = useState(1);
   const [modalItem, setModalItem] = useState(undefined); // undefined = closed, null = create, object = edit
   const [importResult, setImportResult] = useState(null);
@@ -389,18 +390,34 @@ export function ItemsPanel({ canManage }) {
   const [importSuccessMsg, setImportSuccessMsg] = useState('');
   const fileInputRef = useRef(null);
 
-  const itemsQuery = useQuery({ queryKey: ['items', search], queryFn: () => itemsApi.list(search) });
+  const itemsQuery = useQuery({
+    queryKey: ['items', search, statusFilter],
+    queryFn: () => itemsApi.list(search, statusFilter),
+  });
   const invalidateItems = () => queryClient.invalidateQueries({ queryKey: ['items'] });
   const deleteItem = useMutation({ mutationFn: itemsApi.remove, onSuccess: invalidateItems });
+  const reactivateItem = useMutation({
+    mutationFn: (id) => itemsApi.update(id, { is_active: 1 }),
+    onSuccess: invalidateItems,
+  });
 
   const handleSearchChange = (value) => {
     setSearch(value);
     setPage(1); // a new search always starts back at page 1
   };
 
+  const handleStatusFilterChange = (value) => {
+    setStatusFilter(value);
+    setPage(1);
+  };
+
   const handleDelete = async (item) => {
-    if (!window.confirm(`Delete "${item.item_name}"? This cannot be undone.`)) return;
+    if (!window.confirm(`Deactivate "${item.item_name}"? It will be hidden from Billing and the active Items list, but its history is kept.`)) return;
     await deleteItem.mutateAsync(item.id);
+  };
+
+  const handleReactivate = async (item) => {
+    await reactivateItem.mutateAsync(item.id);
   };
 
   const openEdit = async (item) => {
@@ -443,6 +460,24 @@ export function ItemsPanel({ canManage }) {
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-soft px-4 py-3">
           <span className="font-semibold text-ink">Items</span>
           <div className="flex items-center gap-2">
+            <div className="flex overflow-hidden rounded-lg border border-border-soft text-xs">
+              {[
+                ['active', 'Active'],
+                ['inactive', 'Deactivated'],
+                ['all', 'All'],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => handleStatusFilterChange(value)}
+                  className={`px-3 py-1.5 font-medium ${
+                    statusFilter === value ? 'bg-navbar text-gold' : 'bg-white text-ink-muted hover:bg-page'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <input
               type="text"
               placeholder="Search name / code / barcode"
@@ -470,6 +505,7 @@ export function ItemsPanel({ canManage }) {
               <th className="px-4 py-2">NET_PURRATE</th>
               <th className="px-4 py-2">GST%</th>
               <th className="px-4 py-2">HSN</th>
+              {statusFilter === 'all' && <th className="px-4 py-2">Status</th>}
               {canManage && <th className="px-4 py-2 text-right">Actions</th>}
             </tr>
           </thead>
@@ -498,15 +534,30 @@ export function ItemsPanel({ canManage }) {
                 <td className="px-4 py-2 text-ink-muted">{item.net_purrate ?? item.purchase_price}</td>
                 <td className="px-4 py-2 text-ink-muted">{item.gst_percent ?? '—'}</td>
                 <td className="px-4 py-2 text-ink-muted">{item.hsn_code || '—'}</td>
+                {statusFilter === 'all' && (
+                  <td className="px-4 py-2">
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                      Number(item.is_active) ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-danger'
+                    }`}>
+                      {Number(item.is_active) ? 'Active' : 'Deactivated'}
+                    </span>
+                  </td>
+                )}
                 {canManage && (
                   <td className="px-4 py-2 text-right">
                     <div className="flex justify-end gap-1">
                       <button onClick={() => openEdit(item)} title="Edit" className="rounded p-1.5 text-ink-muted hover:bg-page hover:text-gold">
                         <Pencil size={15} />
                       </button>
-                      <button onClick={() => handleDelete(item)} title="Delete" className="rounded p-1.5 text-ink-muted hover:bg-red-50 hover:text-danger">
-                        <Trash2 size={15} />
-                      </button>
+                      {Number(item.is_active) ? (
+                        <button onClick={() => handleDelete(item)} title="Deactivate" className="rounded p-1.5 text-ink-muted hover:bg-red-50 hover:text-danger">
+                          <Trash2 size={15} />
+                        </button>
+                      ) : (
+                        <button onClick={() => handleReactivate(item)} title="Reactivate" className="rounded p-1.5 text-ink-muted hover:bg-emerald-50 hover:text-emerald-700">
+                          <RotateCcw size={15} />
+                        </button>
+                      )}
                     </div>
                   </td>
                 )}
@@ -514,7 +565,7 @@ export function ItemsPanel({ canManage }) {
             ))}
             {items.length === 0 && (
               <tr>
-                <td colSpan={canManage ? 11 : 10} className="px-4 py-6 text-center text-ink-muted">No items yet.</td>
+                <td colSpan={10 + (canManage ? 1 : 0) + (statusFilter === 'all' ? 1 : 0)} className="px-4 py-6 text-center text-ink-muted">No items found.</td>
               </tr>
             )}
           </tbody>

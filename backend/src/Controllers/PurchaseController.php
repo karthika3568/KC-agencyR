@@ -41,7 +41,133 @@ class PurchaseController
     {
         $claims = JwtAuthMiddleware::authenticate();
         $rows = $this->model->all($this->resolveBranchId($claims));
+
+        // ?ids=1,2,3 narrows to exactly those GRNs (the "Export Selected"
+        // case from the UI's row checkboxes) — applied to the same
+        // branch-scoped list every other view of this endpoint already
+        // uses, never a different/unscoped query.
+        if (!empty($_GET['ids'])) {
+            $wanted = array_map('intval', explode(',', (string) $_GET['ids']));
+            $rows = array_values(array_filter($rows, fn ($r) => in_array((int) $r['id'], $wanted, true)));
+        }
+
+        $canViewCost = in_array('purchases.view_purchase_cost', (array) ($claims['permissions'] ?? []), true);
+
+        // ?detail=1 returns the same flattened item-line rows the Excel
+        // export streams, as JSON — lets the web app build a client-side
+        // PDF from the identical, backend-computed numbers (gross/discount/
+        // GST/net) instead of recomputing them in JS, so PDF and Excel can
+        // never drift apart.
+        if (!empty($_GET['detail'])) {
+            Response::json($this->flattenedGrnLines($rows, $canViewCost));
+            return;
+        }
+
+        if (!empty($_GET['export'])) {
+            PermissionMiddleware::require($claims, 'reports.export_excel');
+            $this->exportGrnExcel($rows, !empty($_GET['ids']), $canViewCost);
+        }
+
         Response::json($this->stripCostIfUnauthorized($claims, $rows));
+    }
+
+    /**
+     * One row per GRN line (item detail) — every field General Purchase
+     * requirement section 2/3/8 asks for, all derived from real stored
+     * columns (PurchaseModel::lineItemsFor(), the exact same query/method
+     * find() uses for the single-GRN view, so list export and single-GRN
+     * view can never show different numbers for the same line). Cost/rate
+     * columns are stripped for a caller without purchases.view_purchase_cost.
+     */
+    private function flattenedGrnLines(array $purchases, bool $canViewCost): array
+    {
+        $rows = [];
+        foreach ($purchases as $p) {
+            foreach ($this->model->lineItemsFor((int) $p['id']) as $line) {
+                $row = [
+                    'grn_no' => $p['grn_no'],
+                    'purchase_date' => $p['purchase_date'],
+                    'supplier_name' => $p['supplier_name'],
+                    'supplier_invoice_no' => $p['supplier_invoice_no'],
+                    'branch_name' => $p['branch_name'] ?? null,
+                    'supplier_phone' => $p['supplier_phone'] ?? null,
+                    'supplier_address' => $p['supplier_address'] ?? null,
+                    'supplier_gstin' => $p['supplier_gstin'] ?? null,
+                    'created_by_name' => $p['created_by_name'] ?? null,
+                    'item_name' => $line['item_name'],
+                    'item_code' => $line['item_code'],
+                    'hsn_code' => $line['hsn_code'],
+                    'qty' => $line['qty'],
+                    'free_qty' => $line['free_qty'],
+                    'unit_code' => $line['unit_code'],
+                    'status' => $p['status'],
+                    'payment_mode' => $p['payment_mode'],
+                ];
+                if ($canViewCost) {
+                    $row += [
+                        'rate' => $line['rate'],
+                        'mrp' => $line['mrp'],
+                        'gross_amount' => $line['gross_amount'],
+                        'discount_percent' => $line['discount_percent'],
+                        'discount_amount' => $line['discount_amount'],
+                        'taxable_amount' => $line['taxable_amount'],
+                        'tax_percent' => $line['tax_percent'],
+                        'tax_amount' => $line['tax_amount'],
+                        'net_amount' => $line['net_amount'],
+                        'grn_grand_total' => $p['grand_total'],
+                        'grn_paid_amount' => $p['paid_amount'],
+                        'grn_pending_balance' => $p['pending_balance'],
+                    ];
+                }
+                $rows[] = $row;
+            }
+        }
+        return $rows;
+    }
+
+    /**
+     * One row per GRN line (item detail), same flattened-report convention
+     * used by the invoice-wise profit export — header fields (GRN #, date,
+     * supplier, invoice #, payment mode, totals, status) repeated on every
+     * line of that GRN. A single-GRN export (exactly one id selected) is
+     * named after that GRN directly (section 10/11), not the generic
+     * "Selected" filename.
+     */
+    private function exportGrnExcel(array $purchases, bool $isSelected, bool $canViewCost): void
+    {
+        $singleGrnNo = (count($purchases) === 1) ? $purchases[0]['grn_no'] : null;
+
+        if (empty($purchases)) {
+            \App\Helpers\TableExporter::export(['grn_no' => 'GRN #'], [], 'GRN_Purchases_' . ($isSelected ? 'Selected' : 'All') . '_' . date('Y-m-d') . '.xlsx');
+            return;
+        }
+
+        $rows = $this->flattenedGrnLines($purchases, $canViewCost);
+
+        $columns = [
+            'grn_no' => 'GRN Number', 'purchase_date' => 'Purchase Date', 'supplier_name' => 'Supplier',
+            'supplier_invoice_no' => 'Supplier Invoice Number', 'branch_name' => 'Branch',
+            'item_code' => 'Item Code', 'item_name' => 'Item Name', 'hsn_code' => 'HSN',
+            'qty' => 'Qty', 'free_qty' => 'Free Qty', 'unit_code' => 'Unit',
+        ];
+        if ($canViewCost) {
+            $columns += [
+                'rate' => 'Purchase Rate', 'mrp' => 'MRP',
+                'discount_percent' => 'Discount %', 'discount_amount' => 'Discount Amount',
+                'taxable_amount' => 'Taxable Amount', 'tax_percent' => 'GST %', 'tax_amount' => 'GST Amount',
+                'net_amount' => 'Net Amount',
+            ];
+        }
+        $columns['payment_mode'] = 'Payment Mode';
+        if ($canViewCost) {
+            $columns += ['grn_grand_total' => 'GRN Grand Total', 'grn_pending_balance' => 'GRN Pending Balance'];
+        }
+        $columns['status'] = 'Payment Status';
+
+        $filename = $singleGrnNo !== null
+            ? "{$singleGrnNo}.xlsx"
+            : 'GRN_Purchases_' . ($isSelected ? 'Selected' : 'All') . '_' . date('Y-m-d') . '.xlsx';
+        \App\Helpers\TableExporter::export($columns, $rows, $filename);
     }
 
     public function show(string $id): void

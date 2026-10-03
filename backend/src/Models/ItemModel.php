@@ -110,17 +110,32 @@ class ItemModel
      * @param int|null $branchId when given, only items mapped to that
      * branch are returned — this is what makes item_branches a real
      * availability filter rather than a decorative field (section 6).
+     * @param string $status 'active' (default — every normal caller,
+     * including Billing/POS, gets only sellable items), 'inactive' (the
+     * Items screen's "Deactivated" filter), or 'all' (the Items screen's
+     * combined view). Billing/product-search call sites simply never pass
+     * anything other than the default, so a deactivated item can never
+     * reach the POS product list or search results.
      */
-    public function all(?string $search = null, ?int $branchId = null): array
+    public function all(?string $search = null, ?int $branchId = null, string $status = 'active'): array
     {
         $sql = self::LIST_SELECT;
         $joins = [];
         $where = [];
         $params = [];
 
+        if ($status === 'active') {
+            $where[] = 'i.is_active = 1';
+        } elseif ($status === 'inactive') {
+            $where[] = 'i.is_active = 0';
+        }
+        // 'all' — no is_active filter.
+
         if ($branchId !== null) {
-            $joins[] = 'JOIN item_branches ib ON ib.item_id = i.id AND ib.branch_id = :branch_id';
-            $params['branch_id'] = $branchId;
+            $joins[] = 'LEFT JOIN item_branches ib ON ib.item_id = i.id AND ib.branch_id = :branch_id_join';
+            $where[] = '(ib.branch_id = :branch_id_where OR NOT EXISTS (SELECT 1 FROM item_branches ib2 WHERE ib2.item_id = i.id))';
+            $params['branch_id_join'] = $branchId;
+            $params['branch_id_where'] = $branchId;
         }
         if ($search !== null && $search !== '') {
             // Three distinct placeholders, not one reused three times — PDO
@@ -260,9 +275,18 @@ class ItemModel
         }
     }
 
-    public function delete(int $id): void
+    /**
+     * "Delete" from the item screen is always a deactivation, never a
+     * physical DELETE — an item can be referenced by years of invoices,
+     * purchases, stock movements, and reports, and hard-deleting it would
+     * either break those foreign keys or silently corrupt historical
+     * documents. Reactivation is just the normal update() call with
+     * is_active:1 — there's no separate "undelete" path to keep in sync.
+     */
+    public function delete(int $id): array
     {
-        $this->pdo->prepare('DELETE FROM items WHERE id = :id')->execute(['id' => $id]);
+        $this->pdo->prepare('UPDATE items SET is_active = 0 WHERE id = :id')->execute(['id' => $id]);
+        return ['deleted' => true, 'deactivated' => true, 'message' => 'Item deactivated. It will no longer appear in Billing or the active Items list, and remains available for existing invoices/reports.'];
     }
 
     private function saveUnitConversions(int $itemId, array $unitConversions): void

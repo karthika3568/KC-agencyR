@@ -67,7 +67,13 @@ class InvoiceModel
         }
 
         $stmt = $this->pdo->prepare(
-            'SELECT ii.*, su.short_code AS unit_code
+            // net_amount = the GST-inclusive line total (line_total is
+            // taxable value only, i.e. post-discount but pre-tax) — the one
+            // place this is computed, so every consumer (web/mobile print,
+            // invoice detail, invoice management) reads the same number
+            // instead of five different places re-deriving it.
+            'SELECT ii.*, su.short_code AS unit_code,
+                    ROUND(ii.line_total + ii.tax_amount + ii.cess_amount, 2) AS net_amount
              FROM invoice_items ii
              JOIN stock_units su ON su.id = ii.unit_id
              WHERE ii.invoice_id = :id'

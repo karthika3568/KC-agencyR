@@ -23,8 +23,10 @@ class SupplierPaymentModel
     public function all(int $branchId): array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT sp.*, s.name AS supplier_name
-             FROM supplier_payments sp JOIN suppliers s ON s.id = sp.supplier_id
+            'SELECT sp.*, s.name AS supplier_name, u.name AS paid_by_name
+             FROM supplier_payments sp
+             JOIN suppliers s ON s.id = sp.supplier_id
+             LEFT JOIN users u ON u.id = sp.paid_by
              WHERE sp.branch_id = :branch_id ORDER BY sp.id DESC'
         );
         $stmt->execute(['branch_id' => $branchId]);

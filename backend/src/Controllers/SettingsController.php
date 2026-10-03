@@ -88,7 +88,11 @@ class SettingsController
                 'branch_id' => $branchId, 'printer_type' => 'a4', 'invoice_footer_note' => null,
                 'default_print_copies' => 1, 'bank_account_no' => null, 'bank_name' => null,
                 'upi_id' => null, 'terms_and_conditions' => null, 'show_upi_qr_on_thermal' => 0,
+                'allow_local_free_qty' => 1, 'allow_distance_free_qty' => 0,
             ];
+        } else {
+            $settings['allow_local_free_qty'] = (int) ($settings['allow_local_free_qty'] ?? 1);
+            $settings['allow_distance_free_qty'] = (int) ($settings['allow_distance_free_qty'] ?? 0);
         }
         Response::json($settings);
     }
@@ -103,8 +107,12 @@ class SettingsController
         $columns = [
             'printer_type', 'invoice_footer_note', 'default_print_copies', 'bank_account_no',
             'bank_name', 'upi_id', 'terms_and_conditions', 'show_upi_qr_on_thermal',
+            'allow_local_free_qty', 'allow_distance_free_qty',
         ];
-        $defaults = ['printer_type' => 'a4', 'default_print_copies' => 1, 'show_upi_qr_on_thermal' => 0];
+        $defaults = [
+            'printer_type' => 'a4', 'default_print_copies' => 1, 'show_upi_qr_on_thermal' => 0,
+            'allow_local_free_qty' => 1, 'allow_distance_free_qty' => 0,
+        ];
 
         // A partial body must not blank out fields it didn't mention — merge
         // onto whatever's already saved (or the same defaults printSettings() uses).
@@ -127,6 +135,52 @@ class SettingsController
         )->execute($data);
 
         $this->printSettings();
+    }
+
+    public function freeQtySettings(): void
+    {
+        $claims = JwtAuthMiddleware::authenticate();
+        $branchId = $this->resolveBranchId($claims);
+
+        $stmt = $this->pdo->prepare('SELECT allow_local_free_qty, allow_distance_free_qty FROM branch_print_settings WHERE branch_id = :branch_id');
+        $stmt->execute(['branch_id' => $branchId]);
+        $row = $stmt->fetch();
+
+        if (!$row) {
+            $row = [
+                'allow_local_free_qty' => 1,
+                'allow_distance_free_qty' => 0,
+            ];
+        } else {
+            $row['allow_local_free_qty'] = (int) ($row['allow_local_free_qty'] ?? 1);
+            $row['allow_distance_free_qty'] = (int) ($row['allow_distance_free_qty'] ?? 0);
+        }
+        Response::json($row);
+    }
+
+    public function updateFreeQtySettings(): void
+    {
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::require($claims, 'settings.manage');
+        $branchId = $this->resolveBranchId($claims);
+
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $local = isset($body['allow_local_free_qty']) ? (int) (bool) $body['allow_local_free_qty'] : 1;
+        $distance = isset($body['allow_distance_free_qty']) ? (int) (bool) $body['allow_distance_free_qty'] : 0;
+
+        $stmt = $this->pdo->prepare('SELECT * FROM branch_print_settings WHERE branch_id = :branch_id');
+        $stmt->execute(['branch_id' => $branchId]);
+        $existing = $stmt->fetch();
+
+        if ($existing) {
+            $this->pdo->prepare('UPDATE branch_print_settings SET allow_local_free_qty = :local, allow_distance_free_qty = :distance WHERE branch_id = :branch_id')
+                ->execute(['local' => $local, 'distance' => $distance, 'branch_id' => $branchId]);
+        } else {
+            $this->pdo->prepare('INSERT INTO branch_print_settings (branch_id, allow_local_free_qty, allow_distance_free_qty) VALUES (:branch_id, :local, :distance)')
+                ->execute(['branch_id' => $branchId, 'local' => $local, 'distance' => $distance]);
+        }
+
+        $this->freeQtySettings();
     }
 
     // -------------------------------------------------------------

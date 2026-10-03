@@ -10,6 +10,7 @@ use App\Middleware\JwtAuthMiddleware;
 use App\Middleware\PermissionMiddleware;
 use App\Models\InvoiceModel;
 use App\Services\CreditLedgerService;
+use App\Services\GstEInvoiceService;
 use PDO;
 
 class InvoiceController
@@ -187,6 +188,173 @@ class InvoiceController
         Response::json($result);
     }
 
+    // -------------------------------------------------------------
+    // GST E-Invoice (IRN) / E-Way Bill (section 10) — see
+    // App\Services\GstEInvoiceService for the honest "not configured until
+    // real GSP credentials exist" behavior. These endpoints never fabricate
+    // a success; they surface exactly what the service returns.
+    // -------------------------------------------------------------
+
+    /** PUT /api/invoices/{id}/transport — transporter details an E-Way Bill needs, saved before generating. */
+    public function updateTransportDetails(string $id): void
+    {
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::require($claims, 'pos.manage_gst_filing');
+        $this->requireOwnedInvoice($claims, (int) $id);
+
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        $stmt = $this->pdo->prepare(
+            'UPDATE invoices SET transporter_name = :name, transporter_gstin = :gstin,
+                transport_distance_km = :distance, vehicle_no = :vehicle_no WHERE id = :id'
+        );
+        $stmt->execute([
+            'name' => $body['transporter_name'] ?? null,
+            'gstin' => $body['transporter_gstin'] ?? null,
+            'distance' => isset($body['transport_distance_km']) ? (int) $body['transport_distance_km'] : null,
+            'vehicle_no' => $body['vehicle_no'] ?? null,
+            'id' => (int) $id,
+        ]);
+        Response::json($this->invoices->find((int) $id));
+    }
+
+    public function generateEInvoice(string $id): void
+    {
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::require($claims, 'pos.manage_gst_filing');
+        $invoice = $this->requireOwnedInvoice($claims, (int) $id);
+        $customer = $this->fetchCustomer($invoice['customer_id'] ?? null);
+
+        $service = new GstEInvoiceService($this->pdo);
+        $eligibility = $service->checkEinvoiceEligibility($invoice, $customer);
+        if (!$eligibility['eligible']) {
+            Response::error(implode(' ', $eligibility['reasons']), 422);
+        }
+
+        $branch = $this->fetchBranch((int) $invoice['branch_id']);
+        $result = $service->generateEInvoice($invoice, $invoice['items'], $customer, $branch);
+        $this->applyEInvoiceResult((int) $id, $result);
+        Response::json(['result' => $result, 'invoice' => $this->invoices->find((int) $id)], $result['success'] ? 200 : 422);
+    }
+
+    public function cancelEInvoice(string $id): void
+    {
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::require($claims, 'pos.manage_gst_filing');
+        $invoice = $this->requireOwnedInvoice($claims, (int) $id);
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+
+        $service = new GstEInvoiceService($this->pdo);
+        $result = $service->cancelEInvoice($invoice, (string) ($body['reason'] ?? 'Cancelled by user'));
+        if ($result['success']) {
+            $this->pdo->prepare('UPDATE invoices SET einvoice_status = \'cancelled\' WHERE id = :id')->execute(['id' => (int) $id]);
+        } else {
+            $this->pdo->prepare('UPDATE invoices SET einvoice_error = :err WHERE id = :id')
+                ->execute(['err' => substr($result['error'] ?? '', 0, 500), 'id' => (int) $id]);
+        }
+        Response::json(['result' => $result, 'invoice' => $this->invoices->find((int) $id)], $result['success'] ? 200 : 422);
+    }
+
+    public function generateEWayBill(string $id): void
+    {
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::require($claims, 'pos.manage_gst_filing');
+        $invoice = $this->requireOwnedInvoice($claims, (int) $id);
+        $customer = $this->fetchCustomer($invoice['customer_id'] ?? null);
+
+        $service = new GstEInvoiceService($this->pdo);
+        $eligibility = $service->checkEwayBillEligibility($invoice, $customer);
+        if (!$eligibility['eligible']) {
+            Response::error(implode(' ', $eligibility['reasons']), 422);
+        }
+
+        $branch = $this->fetchBranch((int) $invoice['branch_id']);
+        $result = $service->generateEWayBill($invoice, $invoice['items'], $customer, $branch);
+        $this->applyEWayBillResult((int) $id, $result);
+        Response::json(['result' => $result, 'invoice' => $this->invoices->find((int) $id)], $result['success'] ? 200 : 422);
+    }
+
+    public function cancelEWayBill(string $id): void
+    {
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::require($claims, 'pos.manage_gst_filing');
+        $invoice = $this->requireOwnedInvoice($claims, (int) $id);
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+
+        $service = new GstEInvoiceService($this->pdo);
+        $result = $service->cancelEWayBill($invoice, (string) ($body['reason'] ?? 'Cancelled by user'));
+        if ($result['success']) {
+            $this->pdo->prepare('UPDATE invoices SET eway_bill_status = \'cancelled\' WHERE id = :id')->execute(['id' => (int) $id]);
+        } else {
+            $this->pdo->prepare('UPDATE invoices SET eway_bill_error = :err WHERE id = :id')
+                ->execute(['err' => substr($result['error'] ?? '', 0, 500), 'id' => (int) $id]);
+        }
+        Response::json(['result' => $result, 'invoice' => $this->invoices->find((int) $id)], $result['success'] ? 200 : 422);
+    }
+
+    private function applyEInvoiceResult(int $invoiceId, array $result): void
+    {
+        if ($result['success']) {
+            $stmt = $this->pdo->prepare(
+                'UPDATE invoices SET einvoice_status = \'generated\', irn = :irn, ack_no = :ack_no,
+                    ack_date = :ack_date, einvoice_qr_code = :qr, einvoice_error = NULL,
+                    einvoice_raw_response = :raw WHERE id = :id'
+            );
+            $stmt->execute([
+                'irn' => $result['irn'] ?? null,
+                'ack_no' => $result['ack_no'] ?? null,
+                'ack_date' => !empty($result['ack_date']) ? date('Y-m-d', strtotime($result['ack_date'])) : null,
+                'qr' => $result['qr_code'] ?? null,
+                'raw' => $result['raw_response'] ?? null,
+                'id' => $invoiceId,
+            ]);
+        } else {
+            $stmt = $this->pdo->prepare(
+                'UPDATE invoices SET einvoice_status = \'failed\', einvoice_error = :err, einvoice_raw_response = :raw WHERE id = :id'
+            );
+            $stmt->execute(['err' => substr($result['error'] ?? 'Unknown error', 0, 500), 'raw' => $result['raw_response'] ?? null, 'id' => $invoiceId]);
+        }
+    }
+
+    private function applyEWayBillResult(int $invoiceId, array $result): void
+    {
+        if ($result['success']) {
+            $stmt = $this->pdo->prepare(
+                'UPDATE invoices SET eway_bill_status = \'generated\', eway_bill_no = :no,
+                    eway_bill_date = :date, eway_bill_valid_until = :valid, eway_bill_error = NULL,
+                    eway_bill_raw_response = :raw WHERE id = :id'
+            );
+            $stmt->execute([
+                'no' => $result['eway_bill_no'] ?? null,
+                'date' => !empty($result['eway_bill_date']) ? date('Y-m-d H:i:s', strtotime($result['eway_bill_date'])) : null,
+                'valid' => !empty($result['valid_until']) ? date('Y-m-d H:i:s', strtotime($result['valid_until'])) : null,
+                'raw' => $result['raw_response'] ?? null,
+                'id' => $invoiceId,
+            ]);
+        } else {
+            $stmt = $this->pdo->prepare(
+                'UPDATE invoices SET eway_bill_status = \'failed\', eway_bill_error = :err, eway_bill_raw_response = :raw WHERE id = :id'
+            );
+            $stmt->execute(['err' => substr($result['error'] ?? 'Unknown error', 0, 500), 'raw' => $result['raw_response'] ?? null, 'id' => $invoiceId]);
+        }
+    }
+
+    private function fetchCustomer(?int $customerId): ?array
+    {
+        if ($customerId === null) {
+            return null;
+        }
+        $stmt = $this->pdo->prepare('SELECT * FROM customers WHERE id = :id');
+        $stmt->execute(['id' => $customerId]);
+        return $stmt->fetch() ?: null;
+    }
+
+    private function fetchBranch(int $branchId): array
+    {
+        $stmt = $this->pdo->prepare('SELECT * FROM branches WHERE id = :id');
+        $stmt->execute(['id' => $branchId]);
+        return $stmt->fetch() ?: [];
+    }
+
     /** GET /api/invoices/{id}/print — everything a print template needs, pre-computed. */
     public function print(string $id): void
     {
@@ -269,6 +437,13 @@ class InvoiceController
             $invoiceFormat = $customer['is_local_customer'] ? 'local' : 'outstation';
         }
 
+        $stmtSettings = $this->pdo->prepare('SELECT allow_local_free_qty, allow_distance_free_qty FROM branch_print_settings WHERE branch_id = :branch_id');
+        $stmtSettings->execute(['branch_id' => $branchId]);
+        $freeQtyConfig = $stmtSettings->fetch();
+        $allowLocal = (int) ($freeQtyConfig['allow_local_free_qty'] ?? 1);
+        $allowDistance = (int) ($freeQtyConfig['allow_distance_free_qty'] ?? 0);
+        $isFreeQtyAllowed = $invoiceFormat === 'local' ? ($allowLocal === 1) : ($allowDistance === 1);
+
         $cartInput = $body['items'] ?? [];
         if (empty($cartInput)) {
             return [[], [], 'At least one item is required'];
@@ -298,6 +473,9 @@ class InvoiceController
             }
             if (!$canDiscount) {
                 unset($line['discount_percent'], $line['discount_amount']);
+            }
+            if (!$isFreeQtyAllowed) {
+                $line['free_qty'] = 0;
             }
 
             $lines[] = $this->invoices->priceLine($item, $line, $billType, $priceType);

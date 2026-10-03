@@ -187,12 +187,97 @@ function SequencesPanel({ canManage }) {
   );
 }
 
+function FreeQtySettingsPanel({ canManage }) {
+  const queryClient = useQueryClient();
+  const freeQtyQuery = useQuery({ queryKey: ['settings-free-qty'], queryFn: settingsApi.getFreeQty });
+  const [form, setForm] = useState(null);
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    if (freeQtyQuery.data && !form) {
+      setForm({
+        allow_local_free_qty: Number(freeQtyQuery.data.allow_local_free_qty ?? 1),
+        allow_distance_free_qty: Number(freeQtyQuery.data.allow_distance_free_qty ?? 0),
+      });
+    }
+  }, [freeQtyQuery.data]);
+
+  const saveMutation = useMutation({
+    mutationFn: settingsApi.updateFreeQty,
+    onSuccess: (data) => {
+      setForm({
+        allow_local_free_qty: Number(data.allow_local_free_qty),
+        allow_distance_free_qty: Number(data.allow_distance_free_qty),
+      });
+      queryClient.invalidateQueries({ queryKey: ['settings-free-qty'] });
+      queryClient.invalidateQueries({ queryKey: ['settings-print'] });
+      setMessage('Saved.');
+      setTimeout(() => setMessage(''), 2500);
+    },
+  });
+
+  if (!form) return <p className="text-ink-muted">Loading…</p>;
+
+  return (
+    <div className="card p-4">
+      <div className="mb-2 font-semibold text-ink">Free Quantity Configuration</div>
+      <p className="mb-4 text-xs text-ink-muted">
+        Configure whether Free Quantity input and calculations are enabled for Local and Distance billing types.
+      </p>
+
+      <div className="flex flex-col gap-4 border-t border-border-soft pt-4">
+        <label className="flex items-center justify-between rounded-lg border border-border-soft p-3.5 hover:bg-page cursor-pointer">
+          <div>
+            <div className="font-semibold text-sm text-ink">Local Free Quantity</div>
+            <div className="text-xs text-ink-muted">Enable free quantity entry and invoice display for Local billing (Default: ON)</div>
+          </div>
+          <input
+            type="checkbox"
+            checked={form.allow_local_free_qty === 1}
+            onChange={(e) => setForm({ ...form, allow_local_free_qty: e.target.checked ? 1 : 0 })}
+            disabled={!canManage}
+            className="h-5 w-5 accent-gold"
+          />
+        </label>
+
+        <label className="flex items-center justify-between rounded-lg border border-border-soft p-3.5 hover:bg-page cursor-pointer">
+          <div>
+            <div className="font-semibold text-sm text-ink">Distance Free Quantity</div>
+            <div className="text-xs text-ink-muted">Enable free quantity entry and invoice display for Distance billing (Default: OFF)</div>
+          </div>
+          <input
+            type="checkbox"
+            checked={form.allow_distance_free_qty === 1}
+            onChange={(e) => setForm({ ...form, allow_distance_free_qty: e.target.checked ? 1 : 0 })}
+            disabled={!canManage}
+            className="h-5 w-5 accent-gold"
+          />
+        </label>
+      </div>
+
+      {canManage && (
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            onClick={() => saveMutation.mutate(form)}
+            disabled={saveMutation.isPending}
+            className="rounded bg-success px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            Save Configuration
+          </button>
+          {message && <span className="text-sm font-semibold text-success">{message}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Settings() {
   const canManage = usePermission('settings.manage');
   const canBranches = usePermission('branches.manage');
 
   const tabs = [
     { key: 'profile', label: 'Company Profile', content: <CompanyProfilePanel canManage={canManage} /> },
+    { key: 'free-qty', label: 'Free Quantity Configuration', content: <FreeQtySettingsPanel canManage={canManage} /> },
     { key: 'print', label: 'Thermal Printer Setup', content: <PrintSettingsPanel canManage={canManage} /> },
     { key: 'sequences', label: 'Invoice Sequences', content: <SequencesPanel canManage={canManage} /> },
   ];
