@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 use Dotenv\Dotenv;
 
-require_once __DIR__ . '/../vendor/autoload.php';
+$autoload = file_exists(__DIR__ . '/../vendor/autoload.php') ? __DIR__ . '/../vendor/autoload.php' : __DIR__ . '/vendor/autoload.php';
+require_once $autoload;
 
-$dotenv = Dotenv::createImmutable(__DIR__ . '/..');
+$envDir = file_exists(__DIR__ . '/../.env') ? __DIR__ . '/..' : __DIR__;
+$dotenv = Dotenv::createImmutable($envDir);
 $dotenv->safeLoad();
 
 return [
