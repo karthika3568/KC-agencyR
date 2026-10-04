@@ -39,8 +39,10 @@ class InvoiceModel
             $sql .= ' AND i.status = :status';
             $params['status'] = $status;
         } else {
-            // Default history view never shows held/discardable scratch bills.
-            $sql .= " AND i.status <> 'held'";
+            // Default history view never shows held/discardable scratch
+            // bills, nor soft-deleted ones — a deleted invoice is only
+            // visible by explicitly filtering ?status=deleted.
+            $sql .= " AND i.status NOT IN ('held', 'deleted')";
         }
 
         $sql .= ' ORDER BY i.id DESC LIMIT 200';
@@ -53,11 +55,12 @@ class InvoiceModel
     {
         $stmt = $this->pdo->prepare(
             'SELECT i.*, c.ledger_name AS customer_name, c.phone AS customer_phone, u.name AS employee_name,
-                    cu.name AS cancelled_by_name
+                    cu.name AS cancelled_by_name, du.name AS deleted_by_name
              FROM invoices i
              LEFT JOIN customers c ON c.id = i.customer_id
              JOIN users u ON u.id = i.employee_id
              LEFT JOIN users cu ON cu.id = i.cancelled_by
+             LEFT JOIN users du ON du.id = i.deleted_by
              WHERE i.id = :id'
         );
         $stmt->execute(['id' => $id]);
@@ -552,6 +555,89 @@ class InvoiceModel
             $this->pdo->prepare(
                 "UPDATE invoices SET status = 'cancelled', payment_status = 'cancelled',
                     cancelled_by = :by, cancelled_at = NOW(), cancel_reason = :reason
+                 WHERE id = :id"
+            )->execute(['by' => $actorId, 'reason' => $reason, 'id' => $id]);
+
+            $this->pdo->commit();
+            return $this->find($id);
+        } catch (\Throwable $e) {
+            $this->pdo->rollBack();
+            throw $e;
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // Delete — soft-deletes a completed invoice, distinct from cancel().
+    // Reverses the same stock/credit effects as cancel (so inventory and
+    // customer balances stay correct), but unlike cancel, clears invoice_no
+    // back to NULL (preserving the original in original_invoice_no for
+    // audit) so InvoiceNumberService can reissue that number to the next
+    // invoice created in the same branch+series+year. A cancelled invoice
+    // is never touched by this path — its number is permanently consumed.
+    // -----------------------------------------------------------------
+
+    public function deleteInvoice(int $id, int $actorId, ?string $reason): array
+    {
+        $this->pdo->beginTransaction();
+        try {
+            $stmt = $this->pdo->prepare('SELECT * FROM invoices WHERE id = :id FOR UPDATE');
+            $stmt->execute(['id' => $id]);
+            $invoice = $stmt->fetch();
+
+            if (!$invoice) {
+                throw new \RuntimeException('Invoice not found');
+            }
+            if ($invoice['status'] !== 'completed') {
+                throw new \RuntimeException('Only a completed invoice can be deleted');
+            }
+
+            $stmt = $this->pdo->prepare(
+                "SELECT id FROM sales_returns WHERE invoice_id = :id AND status <> 'rejected' LIMIT 1"
+            );
+            $stmt->execute(['id' => $id]);
+            if ($stmt->fetch()) {
+                throw new \RuntimeException('Cannot delete — this invoice already has a sales return against it');
+            }
+
+            $stmt = $this->pdo->prepare('SELECT * FROM invoice_items WHERE invoice_id = :id');
+            $stmt->execute(['id' => $id]);
+            $items = $stmt->fetchAll();
+
+            $stockService = new StockLedgerService($this->pdo);
+            foreach ($items as $item) {
+                $qtyTotal = (float) $item['qty'] + (float) $item['free_qty'];
+                $stockService->applyMovement(
+                    (int) $item['item_id'],
+                    'branch',
+                    (int) $invoice['branch_id'],
+                    $qtyTotal,
+                    'sale_return',
+                    'invoices',
+                    $id,
+                    'invoice_deleted',
+                    $reason,
+                    $actorId
+                );
+            }
+
+            // Same reversal rule as cancel: only whatever's still
+            // outstanding, since anything already collected already reduced
+            // the ledger via that collection's own entry.
+            $outstanding = (float) $invoice['grand_total'] - (float) $invoice['paid_amount'];
+            if ($outstanding > 0.009 && $invoice['customer_id'] !== null) {
+                (new CreditLedgerService($this->pdo))->record(
+                    (int) $invoice['customer_id'],
+                    'credit_reversal',
+                    $outstanding,
+                    $id,
+                    'Invoice ' . $invoice['invoice_no'] . ' deleted' . ($reason ? ": {$reason}" : ''),
+                    $actorId
+                );
+            }
+
+            $this->pdo->prepare(
+                "UPDATE invoices SET status = 'deleted', original_invoice_no = invoice_no, invoice_no = NULL,
+                    deleted_by = :by, deleted_at = NOW(), delete_reason = :reason
                  WHERE id = :id"
             )->execute(['by' => $actorId, 'reason' => $reason, 'id' => $id]);
 

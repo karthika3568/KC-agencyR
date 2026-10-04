@@ -188,6 +188,32 @@ class InvoiceController
         Response::json($result);
     }
 
+    /**
+     * POST /api/invoices/{id}/delete — soft-delete a completed invoice
+     * (distinct from the void-a-held-bill destroy() above, and from
+     * cancel()): reverses stock/credit the same way cancel does, but also
+     * frees the invoice number for reuse by the next invoice in the same
+     * branch+series+year (section: deleted-number reuse). A cancelled
+     * invoice must go through cancel(), never this — its number stays
+     * permanently consumed.
+     */
+    public function deleteCompleted(string $id): void
+    {
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::require($claims, 'pos.delete_completed_invoice');
+
+        $this->requireOwnedInvoice($claims, (int) $id);
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+
+        try {
+            $result = $this->invoices->deleteInvoice((int) $id, (int) $claims['sub'], $body['reason'] ?? null);
+        } catch (\RuntimeException $e) {
+            Response::error($e->getMessage(), 422);
+        }
+
+        Response::json($result);
+    }
+
     // -------------------------------------------------------------
     // GST E-Invoice (IRN) / E-Way Bill (section 10) — see
     // App\Services\GstEInvoiceService for the honest "not configured until

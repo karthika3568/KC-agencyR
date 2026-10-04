@@ -144,7 +144,7 @@ function ViewModal({ id, onClose }) {
     <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/30 p-4">
       <div className="max-h-[85vh] w-[640px] overflow-auto card p-5">
         <div className="mb-1 flex items-center justify-between">
-          <span className="text-lg font-semibold text-ink">{data.invoice_no || `Held #${data.id}`}</span>
+          <span className="text-lg font-semibold text-ink">{data.invoice_no || data.original_invoice_no || `Held #${data.id}`}</span>
           <Badge variant={STATUS_VARIANT[data.payment_status] || 'neutral'}>{data.payment_status || data.status}</Badge>
         </div>
         <div className="mb-3 text-xs text-ink-muted">
@@ -177,6 +177,12 @@ function ViewModal({ id, onClose }) {
             Cancelled by {data.cancelled_by_name || 'user'} on {data.cancelled_at}{data.cancel_reason ? ` — ${data.cancel_reason}` : ''}
           </div>
         )}
+        {data.status === 'deleted' && (
+          <div className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-danger">
+            Deleted by {data.deleted_by_name || 'user'} on {data.deleted_at}{data.delete_reason ? ` — ${data.delete_reason}` : ''}
+            {data.original_invoice_no && <span> · was {data.original_invoice_no}, number freed for reuse</span>}
+          </div>
+        )}
         <div className="flex justify-end">
           <Button variant="secondary" onClick={onClose}>Close</Button>
         </div>
@@ -205,6 +211,34 @@ function CancelModal({ invoice, onClose, onConfirm, error }) {
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>Back</Button>
           <Button variant="danger" onClick={() => onConfirm(reason)}>Confirm Cancel</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeleteModal({ invoice, onClose, onConfirm, error }) {
+  const [reason, setReason] = useState('');
+  return (
+    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/30 p-4">
+      <div className="w-[420px] card p-5">
+        <div className="mb-1 text-lg font-semibold text-ink">Delete {invoice.invoice_no}</div>
+        <p className="mb-3 text-xs text-ink-muted">
+          This reverses the stock deducted by this sale and, if it was a credit sale, reduces the customer's
+          outstanding by whatever is still unpaid — same as Cancel. Unlike Cancel, the invoice is hidden from
+          reports entirely and its number ({invoice.invoice_no}) becomes available for reuse by the next invoice.
+          This cannot be undone.
+        </p>
+        <textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Reason for deletion (optional)"
+          className="input mb-3 h-20 resize-none"
+        />
+        {error && <p className="mb-2 text-sm text-danger">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose}>Back</Button>
+          <Button variant="danger" onClick={() => onConfirm(reason)}>Confirm Delete</Button>
         </div>
       </div>
     </div>
@@ -450,6 +484,7 @@ function EditModal({ id, onClose }) {
 
 export function InvoiceManagement() {
   const canCancel = usePermission('pos.cancel_completed_invoice');
+  const canDelete = usePermission('pos.delete_completed_invoice');
   const canEdit = usePermission('pos.edit_completed_invoice');
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState('');
@@ -459,6 +494,8 @@ export function InvoiceManagement() {
   const [editingId, setEditingId] = useState(null);
   const [cancelling, setCancelling] = useState(null);
   const [cancelError, setCancelError] = useState('');
+  const [deleting, setDeleting] = useState(null);
+  const [deleteError, setDeleteError] = useState('');
 
   const invoicesQuery = useQuery({ queryKey: ['invoices', statusFilter], queryFn: () => invoicesApi.list(statusFilter || undefined) });
   const cancelMutation = useMutation({
@@ -469,6 +506,15 @@ export function InvoiceManagement() {
       setCancelError('');
     },
     onError: (err) => setCancelError(err?.response?.data?.error || 'Failed to cancel'),
+  });
+  const deleteMutation = useMutation({
+    mutationFn: ({ id, reason }) => invoicesApi.deleteCompleted(id, reason),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      setDeleting(null);
+      setDeleteError('');
+    },
+    onError: (err) => setDeleteError(err?.response?.data?.error || 'Failed to delete'),
   });
 
   const invoices = invoicesQuery.data || [];
@@ -505,6 +551,7 @@ export function InvoiceManagement() {
               <option value="completed">Completed</option>
               <option value="cancelled">Cancelled</option>
               <option value="returned">Returned</option>
+              <option value="deleted">Deleted</option>
             </select>
           </div>
         }
@@ -519,7 +566,7 @@ export function InvoiceManagement() {
           <tbody>
             {filtered.map((inv) => (
               <tr key={inv.id} className="border-b border-border-soft">
-                <td className="px-4 py-2 font-medium text-ink">{inv.invoice_no || `Held #${inv.id}`}</td>
+                <td className="px-4 py-2 font-medium text-ink">{inv.invoice_no || inv.original_invoice_no || `Held #${inv.id}`}</td>
                 <td className="px-4 py-2">{inv.customer_name || 'Walk-in'}</td>
                 <td className="px-4 py-2 text-ink-muted">{inv.invoice_date}</td>
                 <td className="px-4 py-2">{inv.grand_total}</td>
@@ -543,6 +590,11 @@ export function InvoiceManagement() {
                         <Ban size={16} />
                       </button>
                     )}
+                    {canDelete && inv.status === 'completed' && (
+                      <button title="Delete" onClick={() => { setDeleting(inv); setDeleteError(''); }} className="text-danger hover:text-red-700">
+                        <Trash2 size={16} />
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -561,6 +613,14 @@ export function InvoiceManagement() {
           error={cancelError}
           onClose={() => setCancelling(null)}
           onConfirm={(reason) => cancelMutation.mutate({ id: cancelling.id, reason })}
+        />
+      )}
+      {deleting && (
+        <DeleteModal
+          invoice={deleting}
+          error={deleteError}
+          onClose={() => setDeleting(null)}
+          onConfirm={(reason) => deleteMutation.mutate({ id: deleting.id, reason })}
         />
       )}
     </div>

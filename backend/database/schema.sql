@@ -1294,3 +1294,37 @@ INSERT INTO expense_categories (name)
 
 SET FOREIGN_KEY_CHECKS = 1;
 
+-- =====================================================================
+-- Soft-delete a completed invoice — distinct from cancel(). Hides the
+-- invoice from every report/list (all of which already filter
+-- status = 'completed' or exclude 'held', so adding 'deleted' to the
+-- status enum costs nothing there) and frees its invoice_no so the next
+-- invoice created in the same branch+series+year reuses it instead of
+-- skipping ahead (business requirement: deleted-number reuse, cancelled
+-- numbers are never reused). original_invoice_no preserves what the
+-- number was, for audit, after invoice_no itself is cleared back to NULL
+-- — the same nullable state a 'held' bill already has before completion,
+-- so this isn't a new kind of row the rest of the schema has to learn
+-- about. deleted_by/deleted_at/delete_reason mirror cancelled_by/
+-- cancelled_at/cancel_reason exactly.
+-- =====================================================================
+
+ALTER TABLE invoices
+  MODIFY COLUMN status ENUM('held','completed','cancelled','returned','deleted') NOT NULL DEFAULT 'held',
+  ADD COLUMN original_invoice_no VARCHAR(30) NULL AFTER invoice_no,
+  ADD COLUMN deleted_by INT UNSIGNED NULL AFTER edited_at,
+  ADD COLUMN deleted_at TIMESTAMP NULL AFTER deleted_by,
+  ADD COLUMN delete_reason VARCHAR(255) NULL AFTER deleted_at,
+  ADD CONSTRAINT fk_invoices_deleted_by FOREIGN KEY (deleted_by) REFERENCES users(id);
+
+INSERT INTO permissions (module, code, label, description) VALUES
+('pos', 'pos.delete_completed_invoice', 'Delete a completed invoice', 'Soft-delete a completed bill (reverses its stock/credit effects, same as cancel) and frees its invoice number for reuse — unlike cancel, the number is not permanently consumed')
+ON DUPLICATE KEY UPDATE label = VALUES(label), module = VALUES(module), description = VALUES(description);
+
+-- Grant to Super Admin (1) and Admin (2) by default, same as every other
+-- permission those two roles hold in seed.sql.
+INSERT INTO role_permissions (role_id, permission_id)
+  SELECT r.id, p.id FROM roles r CROSS JOIN permissions p
+  WHERE r.id IN (1, 2) AND p.code = 'pos.delete_completed_invoice'
+ON DUPLICATE KEY UPDATE role_id = role_id;
+

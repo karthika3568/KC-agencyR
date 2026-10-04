@@ -249,6 +249,7 @@ $router->delete('/api/invoices/{id}', fn ($id) => $invoiceController->destroy($i
 $router->post('/api/invoices/{id}/complete', fn ($id) => $invoiceController->complete($id));
 $router->put('/api/invoices/{id}/edit', fn ($id) => $invoiceController->editCompleted($id));
 $router->post('/api/invoices/{id}/cancel', fn ($id) => $invoiceController->cancel($id));
+$router->post('/api/invoices/{id}/delete', fn ($id) => $invoiceController->deleteCompleted($id));
 $router->get('/api/invoices/{id}/print', fn ($id) => $invoiceController->print($id));
 $router->put('/api/invoices/{id}/transport', fn ($id) => $invoiceController->updateTransportDetails($id));
 $router->post('/api/invoices/{id}/einvoice/generate', fn ($id) => $invoiceController->generateEInvoice($id));
