@@ -49,6 +49,7 @@ class ItemController
         'cost_price' => 'cost_price',
         'wholesale_price' => 'wholesale_price',
         'min_stock_threshold' => 'min_stock_threshold',
+        'opening_stock' => 'OPENING_STOCK',
         'tax_code' => 'tax_code',
         'is_active' => 'is_active',
     ];
@@ -133,21 +134,43 @@ class ItemController
         $claims = JwtAuthMiddleware::authenticate();
         PermissionMiddleware::require($claims, 'catalog.manage_items');
 
-        if (!$this->items->find((int) $id)) {
+        $itemId = (int) $id;
+        if (!$this->items->find($itemId)) {
             Response::error('Not found', 404);
         }
 
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
-        // update() previously skipped validate() entirely — a duplicate
-        // barcode (or a negative price) went straight to the database and
-        // surfaced as a raw SQL constraint error / generic 500 instead of a
-        // clean message (section 8 of the barcode-save-error investigation).
-        $errors = $this->validate($body, (int) $id);
+        $errors = $this->validate($body, $itemId);
         if (!empty($errors)) {
             Response::json(['errors' => $errors], 422);
         }
-        $this->items->update((int) $id, $body, $body['unit_conversions'] ?? null, $body['branch_ids'] ?? null);
-        Response::json($this->items->find((int) $id));
+        $this->items->update($itemId, $body, $body['unit_conversions'] ?? null, $body['branch_ids'] ?? null);
+
+        if (array_key_exists('opening_stock', $body) && $body['opening_stock'] !== '' && $body['opening_stock'] !== null) {
+            $newOpeningStock = max(0.0, (float) $body['opening_stock']);
+            $stmt = $this->pdo->prepare("SELECT COALESCE(SUM(qty_change), 0) FROM stock_movements WHERE item_id = :id AND movement_type = 'opening_stock'");
+            $stmt->execute(['id' => $itemId]);
+            $currentOpeningStock = (float) $stmt->fetchColumn();
+
+            $diff = $newOpeningStock - $currentOpeningStock;
+            if (abs($diff) > 0.0001) {
+                $stock = new StockLedgerService($this->pdo);
+                $targetBranches = $body['branch_ids'] ?? $this->items->branchIdsFor($itemId);
+                if (empty($targetBranches)) {
+                    $targetBranches = [1];
+                }
+                $diffPerBranch = $diff / count($targetBranches);
+                $sub = (int) ($claims['sub'] ?? 1);
+                foreach ($targetBranches as $branchId) {
+                    $stock->applyMovement(
+                        $itemId, 'branch', (int) $branchId, $diffPerBranch, 'opening_stock',
+                        'items', $itemId, null, 'Opening stock update', $sub
+                    );
+                }
+            }
+        }
+
+        Response::json($this->items->find($itemId));
     }
 
     public function destroy(string $id): void
@@ -405,11 +428,18 @@ class ItemController
 
         $status = in_array($_GET['status'] ?? '', ['active', 'inactive', 'all'], true) ? $_GET['status'] : 'active';
         $rows = $this->items->all(null, null, $status);
+
+        $openingStockMap = [];
+        $osStmt = $this->pdo->query("SELECT item_id, SUM(qty_change) AS total_opening FROM stock_movements WHERE movement_type = 'opening_stock' GROUP BY item_id");
+        foreach ($osStmt->fetchAll() as $osRow) {
+            $openingStockMap[(int) $osRow['item_id']] = (float) $osRow['total_opening'];
+        }
+
         $rowIndex = 2;
         foreach ($rows as $item) {
             $rowData = [];
             foreach ($keys as $col) {
-                $rowData[] = $this->exportValue($item, $col);
+                $rowData[] = $this->exportValue($item, $col, $openingStockMap);
             }
             $sheet->fromArray($rowData, null, "A{$rowIndex}");
             $rowIndex++;
@@ -424,7 +454,7 @@ class ItemController
         exit;
     }
 
-    private function exportValue(array $item, string $col): mixed
+    private function exportValue(array $item, string $col, array $openingStockMap = []): mixed
     {
         return match ($col) {
             'category' => $item['category_name'],
@@ -436,6 +466,7 @@ class ItemController
             'tax_code' => $item['tax_code'],
             'gst' => $item['gst_percent'] ?? null,
             'branches' => $this->branchNamesFor((int) $item['id']),
+            'opening_stock' => $openingStockMap[(int) $item['id']] ?? 0,
             default => $item[$col] ?? null,
         };
     }
@@ -513,6 +544,7 @@ class ItemController
                 'row' => $rowNumber + 2, // +1 for 0-index, +1 for header row
                 'item_code' => $record['item_code'] ?? null,
                 'item_name' => $record['item_name'] ?? null,
+                'opening_stock' => $record['opening_stock'] ?? null,
                 'errors' => $rowErrors,
             ];
 
@@ -541,6 +573,10 @@ class ItemController
                 $itemData['base_unit_id'] = $this->resolvePendingMasterId($itemData['base_unit_id'], $createdUnitIds);
                 $itemData['secondary_unit_id'] = $this->resolvePendingMasterId($itemData['secondary_unit_id'], $createdUnitIds);
                 $itemData['tax_code_id'] = $this->resolvePendingMasterId($itemData['tax_code_id'], $createdTaxCodeIds);
+
+                $openingStock = (float) ($itemData['opening_stock'] ?? 0);
+                unset($itemData['opening_stock']);
+
                 // A blank NET_SRATE/NET_PURRATE/MRP/etc. cell means "leave
                 // unchanged" (never "clear this out") on both paths — on
                 // create there's nothing to preserve, so the omitted NOT
@@ -550,9 +586,35 @@ class ItemController
                 if ($existingItemId !== null) {
                     $this->items->update($existingItemId, $itemData, null, $branchIds);
                     $updated++;
+                    if ($openingStock > 0.0001) {
+                        $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM stock_movements WHERE item_id = :id AND movement_type = 'opening_stock'");
+                        $stmt->execute(['id' => $existingItemId]);
+                        if ((int) $stmt->fetchColumn() === 0) {
+                            $stock = new StockLedgerService($this->pdo);
+                            $targetBranches = $branchIds ?: $this->items->branchIdsFor($existingItemId);
+                            $sub = (int) ($claims['sub'] ?? 1);
+                            foreach ($targetBranches as $branchId) {
+                                $stock->applyMovement(
+                                    $existingItemId, 'branch', (int) $branchId, $openingStock, 'opening_stock',
+                                    'items', $existingItemId, null, 'Opening stock from Excel import', $sub
+                                );
+                            }
+                        }
+                    }
                 } else {
-                    $this->items->create($itemData, [], $branchIds);
+                    $newId = $this->items->create($itemData, [], $branchIds);
                     $inserted++;
+                    if ($openingStock > 0.0001) {
+                        $stock = new StockLedgerService($this->pdo);
+                        $targetBranches = $branchIds ?: $this->items->branchIdsFor($newId);
+                        $sub = (int) ($claims['sub'] ?? 1);
+                        foreach ($targetBranches as $branchId) {
+                            $stock->applyMovement(
+                                $newId, 'branch', (int) $branchId, $openingStock, 'opening_stock',
+                                'items', $newId, null, 'Opening stock from Excel import', $sub
+                            );
+                        }
+                    }
                 }
             }
         }
@@ -588,7 +650,14 @@ class ItemController
     {
         static $reverse = null;
         if ($reverse === null) {
-            $reverse = [];
+            $reverse = [
+                'opening stock' => 'opening_stock',
+                'opening stock qty' => 'opening_stock',
+                'opening stock quantity' => 'opening_stock',
+                'opening_stock_qty' => 'opening_stock',
+                'opening_stock_quantity' => 'opening_stock',
+                'opening stock quanity' => 'opening_stock',
+            ];
             foreach (self::EXCEL_COLUMNS as $key => $label) {
                 $reverse[strtolower($key)] = $key;
                 $reverse[strtolower($label)] = $key;
@@ -748,10 +817,16 @@ class ItemController
         foreach ([
             'purchase_price', 'cost_price', 'wholesale_price', 'retail_price', 'mrp', 'min_stock_threshold',
             'net_srate', 'net_purrate', 'secondary_mrp', 'secondary_net_srate', 'secondary_net_purrate', 'gst',
+            'opening_stock',
         ] as $numField) {
             if (isset($record[$numField]) && $record[$numField] !== '' && !is_numeric($record[$numField])) {
                 $errors[] = "{$numField} must be numeric";
             }
+        }
+
+        $openingStock = isset($record['opening_stock']) && $record['opening_stock'] !== '' ? (float) $record['opening_stock'] : null;
+        if ($openingStock !== null && $openingStock < 0) {
+            $errors[] = "opening_stock must be non-negative";
         }
 
         // NET_SRATE/NET_PURRATE are never derived from MRP or from each
@@ -799,6 +874,7 @@ class ItemController
             'secondary_net_srate' => $secondaryNetSrate,
             'secondary_net_purrate' => $secondaryNetPurrate,
             'min_stock_threshold' => $minStockThreshold,
+            'opening_stock' => $openingStock,
             'tax_code_id' => $taxCodeId,
             'is_active' => isset($record['is_active']) && in_array(strtolower((string) $record['is_active']), ['0', 'no', 'false'], true) ? 0 : 1,
         ];
@@ -1043,21 +1119,21 @@ class ItemController
         $sheet->fromArray(
             ['', 'Coca Cola 250ml', 'Soft Drinks', 'coco_cola', '', 'ABC Distributors', '22021010', '8901111111111',
              'PCS', '15', '13', '11', '', '', '', '', '18',
-             '1', 'Main Branch', '11', '9', '13', '10', 'GST18', '1'],
+             '1', 'Main Branch', '11', '9', '13', '10', '50', 'GST18', '1'],
             null,
             'A2'
         );
         $sheet->fromArray(
             ['', 'Coca Cola 500ml', 'SOFT DRINKS', 'COCO_COLA', '', 'ABC Distributors', '22021010', '8901111111112',
              'PCS', '25', '22', '19', '', '', '', '', '18',
-             '1', 'Main Branch', '19', '16', '22', '10', 'GST18', '1'],
+             '1', 'Main Branch', '19', '16', '22', '10', '100', 'GST18', '1'],
             null,
             'A3'
         );
         $sheet->fromArray(
             ['', 'Coca Cola 1L', 'Soft Drinks', 'Coco_Cola', '', 'ABC Distributors', '22021010', '8901111111113',
              'PCS', '45', '40', '35', '', '', '', '', '18',
-             '1', 'Main Branch', '35', '30', '40', '10', 'GST18', '1'],
+             '1', 'Main Branch', '35', '30', '40', '10', '25', 'GST18', '1'],
             null,
             'A4'
         );

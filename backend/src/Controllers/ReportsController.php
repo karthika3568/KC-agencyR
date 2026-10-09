@@ -239,12 +239,12 @@ class ReportsController
                     MAX(pay.paid_amount) AS paid_amount, MAX(pay.credit_amount) AS credit_amount
              FROM invoice_items ii
              JOIN invoices inv ON inv.id = ii.invoice_id
-             JOIN customers c ON c.id = inv.customer_id
+             LEFT JOIN customers c ON c.id = inv.customer_id
              LEFT JOIN routes r ON r.id = c.route_id
              LEFT JOIN (
                  SELECT cu.route_id, SUM(iv.paid_amount) AS paid_amount, SUM(iv.balance_due) AS credit_amount
                  FROM invoices iv
-                 JOIN customers cu ON cu.id = iv.customer_id
+                 LEFT JOIN customers cu ON cu.id = iv.customer_id
                  WHERE iv.status = 'completed' AND iv.invoice_date BETWEEN :from2 AND :to2
                  GROUP BY cu.route_id
              ) pay ON pay.route_id <=> c.route_id

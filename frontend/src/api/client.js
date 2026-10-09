@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { useBranchStore } from '../store/branchStore';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://192.168.1.106/pos/backend/public/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://10.34.140.90/pos/backend/public/api';
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,

@@ -375,7 +375,8 @@ constant:
 
 ```js
 // mobile/src/config/env.js
-export const API_BASE_URL = 'http://192.168.1.106/pos-system/backend/public/api';
+export const API_BASE_URL = 'http://10.34.140.90/pos/backend/public/api';
+
 ```
 
 `10.0.2.2` is the Android emulator's alias for the host machine's own

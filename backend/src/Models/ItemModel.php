@@ -92,7 +92,9 @@ class ItemModel
     }
 
     private const LIST_SELECT = "
-        SELECT i.*, c.name AS category_name, b.name AS brand_name, pl.name AS product_line_name,
+        SELECT i.*,
+               (SELECT COALESCE(SUM(sm.qty_change), 0) FROM stock_movements sm WHERE sm.item_id = i.id AND sm.movement_type = 'opening_stock') AS opening_stock,
+               c.name AS category_name, b.name AS brand_name, pl.name AS product_line_name,
                s.name AS supplier_name,
                bu.short_code AS base_unit_code, su.short_code AS secondary_unit_code,
                tc.code AS tax_code, tc.gst_percent, tc.cess_percent

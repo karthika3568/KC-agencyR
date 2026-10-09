@@ -42,7 +42,7 @@ function ItemFormModal({ item, onClose }) {
           net_srate: item.net_srate ?? '', net_purrate: item.net_purrate ?? '',
           secondary_mrp: item.secondary_mrp ?? '', secondary_net_srate: item.secondary_net_srate ?? '',
           secondary_net_purrate: item.secondary_net_purrate ?? '',
-          is_active: !!Number(item.is_active),
+          is_active: !!Number(item.is_active), opening_stock: item.opening_stock ?? '',
         }
       : emptyForm
   );
@@ -170,15 +170,11 @@ function ItemFormModal({ item, onClose }) {
       secondary_net_srate: toNullableNumber(form.secondary_net_srate),
       secondary_net_purrate: toNullableNumber(form.secondary_net_purrate),
       min_stock_threshold: Number(form.min_stock_threshold || 0),
+      opening_stock: Number(form.opening_stock || 0),
       is_active: form.is_active ? 1 : 0,
       branch_ids: selectedBranches,
       unit_conversions: unitConversions,
     };
-    if (!isEdit) {
-      payload.opening_stock = Number(form.opening_stock || 0);
-    } else {
-      delete payload.opening_stock;
-    }
 
     try {
       let savedId = item?.id;
@@ -267,11 +263,9 @@ function ItemFormModal({ item, onClose }) {
           <Field label="NET SALE RATE"><input type="number" step="any" value={form.net_srate} onChange={(e) => update('net_srate', e.target.value)} className="input" placeholder={form.retail_price || '0.00'} /></Field>
           <Field label="NET PURCHASE RATE"><input type="number" step="any" value={form.net_purrate} onChange={(e) => update('net_purrate', e.target.value)} className="input" placeholder={form.purchase_price || '0.00'} /></Field>
           <Field label="Min stock threshold"><input type="number" step="any" value={form.min_stock_threshold} onChange={(e) => update('min_stock_threshold', e.target.value)} className="input" /></Field>
-          {!isEdit && (
-            <Field label="Opening stock (per branch below)">
-              <input type="number" step="any" min="0" value={form.opening_stock} onChange={(e) => update('opening_stock', e.target.value)} className="input" />
-            </Field>
-          )}
+          <Field label="Opening stock">
+            <input type="number" step="any" min="0" value={form.opening_stock} onChange={(e) => update('opening_stock', e.target.value)} className="input" placeholder="0" />
+          </Field>
           <Field label="Active?">
             <select value={form.is_active ? '1' : '0'} onChange={(e) => update('is_active', e.target.value === '1')} className="input">
               <option value="1">Active</option>
@@ -503,6 +497,7 @@ export function ItemsPanel({ canManage }) {
               <th className="px-4 py-2">MRP</th>
               <th className="px-4 py-2">NET_SRATE</th>
               <th className="px-4 py-2">NET_PURRATE</th>
+              <th className="px-4 py-2">Opening Stock</th>
               <th className="px-4 py-2">GST%</th>
               <th className="px-4 py-2">HSN</th>
               {statusFilter === 'all' && <th className="px-4 py-2">Status</th>}
@@ -532,6 +527,7 @@ export function ItemsPanel({ canManage }) {
                 <td className="px-4 py-2 text-ink-muted">{item.mrp}</td>
                 <td className="px-4 py-2 text-ink-muted">{item.net_srate ?? item.retail_price}</td>
                 <td className="px-4 py-2 text-ink-muted">{item.net_purrate ?? item.purchase_price}</td>
+                <td className="px-4 py-2 font-medium text-ink">{item.opening_stock ?? 0}</td>
                 <td className="px-4 py-2 text-ink-muted">{item.gst_percent ?? '—'}</td>
                 <td className="px-4 py-2 text-ink-muted">{item.hsn_code || '—'}</td>
                 {statusFilter === 'all' && (
@@ -565,7 +561,7 @@ export function ItemsPanel({ canManage }) {
             ))}
             {items.length === 0 && (
               <tr>
-                <td colSpan={10 + (canManage ? 1 : 0) + (statusFilter === 'all' ? 1 : 0)} className="px-4 py-6 text-center text-ink-muted">No items found.</td>
+                <td colSpan={11 + (canManage ? 1 : 0) + (statusFilter === 'all' ? 1 : 0)} className="px-4 py-6 text-center text-ink-muted">No items found.</td>
               </tr>
             )}
           </tbody>
@@ -621,6 +617,7 @@ export function ItemsPanel({ canManage }) {
                     <tr className="bg-page text-left text-ink-muted">
                       <th className="px-3 py-1.5">Row</th>
                       <th className="px-3 py-1.5">Item</th>
+                      <th className="px-3 py-1.5">Opening Stock</th>
                       <th className="px-3 py-1.5">Errors</th>
                     </tr>
                   </thead>
@@ -629,6 +626,7 @@ export function ItemsPanel({ canManage }) {
                       <tr key={r.row} className={r.errors.length ? 'bg-red-50' : ''}>
                         <td className="px-3 py-1.5">{r.row}</td>
                         <td className="px-3 py-1.5">{r.item_name}</td>
+                        <td className="px-3 py-1.5">{r.opening_stock ?? '—'}</td>
                         <td className="px-3 py-1.5 text-danger">{r.errors.join(', ')}</td>
                       </tr>
                     ))}

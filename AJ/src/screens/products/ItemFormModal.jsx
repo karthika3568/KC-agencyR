@@ -45,7 +45,7 @@ export function ItemFormModal({ item, onClose }) {
     secondary_net_srate: item?.secondary_net_srate != null ? String(item.secondary_net_srate) : '',
     secondary_net_purrate: item?.secondary_net_purrate != null ? String(item.secondary_net_purrate) : '',
     min_stock_threshold: String(item?.min_stock_threshold ?? ''),
-    opening_stock: '',
+    opening_stock: item?.opening_stock != null ? String(item.opening_stock) : '',
     is_active: item ? !!Number(item.is_active) : true,
   });
   const [selectedBranches, setSelectedBranches] = useState(item?.branch_ids || []);
@@ -100,12 +100,10 @@ export function ItemFormModal({ item, onClose }) {
       secondary_net_srate: numOrNull(form.secondary_net_srate),
       secondary_net_purrate: numOrNull(form.secondary_net_purrate),
       min_stock_threshold: Number(form.min_stock_threshold || 0),
+      opening_stock: Number(form.opening_stock || 0),
       is_active: form.is_active ? 1 : 0,
       branch_ids: selectedBranches,
     };
-    if (!isEdit) {
-      payload.opening_stock = Number(form.opening_stock || 0);
-    }
     try {
       let id = item?.id;
       if (isEdit) {
