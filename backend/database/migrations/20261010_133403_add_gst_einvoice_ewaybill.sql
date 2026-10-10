@@ -1,14 +1,4 @@
--- Migration: E-Invoice (IRN) + E-Way Bill status tracking on invoices, and
--- the GST configuration this needs.
---
--- irn/ack_no/ack_date already existed on `invoices` (scaffolded in an
--- earlier phase, never wired to anything) — reused here rather than
--- duplicated. Everything else is new: explicit status enums (so the UI can
--- show Not Generated/Generated/Failed/Cancelled instead of guessing from a
--- null IRN), the QR payload, per-feature error text for a failed attempt,
--- the raw provider response for audit, and E-Way Bill's own fields
--- (mirrors IRN/ack_no/ack_date's shape, since it's the same kind of
--- "external filing reference" data).
+-- Migration: E-Invoice (IRN) + E-Way Bill status tracking on invoices, and GST configuration
 ALTER TABLE invoices
   ADD COLUMN einvoice_status ENUM('not_generated','generated','failed','cancelled') NOT NULL DEFAULT 'not_generated' AFTER ack_date,
   ADD COLUMN einvoice_qr_code TEXT NULL AFTER einvoice_status,
@@ -20,8 +10,6 @@ ALTER TABLE invoices
   ADD COLUMN eway_bill_valid_until TIMESTAMP NULL AFTER eway_bill_date,
   ADD COLUMN eway_bill_error VARCHAR(500) NULL AFTER eway_bill_valid_until,
   ADD COLUMN eway_bill_raw_response TEXT NULL AFTER eway_bill_error,
-  -- Transport details E-Way Bill generation needs — none of this existed
-  -- on invoices before (vehicle_no did, from Phase 3, and is reused as-is).
   ADD COLUMN transporter_name VARCHAR(150) NULL AFTER eway_bill_raw_response,
   ADD COLUMN transporter_gstin VARCHAR(20) NULL AFTER transporter_name,
   ADD COLUMN transport_distance_km INT UNSIGNED NULL AFTER transporter_gstin;
