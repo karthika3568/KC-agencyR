@@ -43,6 +43,21 @@ mobile/ios/Pods/
 *.jsbundle
 
 # =====================================================================
+# veg-pos (wholesale vegetable commission shop — sibling project)
+# =====================================================================
+veg-pos/backend/vendor/
+veg-pos/backend/.env
+veg-pos/backend/.env.*
+!veg-pos/backend/.env.example
+veg-pos/backend/public/uploads/
+veg-pos/frontend/node_modules/
+veg-pos/frontend/dist/
+veg-pos/frontend/dev-dist/
+veg-pos/frontend/.env
+veg-pos/frontend/.env.*
+!veg-pos/frontend/.env.example
+
+# =====================================================================
 # Node (generic, any package.json anywhere)
 # =====================================================================
 node_modules/
