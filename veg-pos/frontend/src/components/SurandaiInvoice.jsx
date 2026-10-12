@@ -109,8 +109,11 @@ export default function SurandaiInvoice({ bill, settings = {}, isCommissionView,
   const itemsTotal = Number(bill.items_total !== undefined ? bill.items_total : (bill.subtotal !== undefined ? bill.subtotal : 0));
   const discountVal = Number(bill.discount_amount || bill.discount || 0);
   const prevBal = Number(bill.previous_balance !== undefined ? bill.previous_balance : (bill.prev_balance !== undefined ? bill.prev_balance : 0));
-  const grandTotalVal = Number(bill.grand_total !== undefined ? bill.grand_total : (itemsTotal - discountVal + prevBal));
+  const todayBillTotal = Math.max(0, itemsTotal - discountVal);
   const paidVal = Number(bill.paid_amount || 0);
+  const paidForOldBalance = prevBal > 0 ? Math.max(0, Math.min(prevBal, paidVal - todayBillTotal)) : 0;
+  const todayDueVal = Math.max(0, todayBillTotal - paidVal);
+  const grandTotalVal = Number(bill.grand_total !== undefined ? bill.grand_total : (todayBillTotal + prevBal));
   const balanceDueVal = Number(bill.balance_due !== undefined ? bill.balance_due : (grandTotalVal - paidVal));
 
   const commissionVal = Number(bill.commission_amount || 0);
@@ -643,7 +646,7 @@ export default function SurandaiInvoice({ bill, settings = {}, isCommissionView,
         {/* Normal Bill Bottom Summary (Clean 2-Column Layout) */}
         <div className="border-t-2 border-[#0e6037] mt-1 pt-1 flex flex-row justify-between items-start text-xs">
           
-          {/* Left: Payment info & Note */}
+          {/* Left: Payment info, Note & Old Balance */}
           <div className="w-[45%] text-[10px] space-y-1">
             <div>
               <span className="font-bold text-[#0e6037]">செலுத்தும் முறை: </span>
@@ -653,6 +656,18 @@ export default function SurandaiInvoice({ bill, settings = {}, isCommissionView,
               <span className="font-bold text-[#0e6037]">மொத்த உருப்படிகள்: </span>
               <span className="font-mono font-bold">{rawLines.length} Items</span>
             </div>
+            {prevBal > 0 && (
+              <div className="pt-0.5 border-t border-dotted border-gray-300">
+                <span className="font-bold text-amber-900">பழைய பாக்கி: </span>
+                <span className="font-mono font-bold text-slate-800">₹{prevBal.toFixed(2)}</span>
+                {paidForOldBalance > 0 && (
+                  <div className="text-emerald-700 font-bold">
+                    <span>கழித்த பின் மீதம்: </span>
+                    <span className="font-mono">₹{Math.max(0, prevBal - paidForOldBalance).toFixed(2)}</span>
+                  </div>
+                )}
+              </div>
+            )}
             {bill.notes && (
               <div className="text-gray-600 italic">
                 குறிப்பு: {bill.notes}
@@ -674,17 +689,17 @@ export default function SurandaiInvoice({ bill, settings = {}, isCommissionView,
               </div>
             )}
 
-            {prevBal > 0 && (
-              <div className="flex justify-between text-amber-800">
-                <span>பழைய பாக்கி:</span>
-                <span className="font-mono">+ ₹{prevBal.toFixed(2)}</span>
-              </div>
-            )}
-
             <div className="flex justify-between border-t border-b border-[#0e6037] py-0.5 bg-[#e6f4ea] text-sm text-[#0e6037] font-black px-1">
               <span>மொத்தம்:</span>
-              <span className="font-mono">₹{grandTotalVal.toFixed(2)}</span>
+              <span className="font-mono">₹{todayBillTotal.toFixed(2)}</span>
             </div>
+
+            {paidForOldBalance > 0 && (
+              <div className="flex justify-between text-blue-800 pt-0.5">
+                <span>பழைய பாக்கியில் செலுத்தியது:</span>
+                <span className="font-mono">+ ₹{paidForOldBalance.toFixed(2)}</span>
+              </div>
+            )}
 
             {paidVal > 0 && (
               <div className="flex justify-between pt-0.5 text-slate-800">
@@ -693,10 +708,10 @@ export default function SurandaiInvoice({ bill, settings = {}, isCommissionView,
               </div>
             )}
 
-            {balanceDueVal > 0 && (
+            {todayDueVal > 0 && (
               <div className="flex justify-between text-red-700">
-                <span>மீதி பாக்கி:</span>
-                <span className="font-mono font-black">₹{balanceDueVal.toFixed(2)}</span>
+                <span>இன்றைய மீதி பாக்கி:</span>
+                <span className="font-mono font-black">₹{todayDueVal.toFixed(2)}</span>
               </div>
             )}
           </div>
