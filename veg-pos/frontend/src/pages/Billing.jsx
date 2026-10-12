@@ -40,6 +40,7 @@ export default function Billing() {
   const [methods, setMethods] = useState([]);
   const [cart, setCart] = useState(emptyCart());
   const [previousBalance, setPreviousBalance] = useState(0);
+  const [isPaidManuallyEdited, setIsPaidManuallyEdited] = useState(false);
   const [codeInput, setCodeInput] = useState('');
   const [heldOpen, setHeldOpen] = useState(false);
   const [heldBills, setHeldBills] = useState([]);
@@ -51,7 +52,7 @@ export default function Billing() {
     listParties().then(setParties);
     listPaymentMethods().then((m) => {
       setMethods(m);
-      const def = m.find((x) => x.is_default);
+      const def = m.find((x) => x.is_default) || m[0];
       if (def) setCart((c) => ({ ...c, paymentMethodId: def.id }));
     });
   }, []);
@@ -181,6 +182,26 @@ export default function Billing() {
   const balanceDue = finalTotal - paid;
   const canSave = !isCommission || !deductionsExceedSales;
 
+  // Auto-sync paidAmount with full finalTotal unless user explicitly entered a custom partial amount
+  useEffect(() => {
+    if (!isPaidManuallyEdited) {
+      setCart((c) => {
+        const target = finalTotal > 0 ? finalTotal : 0;
+        if (Number(c.paidAmount) === Number(target)) return c;
+        return { ...c, paidAmount: target };
+      });
+    }
+  }, [finalTotal, isPaidManuallyEdited]);
+
+  function handlePaymentMethodChange(methodId) {
+    setCart((c) => ({
+      ...c,
+      paymentMethodId: methodId,
+      paidAmount: finalTotal > 0 ? finalTotal : 0,
+    }));
+    setIsPaidManuallyEdited(false);
+  }
+
   function buildPayload() {
     return {
       location_type: cart.locationType,
@@ -245,8 +266,9 @@ export default function Billing() {
   }
 
   function resetCart() {
+    setIsPaidManuallyEdited(false);
     setCart(emptyCart());
-    const def = methods.find((x) => x.is_default);
+    const def = methods.find((x) => x.is_default) || methods[0];
     if (def) setCart((c) => ({ ...c, paymentMethodId: def.id }));
     setTimeout(() => codeRef.current?.focus(), 50);
   }
@@ -637,13 +659,55 @@ export default function Billing() {
 
               <div className="flex items-center justify-between py-0.5 text-xs">
                 <label className="text-gray-600 text-xs mb-0 font-medium">{t('billing.paid_amount')}</label>
-                <input
-                  className="w-28 h-6 px-1.5 text-xs text-right font-mono font-bold rounded border border-gray-300 focus:ring-1 focus:ring-blue-600"
-                  type="number"
-                  step="0.01"
-                  value={cart.paidAmount}
-                  onChange={(e) => setCart({ ...cart, paidAmount: e.target.value })}
-                />
+                <div className="flex items-center gap-1">
+                  <input
+                    className="w-24 h-6 px-1.5 text-xs text-right font-mono font-bold rounded border border-gray-300 focus:ring-1 focus:ring-blue-600"
+                    type="number"
+                    step="0.01"
+                    value={cart.paidAmount}
+                    onChange={(e) => {
+                      setIsPaidManuallyEdited(true);
+                      setCart({ ...cart, paidAmount: e.target.value });
+                    }}
+                  />
+                  <button
+                    type="button"
+                    title="முழு தொகை செலுத்த (Full Paid)"
+                    className="px-2 py-0.5 text-[10px] font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded transition-colors"
+                    onClick={() => {
+                      setIsPaidManuallyEdited(false);
+                      setCart({ ...cart, paidAmount: finalTotal > 0 ? finalTotal : 0 });
+                    }}
+                  >
+                    Full
+                  </button>
+                </div>
+              </div>
+
+              {/* Quick adjustment chips */}
+              <div className="flex gap-1 justify-end pb-0.5 text-[10px]">
+                <button
+                  type="button"
+                  className="px-1.5 py-0.5 text-gray-600 hover:bg-gray-100 border border-gray-200 rounded font-medium"
+                  onClick={() => {
+                    setIsPaidManuallyEdited(true);
+                    setCart({ ...cart, paidAmount: 0 });
+                  }}
+                >
+                  கடன் (0)
+                </button>
+                {previousBalance > 0 && (
+                  <button
+                    type="button"
+                    className="px-1.5 py-0.5 text-blue-700 hover:bg-blue-50 border border-blue-200 rounded font-medium"
+                    onClick={() => {
+                      setIsPaidManuallyEdited(true);
+                      setCart({ ...cart, paidAmount: todayTotal > 0 ? todayTotal : 0 });
+                    }}
+                  >
+                    இன்றைய பில் மட்டும் ({formatINR(todayTotal)})
+                  </button>
+                )}
               </div>
 
               <div className="flex items-center justify-between py-0.5 text-xs">
@@ -651,7 +715,7 @@ export default function Billing() {
                 <select
                   className="w-36 h-6 px-1.5 text-xs rounded border border-gray-300 font-medium bg-white focus:ring-1 focus:ring-blue-600"
                   value={cart.paymentMethodId}
-                  onChange={(e) => setCart({ ...cart, paymentMethodId: e.target.value })}
+                  onChange={(e) => handlePaymentMethodChange(e.target.value)}
                 >
                   {methods.map((m) => (
                     <option key={m.id} value={m.id}>
@@ -662,12 +726,59 @@ export default function Billing() {
               </div>
 
               {/* Balance Due Navy Bar */}
-              <div className="bg-[#0a1733] text-white px-3 py-1 rounded-md flex items-center justify-between font-black text-xs">
-                <span className="tracking-wide">BALANCE DUE</span>
-                <span className={`font-mono text-sm ${balanceDue > 0 ? 'text-rose-400' : 'text-emerald-300'}`}>
-                  {formatINR(balanceDue)}
+              <div className={`px-3 py-1 rounded-md flex items-center justify-between font-black text-xs ${
+                balanceDue < -0.009 ? 'bg-emerald-950 text-white' : 'bg-[#0a1733] text-white'
+              }`}>
+                <span className="tracking-wide">
+                  {balanceDue > 0.009
+                    ? 'BALANCE DUE (மீதி பாக்கி)'
+                    : balanceDue < -0.009
+                      ? 'CHANGE / அட்வான்ஸ் (ADVANCE)'
+                      : 'PAID IN FULL (முழுவதும் செலுத்தப்பட்டது)'}
+                </span>
+                <span className={`font-mono text-sm ${
+                  balanceDue > 0.009 ? 'text-rose-400' : balanceDue < -0.009 ? 'text-amber-300 font-black' : 'text-emerald-300'
+                }`}>
+                  {balanceDue < -0.009 ? `+ ${formatINR(Math.abs(balanceDue))}` : formatINR(balanceDue)}
                 </span>
               </div>
+
+              {/* Live Outstanding Deduction / Extra Revenue Breakdown */}
+              {previousBalance > 0 && paid > todayTotal && (
+                <div className="bg-blue-50 border border-blue-200 text-blue-900 rounded p-1.5 text-[11px] space-y-0.5 mt-0.5">
+                  <div className="flex justify-between font-semibold">
+                    <span>இன்றைய பில் ({formatINR(todayTotal)}):</span>
+                    <span className="text-emerald-700 font-bold font-mono">கழிக்கப்பட்டது ✓</span>
+                  </div>
+                  <div className="flex justify-between text-blue-800">
+                    <span>பழைய பாக்கியில் ({formatINR(previousBalance)}) கழித்தது:</span>
+                    <span className="font-mono font-bold text-emerald-600">- {formatINR(Math.min(previousBalance, paid - todayTotal))}</span>
+                  </div>
+                  <div className="flex justify-between font-bold border-t border-blue-200 pt-0.5">
+                    <span>மீதமுள்ள பழைய பாக்கி:</span>
+                    <span className="font-mono text-rose-600 font-black">{formatINR(Math.max(0, previousBalance - (paid - todayTotal)))}</span>
+                  </div>
+                  {paid > grandTotal && (
+                    <div className="flex justify-between font-bold text-amber-900 bg-amber-100/70 p-1 rounded mt-0.5">
+                      <span>கூடுதல் தொகை / அட்வான்ஸ்:</span>
+                      <span className="font-mono text-xs font-black text-emerald-800">₹{(paid - grandTotal).toFixed(2)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {previousBalance <= 0 && paid > finalTotal && (
+                <div className="bg-emerald-50 border border-emerald-300 text-emerald-950 rounded p-1.5 text-[11px] space-y-0.5 mt-0.5">
+                  <div className="flex justify-between font-bold">
+                    <span>பில் தொகை: {formatINR(finalTotal)}</span>
+                    <span className="text-emerald-700 font-mono">செலுத்தியது: {formatINR(paid)}</span>
+                  </div>
+                  <div className="flex justify-between text-emerald-800 font-bold border-t border-emerald-200 pt-0.5">
+                    <span>அதிகப்படியான தொகை (வருவாயில் சேர்க்கப்பட்டது):</span>
+                    <span className="font-mono font-black text-xs text-emerald-700">+ ₹{(paid - finalTotal).toFixed(2)}</span>
+                  </div>
+                </div>
+              )}
 
               <input
                 className="w-full h-6 px-2 text-xs rounded border border-gray-300 text-gray-700 placeholder-gray-400"

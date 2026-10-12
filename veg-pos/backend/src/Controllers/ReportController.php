@@ -255,17 +255,28 @@ class ReportController
         $totalDiscount = 0.0;
 
         foreach ($rows as &$row) {
-            $sales = (float) $row['items_total'] - (float) $row['discount_amount'];
+            $baseSales = (float) $row['items_total'] - (float) $row['discount_amount'];
+            $paid = (float) $row['paid_amount'];
+            $grand = (float) $row['grand_total'];
+
+            // Extra revenue: if customer paid more than grand total and no credit party (walk-in), add to revenue & profit
+            $excessPaid = 0.0;
+            if (empty($row['party_id']) && $paid > $grand + 0.009) {
+                $excessPaid = round($paid - $grand, 2);
+            }
+            $sales = $baseSales + $excessPaid;
+
             if ($row['bill_type'] === 'commission') {
-                $profit = (float) $row['commission_amount'];
+                $profit = round((float) $row['commission_amount'] + $excessPaid, 2);
                 $cost = round($sales - $profit, 2);
             } else {
-                $cost = round($sales * 0.85, 2);
+                $cost = round($baseSales * 0.85, 2);
                 $profit = round($sales - $cost, 2);
             }
             $row['net_sales'] = round($sales, 2);
             $row['estimated_cost'] = $cost;
             $row['profit'] = $profit;
+            $row['excess_paid'] = $excessPaid;
             $row['margin_pct'] = $sales > 0 ? round(($profit / $sales) * 100, 1) : 0;
 
             $totalSales += $sales;
