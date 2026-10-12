@@ -174,8 +174,6 @@ export default function SurandaiInvoice({ bill, settings = {}, isCommissionView,
             </div>
           </div>
 
-          <div className="border-t-[1.5px] border-[#0e6037] my-1" />
-
           {/* Deity Header & Shop Number Bar */}
           <div className="text-center font-bold text-[#0e6037] text-xs tracking-wide">
             {god1}
@@ -206,9 +204,6 @@ export default function SurandaiInvoice({ bill, settings = {}, isCommissionView,
 
             {/* Center Brand Title & Oval Logo */}
             <div className="text-center flex-1 px-1">
-              <div className="text-[9px] font-bold text-slate-800 leading-tight">
-                {god1}
-              </div>
               <div className="text-[9px] font-bold text-slate-800 leading-tight">
                 {god2}
               </div>
@@ -298,8 +293,10 @@ export default function SurandaiInvoice({ bill, settings = {}, isCommissionView,
                 const rateVal = l.rate ? Number(l.rate) : 0;
                 const weightNum = parseFloat(l.weight !== undefined && l.weight !== null ? l.weight : (l.qty !== undefined ? l.qty : 0));
                 const weightDisplay = weightNum > 0 ? weightNum.toFixed(2) : '—';
-                const nosNum = parseFloat(l.nos !== undefined && l.nos !== null ? l.nos : (l.bags !== undefined ? l.bags : 0));
-                const nosDisplay = nosNum > 0 ? nosNum : '—';
+                const bagNum = (l.bag_count !== null && l.bag_count !== undefined && l.bag_count !== '')
+                  ? Number(l.bag_count)
+                  : (parseFloat(l.nos !== undefined && l.nos !== null ? l.nos : (l.bags !== undefined ? l.bags : 0)) || 0);
+                const bagDisplay = bagNum > 0 ? bagNum : '';
 
                 const amountVal = l.amount !== undefined ? Number(l.amount) : (l.line_total !== undefined ? Number(l.line_total) : 0);
 
@@ -315,7 +312,7 @@ export default function SurandaiInvoice({ bill, settings = {}, isCommissionView,
                       {weightDisplay}
                     </td>
                     <td className="border-r border-[#0e6037] py-2 px-1 text-center font-mono font-bold text-xs text-slate-800">
-                      {nosDisplay}
+                      {bagDisplay || ''}
                     </td>
                     <td className="py-2 px-2 text-right font-mono font-bold text-xs pr-2">
                       {amountVal > 0 ? amountVal.toFixed(2) : '—'}
@@ -477,10 +474,9 @@ export default function SurandaiInvoice({ bill, settings = {}, isCommissionView,
 
           </div>
 
-          {/* Bottom Inquiries & Terms */}
+          {/* Bottom Terms */}
           <div className="mt-1 text-center text-[8.5px] text-slate-600 border-t border-gray-200 pt-1">
             <div>Terms: Goods once sold will not be taken back.</div>
-            {phones.length > 0 && <div>• For inquiries: {phones.join(' / ')}</div>}
           </div>
 
         </div>
@@ -510,8 +506,6 @@ export default function SurandaiInvoice({ bill, settings = {}, isCommissionView,
             <div className="font-mono pl-7">{phone3}</div>
           </div>
         </div>
-
-        <div className="border-t-[1.5px] border-[#0e6037] my-1" />
 
         {/* Deity Header & Shop Number Bar */}
         <div className="text-center font-bold text-[#0e6037] text-xs tracking-wide">
@@ -543,9 +537,6 @@ export default function SurandaiInvoice({ bill, settings = {}, isCommissionView,
 
           {/* Center Brand Title & Oval Logo */}
           <div className="text-center flex-1 px-1">
-            <div className="text-[9px] font-bold text-slate-800 leading-tight">
-              {god1}
-            </div>
             <div className="text-[9px] font-bold text-slate-800 leading-tight">
               {god2}
             </div>
@@ -635,8 +626,10 @@ export default function SurandaiInvoice({ bill, settings = {}, isCommissionView,
               const itemName = l.item_name_ta || l.item_name_en || l.item_name || '';
               const weightNum = parseFloat(l.weight !== undefined && l.weight !== null ? l.weight : (l.qty || 1));
               const weightDisplay = weightNum > 0 ? weightNum.toFixed(2) : '—';
-              const nosNum = parseFloat(l.nos !== undefined && l.nos !== null ? l.nos : (l.bags !== undefined ? l.bags : 0));
-              const nosDisplay = nosNum > 0 ? nosNum : '—';
+              const bagNum = (l.bag_count !== null && l.bag_count !== undefined && l.bag_count !== '')
+                ? Number(l.bag_count)
+                : (parseFloat(l.nos !== undefined && l.nos !== null ? l.nos : (l.bags !== undefined ? l.bags : 0)) || 0);
+              const bagDisplay = bagNum > 0 ? bagNum : '';
               const rateVal = Number(l.rate || 0).toFixed(2);
               const amountVal = l.amount !== undefined ? Number(l.amount) : (l.line_total !== undefined ? Number(l.line_total) : 0);
 
@@ -652,7 +645,7 @@ export default function SurandaiInvoice({ bill, settings = {}, isCommissionView,
                     {weightDisplay}
                   </td>
                   <td className="border-r border-[#0e6037] py-1 px-1 text-center font-mono font-bold text-xs text-slate-800">
-                    {nosDisplay}
+                    {bagDisplay || ''}
                   </td>
                   <td className="py-1 px-1.5 text-right font-mono font-bold text-xs pr-2">
                     {amountVal.toFixed(2)}
@@ -734,10 +727,9 @@ export default function SurandaiInvoice({ bill, settings = {}, isCommissionView,
 
         </div>
 
-        {/* Bottom Inquiries & Terms */}
+        {/* Bottom Terms */}
         <div className="mt-1 text-center text-[8.5px] text-slate-600 border-t border-gray-200 pt-1">
           <div>Terms: Goods once sold will not be taken back.</div>
-          {phones.length > 0 && <div>• For inquiries: {phones.join(' / ')}</div>}
         </div>
 
       </div>
