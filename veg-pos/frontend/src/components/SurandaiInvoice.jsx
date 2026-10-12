@@ -653,20 +653,12 @@ export default function SurandaiInvoice({ bill, settings = {}, isCommissionView,
         {/* Normal Bill Bottom Summary (Clean 2-Column Layout) */}
         <div className="border-t-2 border-[#0e6037] mt-1 pt-1 flex flex-row justify-between items-start text-xs">
           
-          {/* Left: Payment info, Note & Old Balance */}
+          {/* Left: Old Balance & Notes */}
           <div className="w-[45%] text-[10px] space-y-1">
-            <div>
-              <span className="font-bold text-[#0e6037]">செலுத்தும் முறை: </span>
-              <span className="font-semibold">{bill.payment_method_name || 'ரொக்கம் / Cash'}</span>
-            </div>
-            <div>
-              <span className="font-bold text-[#0e6037]">மொத்த உருப்படிகள்: </span>
-              <span className="font-mono font-bold">{rawLines.length} Items</span>
-            </div>
             {prevBal > 0 && (
-              <div className="pt-0.5 border-t border-dotted border-gray-300">
-                <span className="font-bold text-amber-900">பழைய பாக்கி: </span>
-                <span className="font-mono font-bold text-slate-800">₹{prevBal.toFixed(2)}</span>
+              <div>
+                <span className="font-bold text-amber-900 text-xs">பழைய பாக்கி: </span>
+                <span className="font-mono font-bold text-slate-800 text-xs">₹{prevBal.toFixed(2)}</span>
               </div>
             )}
             {bill.notes && (
