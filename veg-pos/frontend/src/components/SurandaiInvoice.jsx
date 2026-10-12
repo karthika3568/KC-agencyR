@@ -1,42 +1,91 @@
 import React from 'react';
 import { formatINR, formatDateDMY } from '../utils/format';
+import { useSettings } from '../hooks/useSettings';
 
 export default function SurandaiInvoice({ bill, settings = {}, isCommissionView, lang = 'ta' }) {
   if (!bill) return null;
+
+  // Retrieve global settings from SettingsContext or localStorage
+  let globalSettings = {};
+  try {
+    const hook = useSettings?.();
+    if (hook && hook.settings) {
+      globalSettings = hook.settings;
+    }
+  } catch (e) {
+    // Graceful fallback outside provider
+  }
+  if (!globalSettings || Object.keys(globalSettings).length === 0) {
+    try {
+      const cached = localStorage.getItem('veg_pos_settings');
+      if (cached) globalSettings = JSON.parse(cached);
+    } catch (e) {}
+  }
+
+  // Merge explicitly passed settings with global settings
+  const effectiveSettings = { ...(globalSettings || {}), ...(settings || {}) };
 
   // Decide format based on bill_type or user toggle
   const isCommission = isCommissionView !== undefined 
     ? isCommissionView 
     : bill.bill_type === 'commission';
 
-  // Parse phone numbers from settings or fallback to defaults
+  // Parse phone numbers dynamically from settings
   let phones = [];
   try {
-    if (settings.phone_numbers) {
-      phones = typeof settings.phone_numbers === 'string' 
-        ? JSON.parse(settings.phone_numbers) 
-        : settings.phone_numbers;
+    const rawPhones = effectiveSettings.phone_numbers;
+    if (rawPhones) {
+      if (typeof rawPhones === 'string') {
+        const trimmed = rawPhones.trim();
+        if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+          phones = JSON.parse(trimmed);
+        } else {
+          phones = trimmed.split(/[,/|;\n]+/).map((s) => s.trim()).filter(Boolean);
+        }
+      } else if (Array.isArray(rawPhones)) {
+        phones = rawPhones;
+      }
     }
   } catch (e) {
     phones = [];
   }
+
+  // Also check individual phone fields if array was empty
   if (!phones || phones.length === 0) {
-    phones = ['9659580845', '9488103983', '9789767576'];
+    [effectiveSettings.phone, effectiveSettings.phone_1, effectiveSettings.phone_2, effectiveSettings.phone_3, effectiveSettings.mobile]
+      .filter(Boolean)
+      .forEach((p) => phones.push(p));
   }
 
-  const phone1 = phones[0] || '9659580845';
-  const phone2 = phones[1] || '9488103983';
-  const phone3 = phones[2] || '9789767576';
+  // Fallback defaults only if settings have completely never been configured
+  const hasConfiguredSettings = Boolean(
+    effectiveSettings.company_name_ta ||
+    effectiveSettings.company_name_en ||
+    effectiveSettings.proprietor_name ||
+    effectiveSettings.phone_numbers
+  );
 
-  const shopNo1 = settings.shop_number || '14';
-  const shopNo2 = settings.shop_number_2 || '15';
-  const companyNameTa = settings.company_name_ta || 'ஸ்ரீ பவானி காய்கனி கமிஷன் வியாபாரம்';
-  const address = settings.address_line1 || 'தினசரி மார்க்கெட்';
-  const location = settings.address_line2 || 'சுரண்டை.';
-  const proprietor = settings.proprietor_name || 'பவானி சங்கர்';
-  const god1 = settings.god_name_1 || 'ஸ்ரீ பவானி அம்மன் துணை';
-  const god2 = settings.god_name_2 || 'ஸ்ரீ பொட்டல் மாடசாமி';
-  const brandLogo = settings.logo_brand || 'VTC';
+  if (!phones || phones.length === 0) {
+    phones = hasConfiguredSettings ? [] : ['9659580845', '9488103983', '9789767576'];
+  }
+
+  const phone1 = phones[0] || '';
+  const phone2 = phones[1] || '';
+  const phone3 = phones[2] || '';
+
+  const shopNo1 = effectiveSettings.shop_number || (hasConfiguredSettings ? '' : '14');
+  const shopNo2 = effectiveSettings.shop_number_2 || (hasConfiguredSettings ? '' : '15');
+  const companyNameTa = effectiveSettings.company_name_ta || effectiveSettings.company_name || effectiveSettings.shop_name || 'ஸ்ரீ பவானி காய்கனி கமிஷன் வியாபாரம்';
+  const companyNameEn = effectiveSettings.company_name_en || effectiveSettings.company_name || '';
+  const displayName = lang === 'en' ? (companyNameEn || companyNameTa) : (companyNameTa || companyNameEn);
+  const address = effectiveSettings.address_line1 || (hasConfiguredSettings ? '' : 'தினசரி மார்க்கெட்');
+  const location = effectiveSettings.address_line2 || (hasConfiguredSettings ? '' : 'சுரண்டை.');
+  const proprietor = effectiveSettings.proprietor_name || effectiveSettings.owner_name || (hasConfiguredSettings ? '' : 'பவானி சங்கர்');
+  const god1 = effectiveSettings.god_name_1 !== undefined && effectiveSettings.god_name_1 !== null ? effectiveSettings.god_name_1 : 'ஸ்ரீ பவானி அம்மன் துணை';
+  const god2 = effectiveSettings.god_name_2 !== undefined && effectiveSettings.god_name_2 !== null ? effectiveSettings.god_name_2 : 'ஸ்ரீ பொட்டல் மாடசாமி';
+  const brandLogo = effectiveSettings.logo_brand !== undefined && effectiveSettings.logo_brand !== null ? effectiveSettings.logo_brand : 'VTC';
+  const footerNote = effectiveSettings.footer_note || 'நன்றி! மீண்டும் வருக!';
+  const gstin = effectiveSettings.gstin || effectiveSettings.gst_no || '';
 
   const customerName = bill.party_name || bill.walkin_name || bill.customer_name || '';
   const billNo = bill.bill_no || (bill.id ? `B-${bill.id}` : '—');
@@ -191,11 +240,13 @@ export default function SurandaiInvoice({ bill, settings = {}, isCommissionView,
           {/* Main Shop Name */}
           <div className="text-center mt-0.5 mb-0.5">
             <h1 className="text-xl font-black text-red-600 tracking-wide font-sans leading-tight">
-              {companyNameTa}
+              {displayName || companyNameTa}
             </h1>
-            <div className="text-xs font-bold text-[#0e6037] tracking-wider leading-tight">
-              {address}, {location}
-            </div>
+            {(address || location) && (
+              <div className="text-xs font-bold text-[#0e6037] tracking-wider leading-tight">
+                {[address, location].filter(Boolean).join(', ')}
+              </div>
+            )}
           </div>
 
           {/* Customer & Date Line */}
@@ -370,14 +421,14 @@ export default function SurandaiInvoice({ bill, settings = {}, isCommissionView,
             
             {/* Left Thank You Box */}
             <div className="border border-[#0e6037] rounded px-2 py-1 text-center leading-tight">
-              <div className="font-bold text-[#0e6037]">நன்றி! மீண்டும் வருக!</div>
+              <div className="font-bold text-[#0e6037]">{footerNote || 'நன்றி! மீண்டும் வருக!'}</div>
               <div className="text-[8px] font-semibold text-slate-700">• Thank You!</div>
               <div className="text-[8px] font-semibold text-slate-700">Visit Again!</div>
             </div>
 
             {/* Right POS / GST Notes */}
             <div className="text-right leading-tight text-slate-700">
-              <div>• Computerized POS Invoice • GSTIN: __________________</div>
+              <div>• Computerized POS Invoice {gstin ? `• GSTIN: ${gstin}` : ''}</div>
               <div>• This is a computer-generated invoice. No signature required.</div>
             </div>
 
@@ -386,7 +437,7 @@ export default function SurandaiInvoice({ bill, settings = {}, isCommissionView,
           {/* Bottom Inquiries & Terms */}
           <div className="mt-1 text-center text-[8.5px] text-slate-600 border-t border-dotted border-gray-300 pt-0.5">
             <div>Terms: Goods once sold will not be taken back.</div>
-            <div>• For inquiries: {phone1} / {phone2}</div>
+            {phones.length > 0 && <div>• For inquiries: {phones.join(' / ')}</div>}
           </div>
 
         </div>
@@ -489,11 +540,13 @@ export default function SurandaiInvoice({ bill, settings = {}, isCommissionView,
         {/* Main Shop Name */}
         <div className="text-center mt-0.5 mb-0.5">
           <h1 className="text-xl font-black text-red-600 tracking-wide font-sans leading-tight">
-            {companyNameTa}
+            {displayName || companyNameTa}
           </h1>
-          <div className="text-xs font-bold text-[#0e6037] tracking-wider leading-tight">
-            {address}, {location}
-          </div>
+          {(address || location) && (
+            <div className="text-xs font-bold text-[#0e6037] tracking-wider leading-tight">
+              {[address, location].filter(Boolean).join(', ')}
+            </div>
+          )}
         </div>
 
         {/* Customer & Bill No Bar */}
@@ -634,14 +687,14 @@ export default function SurandaiInvoice({ bill, settings = {}, isCommissionView,
           
           {/* Left Thank You Box */}
           <div className="border border-[#0e6037] rounded px-2 py-1 text-center leading-tight">
-            <div className="font-bold text-[#0e6037]">நன்றி! மீண்டும் வருக!</div>
+            <div className="font-bold text-[#0e6037]">{footerNote || 'நன்றி! மீண்டும் வருக!'}</div>
             <div className="text-[8px] font-semibold text-slate-700">• Thank You!</div>
             <div className="text-[8px] font-semibold text-slate-700">Visit Again!</div>
           </div>
 
           {/* Right POS / GST Notes */}
           <div className="text-right leading-tight text-slate-700">
-            <div>• Computerized POS Invoice • GSTIN: __________________</div>
+            <div>• Computerized POS Invoice {gstin ? `• GSTIN: ${gstin}` : ''}</div>
             <div>• This is a computer-generated invoice. No signature required.</div>
           </div>
 
@@ -650,7 +703,7 @@ export default function SurandaiInvoice({ bill, settings = {}, isCommissionView,
         {/* Bottom Inquiries & Terms */}
         <div className="mt-1 text-center text-[8.5px] text-slate-600 border-t border-dotted border-gray-300 pt-0.5">
           <div>Terms: Goods once sold will not be taken back.</div>
-          <div>• For inquiries: {phone1} / {phone2}</div>
+          {phones.length > 0 && <div>• For inquiries: {phones.join(' / ')}</div>}
         </div>
 
       </div>

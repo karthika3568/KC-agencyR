@@ -20,7 +20,21 @@ export default function Settings() {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    getSettings().then(setSettings);
+    getSettings().then((data) => {
+      if (data && data.phone_numbers) {
+        try {
+          if (typeof data.phone_numbers === 'string' && data.phone_numbers.trim().startsWith('[')) {
+            const arr = JSON.parse(data.phone_numbers);
+            if (Array.isArray(arr)) {
+              data.phone_numbers = arr.join(', ');
+            }
+          } else if (Array.isArray(data.phone_numbers)) {
+            data.phone_numbers = data.phone_numbers.join(', ');
+          }
+        } catch (e) {}
+      }
+      setSettings(data);
+    });
     getSequences().then(setSequences);
     listPaymentMethods({ active_only: '0' }).then(setMethods);
   }, []);
@@ -149,14 +163,19 @@ export default function Settings() {
 
             <div className="card space-y-3">
               <div className="grid sm:grid-cols-2 gap-3">
-                <TextField label="Shop name (Tamil)" value={settings.company_name_ta} onChange={(v) => field('company_name_ta', v)} />
-                <TextField label="Shop name (English)" value={settings.company_name_en} onChange={(v) => field('company_name_en', v)} />
-                <TextField label="Tagline" value={settings.company_tagline} onChange={(v) => field('company_tagline', v)} />
-                <TextField label="Proprietor" value={settings.proprietor_name} onChange={(v) => field('proprietor_name', v)} />
-                <TextField label="Shop number" value={settings.shop_number} onChange={(v) => field('shop_number', v)} />
-                <TextField label="Address line 1" value={settings.address_line1} onChange={(v) => field('address_line1', v)} />
-                <TextField label="Address line 2" value={settings.address_line2} onChange={(v) => field('address_line2', v)} />
-                <TextField label="Phone numbers (e.g. 9659580845, 9488103983)" value={settings.phone_numbers} onChange={(v) => field('phone_numbers', v)} />
+                <TextField label="Shop name (Tamil) / கடை பெயர் (தமிழ்)" value={settings.company_name_ta} onChange={(v) => field('company_name_ta', v)} />
+                <TextField label="Shop name (English) / கடை பெயர் (English)" value={settings.company_name_en} onChange={(v) => field('company_name_en', v)} />
+                <TextField label="Proprietor / உரிமையாளர் பெயர்" value={settings.proprietor_name} onChange={(v) => field('proprietor_name', v)} />
+                <TextField label="Tagline / வாசகம்" value={settings.company_tagline} onChange={(v) => field('company_tagline', v)} />
+                <TextField label="Shop number 1 / கடை எண் 1" value={settings.shop_number} onChange={(v) => field('shop_number', v)} />
+                <TextField label="Shop number 2 / கடை எண் 2" value={settings.shop_number_2} onChange={(v) => field('shop_number_2', v)} />
+                <TextField label="Address line 1 / முகவரி 1 (மார்க்கெட்)" value={settings.address_line1} onChange={(v) => field('address_line1', v)} />
+                <TextField label="Address line 2 / ஊர் (சுரண்டை)" value={settings.address_line2} onChange={(v) => field('address_line2', v)} />
+                <TextField label="Phone numbers / தொடர்புக்கு (e.g. 9659580845, 9488103983)" value={settings.phone_numbers} onChange={(v) => field('phone_numbers', v)} />
+                <TextField label="Deity 1 / கடவுள் துணை 1" value={settings.god_name_1} onChange={(v) => field('god_name_1', v)} />
+                <TextField label="Deity 2 / கடவுள் துணை 2" value={settings.god_name_2} onChange={(v) => field('god_name_2', v)} />
+                <TextField label="Logo / Brand badge (e.g. VTC)" value={settings.logo_brand} onChange={(v) => field('logo_brand', v)} />
+                <TextField label="GSTIN" value={settings.gstin} onChange={(v) => field('gstin', v)} />
               </div>
               <label className="flex items-center gap-2 text-sm pt-2">
                 <input

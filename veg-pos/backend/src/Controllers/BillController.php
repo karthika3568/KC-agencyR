@@ -83,6 +83,26 @@ class BillController
         Response::json($bill);
     }
 
+    public function print(string $id): void
+    {
+        AuthMiddleware::authenticate();
+        $bill = $this->fetchBillWithLines((int) $id);
+        if (!$bill) {
+            Response::error('Bill not found', 404);
+        }
+
+        $rows = $this->pdo->query('SELECT `key`, `value` FROM settings')->fetchAll();
+        $settings = [];
+        foreach ($rows as $row) {
+            $settings[$row['key']] = $row['value'];
+        }
+
+        Response::json([
+            'bill' => $bill,
+            'settings' => $settings,
+        ]);
+    }
+
     public function store(): void
     {
         $claims = AuthMiddleware::authenticate();
