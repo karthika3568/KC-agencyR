@@ -23,34 +23,63 @@ export default function PrintBill() {
   if (!payload) return <div className="p-8 text-center text-gray-500 font-bold">Loading Invoice...</div>;
 
   const { bill, settings } = payload;
-  const paperFormat = params.get('format') || settings.default_print_format || 'slip';
+  const paperFormat = params.get('format') || settings.default_print_format || 'a5';
   const activeIsCommission = formatMode !== null 
     ? formatMode === 'commission' 
     : bill.bill_type === 'commission';
 
   return (
-    <div className="min-h-screen bg-gray-200 pb-12">
-      {/* Print Page Styles */}
+    <div className="print-page-wrapper min-h-screen bg-slate-100 pb-12 print:p-0 print:m-0 print:bg-white print:min-h-0">
+      {/* Strict Single-Page Print Styles */}
       <style>{`
         @page {
-          size: ${paperFormat === 'a4' ? 'A4' : paperFormat === 'a5' ? 'A5' : 'auto'};
-          margin: 4mm;
+          size: ${paperFormat === 'a4' ? 'A4 portrait' : paperFormat === 'slip' ? 'auto' : 'A5 portrait'};
+          margin: 3mm;
         }
         @media print {
-          .no-print { display: none !important; }
-          body { background: white !important; }
-          .print-container { padding: 0 !important; margin: 0 !important; background: transparent !important; }
-          .surandai-invoice-slip { border: 2px solid #000 !important; max-width: 100% !important; box-shadow: none !important; }
+          html, body {
+            height: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+            background: #ffffff !important;
+          }
+          .no-print {
+            display: none !important;
+          }
+          .print-page-wrapper {
+            background: #ffffff !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            min-height: 0 !important;
+            height: auto !important;
+          }
+          .print-container {
+            padding: 0 !important;
+            margin: 0 auto !important;
+            max-width: 100% !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            page-break-after: avoid !important;
+          }
+          .surandai-bhavani-template {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            page-break-after: avoid !important;
+            margin: 0 auto !important;
+            box-shadow: none !important;
+            max-height: 98vh !important;
+          }
         }
       `}</style>
 
       {/* Top Action & Mode Selector Bar (Hidden on Print) */}
-      <div className="no-print sticky top-0 z-50 bg-white border-b border-gray-300 shadow-sm p-3 mb-6">
+      <div className="no-print sticky top-0 z-50 bg-white border-b border-gray-200 shadow-sm p-3 mb-6">
         <div className="max-w-5xl mx-auto flex flex-wrap items-center justify-between gap-3 text-sm">
           
           {/* Back Button */}
           <button
-            className="bg-gray-800 hover:bg-gray-900 text-white font-bold px-3.5 py-1.5 rounded text-xs flex items-center gap-1.5 shadow transition-all"
+            className="bg-slate-800 hover:bg-slate-900 text-white font-bold px-3.5 py-1.5 rounded-lg text-xs flex items-center gap-1.5 shadow transition-all"
             onClick={() => navigate('/invoices')}
             title="Return to Invoices list"
           >
@@ -64,31 +93,31 @@ export default function PrintBill() {
           <div className="flex items-center gap-2">
             <span className="font-bold text-gray-700 text-xs">பில் வடிவம்:</span>
             <button
-              className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                 activeIsCommission 
-                  ? 'bg-green-700 text-white shadow' 
+                  ? 'bg-blue-900 text-white shadow' 
                   : 'bg-gray-100 text-gray-700 border hover:bg-gray-200'
               }`}
               onClick={() => setFormatMode('commission')}
             >
-              கமிஷன் பில் (Commission Bill)
+              கமிஷன் பில் (Commission)
             </button>
             <button
-              className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                 !activeIsCommission 
-                  ? 'bg-blue-700 text-white shadow' 
+                  ? 'bg-blue-900 text-white shadow' 
                   : 'bg-gray-100 text-gray-700 border hover:bg-gray-200'
               }`}
               onClick={() => setFormatMode('normal')}
             >
-              சாதாரண பில் (Normal Bill)
+              சாதாரண பில் (Normal)
             </button>
           </div>
 
           {/* Language Selector */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <button
-              className={`px-2.5 py-1 rounded text-xs font-semibold ${
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${
                 language === 'ta' ? 'bg-amber-600 text-white' : 'bg-gray-100 text-gray-700 border'
               }`}
               onClick={() => setLanguage('ta')}
@@ -96,7 +125,7 @@ export default function PrintBill() {
               தமிழ்
             </button>
             <button
-              className={`px-2.5 py-1 rounded text-xs font-semibold ${
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${
                 language === 'en' ? 'bg-amber-600 text-white' : 'bg-gray-100 text-gray-700 border'
               }`}
               onClick={() => setLanguage('en')}
@@ -107,22 +136,22 @@ export default function PrintBill() {
 
           {/* Paper Size Selector */}
           <div className="flex items-center gap-1.5">
-            {['slip', 'a5', 'a4'].map((f) => (
+            {['a5', 'slip', 'a4'].map((f) => (
               <button
                 key={f}
-                className={`px-2.5 py-1 rounded text-xs uppercase font-bold ${
-                  f === paperFormat ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700 border'
+                className={`px-2.5 py-1 rounded-lg text-xs uppercase font-bold ${
+                  f === paperFormat ? 'bg-slate-900 text-white' : 'bg-gray-100 text-gray-700 border'
                 }`}
                 onClick={() => setParams({ format: f })}
               >
-                {f === 'slip' ? 'Slip' : f}
+                {f === 'a5' ? 'A5' : f === 'slip' ? 'Slip' : 'A4'}
               </button>
             ))}
           </div>
 
           {/* Print Button */}
           <button
-            className="bg-brand-700 hover:bg-brand-800 text-white font-bold px-5 py-1.5 rounded text-sm flex items-center gap-1.5 shadow"
+            className="bg-blue-900 hover:bg-blue-950 text-white font-bold px-5 py-1.5 rounded-lg text-sm flex items-center gap-1.5 shadow"
             onClick={() => window.print()}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

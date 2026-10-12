@@ -12,12 +12,13 @@ class CorsMiddleware
         $allowedOrigins = $config['cors']['origins'];
         $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 
-        // Vite picks the next free port (5173, 5174, 5175, ...) when the
-        // default is already in use, so allow any localhost/127.0.0.1 origin
-        // in dev rather than needing .env updated every time that happens.
-        $isLocalDevOrigin = (bool) preg_match('#^https?://(localhost|127\.0\.0\.1)(:\d+)?$#', $origin);
+        // Allow localhost, 127.0.0.1, local LAN IPs, qynova.in domains, capacitor/ionic app origins in dev
+        $isLocalDevOrigin = (bool) preg_match('#^https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|.*\.qynova\.in)(:\d+)?$#', $origin)
+            || preg_match('#^(capacitor|ionic|file)://#', $origin);
 
-        if ($isLocalDevOrigin || in_array($origin, $allowedOrigins, true)) {
+        if (empty($origin)) {
+            header('Access-Control-Allow-Origin: *');
+        } elseif ($isLocalDevOrigin || in_array($origin, $allowedOrigins, true)) {
             header('Access-Control-Allow-Origin: ' . $origin);
             header('Vary: Origin');
         }

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { listUsers, createUser, updateUser, getAuditLog } from '../api/settings';
-import { formatDateDMY } from '../utils/format';
+import { listUsers, createUser, updateUser } from '../api/settings';
 
 const BLANK = { name: '', username: '', password: '', pin: '', role: 'staff' };
 
@@ -9,8 +8,6 @@ export default function Users({ embedded = false }) {
   const { t } = useTranslation();
   const [users, setUsers] = useState([]);
   const [form, setForm] = useState(null);
-  const [audit, setAudit] = useState([]);
-  const [showAudit, setShowAudit] = useState(false);
 
   function load() {
     listUsers().then(setUsers);
@@ -29,31 +26,20 @@ export default function Users({ embedded = false }) {
     load();
   }
 
-  async function openAudit() {
-    const rows = await getAuditLog();
-    setAudit(rows);
-    setShowAudit(true);
-  }
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         {!embedded ? (
-          <h1 className="text-xl font-bold">{t('nav.users')}</h1>
+          <h1 className="text-xl font-bold text-gray-900">{t('nav.users')}</h1>
         ) : (
           <div>
-            <h2 className="text-lg font-bold text-gray-800">{t('nav.users')}</h2>
+            <h2 className="text-lg font-bold text-gray-900">{t('nav.users')}</h2>
             <p className="text-xs text-gray-500">Manage operator logins and access roles</p>
           </div>
         )}
-        <div className="flex gap-2">
-          <button className="btn-secondary" onClick={openAudit}>
-            Audit Log
-          </button>
-          <button className="btn-primary" onClick={() => setForm(BLANK)}>
-            + {t('common.add')}
-          </button>
-        </div>
+        <button className="btn-primary" onClick={() => setForm(BLANK)}>
+          + {t('common.add')}
+        </button>
       </div>
 
       <div className="card overflow-x-auto">
@@ -70,12 +56,22 @@ export default function Users({ embedded = false }) {
           <tbody>
             {users.map((u) => (
               <tr key={u.id}>
-                <td>{u.name}</td>
+                <td className="font-medium text-gray-900">{u.name}</td>
                 <td>{u.username}</td>
-                <td>{u.role}</td>
-                <td>{u.active ? t('common.active') : t('common.inactive')}</td>
                 <td>
-                  <button className="text-brand-700 underline" onClick={() => setForm({ ...u, password: '', pin: '' })}>
+                  <span className="capitalize px-2 py-0.5 rounded text-xs bg-slate-100 font-medium text-slate-700">
+                    {u.role}
+                  </span>
+                </td>
+                <td>
+                  <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${
+                    u.active ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+                  }`}>
+                    {u.active ? t('common.active') : t('common.inactive')}
+                  </span>
+                </td>
+                <td>
+                  <button className="text-brand-700 hover:text-brand-800 underline font-medium" onClick={() => setForm({ ...u, password: '', pin: '' })}>
                     {t('common.edit')}
                   </button>
                 </td>
@@ -86,9 +82,9 @@ export default function Users({ embedded = false }) {
       </div>
 
       {form && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 no-print">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 no-print p-4">
           <form onSubmit={handleSave} className="card w-full max-w-md space-y-3">
-            <h2 className="font-bold text-lg">{form.id ? t('common.edit') : t('common.add')}</h2>
+            <h2 className="font-bold text-lg text-gray-900">{form.id ? t('common.edit') : t('common.add')}</h2>
             <div>
               <label className="label">{t('common.name')}</label>
               <input className="input" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
@@ -116,7 +112,7 @@ export default function Users({ embedded = false }) {
               <input className="input" value={form.pin} onChange={(e) => setForm({ ...form, pin: e.target.value })} />
             </div>
             {form.id && (
-              <label className="flex items-center gap-2 text-sm">
+              <label className="flex items-center gap-2 text-sm pt-1">
                 <input type="checkbox" checked={!!form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} />
                 {t('common.active')}
               </label>
@@ -128,41 +124,6 @@ export default function Users({ embedded = false }) {
               <button className="btn-primary">{t('common.save')}</button>
             </div>
           </form>
-        </div>
-      )}
-
-      {showAudit && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 no-print p-4">
-          <div className="card w-full max-w-3xl max-h-[85vh] overflow-y-auto space-y-3">
-            <div className="flex justify-between">
-              <h2 className="font-bold text-lg">Audit Log</h2>
-              <button className="btn-secondary" onClick={() => setShowAudit(false)}>
-                {t('common.close')}
-              </button>
-            </div>
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>{t('common.date')}</th>
-                  <th>User</th>
-                  <th>Action</th>
-                  <th>Entity</th>
-                  <th>Details</th>
-                </tr>
-              </thead>
-              <tbody>
-                {audit.map((a) => (
-                  <tr key={a.id}>
-                    <td>{formatDateDMY(a.created_at)}</td>
-                    <td>{a.username}</td>
-                    <td>{a.action}</td>
-                    <td>{a.entity_type} #{a.entity_id}</td>
-                    <td className="text-xs">{a.details}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
         </div>
       )}
     </div>

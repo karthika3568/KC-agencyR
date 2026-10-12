@@ -45,18 +45,34 @@ export default function QuickSale({ embedded = false }) {
 
   function addLine() {
     if (!matchedItem || !weight || !rate) return;
-    setLines((ls) => [
-      ...ls,
-      {
-        key: Date.now(),
-        item_id: matchedItem.id,
-        item_name_ta: matchedItem.name_ta,
-        item_name_en: matchedItem.name_en,
-        weight: Number(weight),
-        rate: Number(rate),
-        amount: Number(weight) * Number(rate),
-      },
-    ]);
+    setLines((ls) => {
+      const existingIdx = ls.findIndex((l) => l.item_id === matchedItem.id);
+      if (existingIdx >= 0) {
+        const updated = [...ls];
+        const existing = updated[existingIdx];
+        const newWeight = Math.round(((Number(existing.weight) || 0) + Number(weight)) * 1000) / 1000;
+        const lineRate = Number(rate) || existing.rate;
+        updated[existingIdx] = {
+          ...existing,
+          weight: newWeight,
+          rate: lineRate,
+          amount: Math.round(newWeight * lineRate * 100) / 100,
+        };
+        return updated;
+      }
+      return [
+        ...ls,
+        {
+          key: Date.now(),
+          item_id: matchedItem.id,
+          item_name_ta: matchedItem.name_ta,
+          item_name_en: matchedItem.name_en,
+          weight: Number(weight),
+          rate: Number(rate),
+          amount: Math.round(Number(weight) * Number(rate) * 100) / 100,
+        },
+      ];
+    });
     setCode('');
     setWeight('');
     setRate('');

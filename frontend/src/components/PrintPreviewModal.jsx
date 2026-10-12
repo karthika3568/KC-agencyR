@@ -4,6 +4,7 @@ import { X, Printer } from 'lucide-react';
 import { invoicesApi } from '../api/invoices';
 import { ThermalTemplate } from '../print/ThermalTemplate';
 import { A4Template } from '../print/A4Template';
+import SurandaiInvoice from './SurandaiInvoice';
 import { Button } from './Button.jsx';
 import '../print/print.css';
 
@@ -41,16 +42,22 @@ export function PrintPreviewModal({ invoiceId, onClose }) {
       <div className="no-print mx-auto mb-4 flex max-w-3xl items-center gap-2 rounded-lg bg-white p-3 shadow-sm">
         <span className="text-sm font-medium text-gray-600">Format:</span>
         <button
+          onClick={() => setFormat('a4')}
+          className={`rounded px-3 py-1 text-sm ${format === 'a4' ? 'bg-navbar text-white' : 'bg-gray-100 text-gray-700'}`}
+        >
+          A4
+        </button>
+        <button
           onClick={() => setFormat('thermal')}
           className={`rounded px-3 py-1 text-sm ${format === 'thermal' ? 'bg-navbar text-white' : 'bg-gray-100 text-gray-700'}`}
         >
           Thermal (80mm)
         </button>
         <button
-          onClick={() => setFormat('a4')}
-          className={`rounded px-3 py-1 text-sm ${format === 'a4' ? 'bg-navbar text-white' : 'bg-gray-100 text-gray-700'}`}
+          onClick={() => setFormat('surandai')}
+          className={`rounded px-3 py-1 text-sm ${format === 'surandai' ? 'bg-navbar text-white' : 'bg-gray-100 text-gray-700'}`}
         >
-          A4
+          Paper Bill (Mandi Slip)
         </button>
         <div className="ml-auto flex items-center gap-2">
           {data?.invoice?.customer_phone && (
@@ -67,7 +74,13 @@ export function PrintPreviewModal({ invoiceId, onClose }) {
       {!error && !data && <div className="mx-auto w-fit rounded-lg bg-white p-6 text-gray-500 shadow-sm">Loading…</div>}
       {data && (
         <div className="mx-auto w-fit rounded-lg bg-white p-6 shadow-sm">
-          {format === 'thermal' ? <ThermalTemplate data={data} /> : <A4Template data={data} />}
+          {format === 'surandai' ? (
+            <SurandaiInvoice bill={data.invoice} settings={data.branch || {}} lang="ta" />
+          ) : format === 'thermal' ? (
+            <ThermalTemplate data={data} />
+          ) : (
+            <A4Template data={data} />
+          )}
         </div>
       )}
     </div>,

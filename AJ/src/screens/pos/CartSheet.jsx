@@ -146,7 +146,20 @@ export function CartSheet({
                     <TouchableOpacity onPress={() => updateQty(line.key, -1)} style={styles.qtyBtn}>
                       <Text style={styles.qtyBtnText}>-</Text>
                     </TouchableOpacity>
-                    <Text style={styles.qtyText}>{line.qty}</Text>
+                    <TextInput
+                      keyboardType="numeric"
+                      value={String(line.qty ?? '')}
+                      onChangeText={(v) => {
+                        const parsed = parseInt(v, 10);
+                        updateLine(line.key, { qty: isNaN(parsed) || parsed < 1 ? (v === '' ? '' : 1) : parsed });
+                      }}
+                      onBlur={() => {
+                        if (!line.qty || Number(line.qty) < 1) {
+                          updateLine(line.key, { qty: 1 });
+                        }
+                      }}
+                      style={styles.qtyInput}
+                    />
                     <TouchableOpacity onPress={() => updateQty(line.key, 1)} style={styles.qtyBtn}>
                       <Icon name="plus" size={12} color={colors.ink} />
                     </TouchableOpacity>
@@ -371,7 +384,21 @@ const styles = StyleSheet.create({
   cartMeta: { fontSize: 11, color: colors.inkMuted },
   qtyBtn: { width: 28, height: 28, borderRadius: 6, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC' },
   qtyBtnText: { fontWeight: '700', fontSize: 14, color: colors.ink },
-  qtyText: { width: 24, textAlign: 'center', fontWeight: '600' },
+  qtyInput: {
+    minWidth: 42,
+    height: 28,
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    borderRadius: 6,
+    paddingHorizontal: 4,
+    paddingVertical: 0,
+    marginHorizontal: 4,
+    textAlign: 'center',
+    fontWeight: '600',
+    fontSize: 13,
+    color: colors.ink,
+    backgroundColor: '#ffffff',
+  },
   removeBtn: { marginLeft: 8, padding: 4 },
   lineExtras: { flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 10 },
   discountGroup: { flexDirection: 'row', alignItems: 'center', gap: 4 },

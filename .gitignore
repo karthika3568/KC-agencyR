@@ -90,4 +90,5 @@ deploy.py
 deploy_all.py
 scratch/
 db_backups/
+*.zip
 

@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { getSettings, updateSettings, getSequences, updateSequence, getAuditLog } from '../api/settings';
+import { getSettings, updateSettings, getSequences, updateSequence } from '../api/settings';
 import { listPaymentMethods, createPaymentMethod, updatePaymentMethod } from '../api/payments';
 import { setAppLanguage } from '../i18n';
 import { useSettings } from '../hooks/useSettings';
-import { formatDateDMY } from '../utils/format';
 import Users from './Users';
 
 export default function Settings() {
@@ -19,23 +18,12 @@ export default function Settings() {
   const [methods, setMethods] = useState([]);
   const [newMethod, setNewMethod] = useState('');
   const [saved, setSaved] = useState(false);
-  const [auditRows, setAuditRows] = useState([]);
-  const [loadingAudit, setLoadingAudit] = useState(false);
 
   useEffect(() => {
     getSettings().then(setSettings);
     getSequences().then(setSequences);
     listPaymentMethods({ active_only: '0' }).then(setMethods);
   }, []);
-
-  useEffect(() => {
-    if (activeTab === 'audit') {
-      setLoadingAudit(true);
-      getAuditLog()
-        .then(setAuditRows)
-        .finally(() => setLoadingAudit(false));
-    }
-  }, [activeTab]);
 
   function field(key, value) {
     setSettings((s) => ({ ...s, [key]: value }));
@@ -107,16 +95,6 @@ export default function Settings() {
         </svg>
       ),
     },
-    {
-      id: 'audit',
-      label: 'Audit Log',
-      desc: 'System event log & history',
-      icon: (
-        <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-        </svg>
-      ),
-    },
   ];
 
   if (!settings) return <div className="p-4">{t('common.loading')}</div>;
@@ -139,7 +117,7 @@ export default function Settings() {
                 onClick={() => setSearchParams({ tab: item.id })}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all text-left whitespace-nowrap ${
                   active
-                    ? 'bg-brand-50 text-brand-700 font-semibold border-l-4 border-brand-600 shadow-xs'
+                    ? 'bg-brand-50 text-brand-700 font-semibold border-l-4 border-brand-600 shadow-sm'
                     : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 border-l-4 border-transparent'
                 }`}
               >
@@ -353,64 +331,6 @@ export default function Settings() {
         {activeTab === 'users' && (
           <div className="space-y-4">
             <Users embedded />
-          </div>
-        )}
-
-        {/* Tab 5: Audit Log */}
-        {activeTab === 'audit' && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">System Audit Log</h1>
-                <p className="text-xs text-gray-500">Complete trail of operational activities and changes</p>
-              </div>
-              <button
-                className="btn-secondary text-sm"
-                onClick={() => {
-                  setLoadingAudit(true);
-                  getAuditLog()
-                    .then(setAuditRows)
-                    .finally(() => setLoadingAudit(false));
-                }}
-              >
-                Refresh Log
-              </button>
-            </div>
-
-            <div className="card overflow-x-auto">
-              {loadingAudit ? (
-                <div className="p-8 text-center text-gray-500">{t('common.loading')}</div>
-              ) : auditRows.length === 0 ? (
-                <div className="p-8 text-center text-gray-400">No audit records found</div>
-              ) : (
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>{t('common.date')}</th>
-                      <th>User</th>
-                      <th>Action</th>
-                      <th>Entity</th>
-                      <th>Details</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {auditRows.map((a) => (
-                      <tr key={a.id}>
-                        <td className="whitespace-nowrap">{formatDateDMY(a.created_at)}</td>
-                        <td className="font-medium">{a.username}</td>
-                        <td>
-                          <span className="px-2 py-0.5 rounded text-xs bg-gray-100 font-mono text-gray-700">
-                            {a.action}
-                          </span>
-                        </td>
-                        <td className="text-sm">{a.entity_type} #{a.entity_id}</td>
-                        <td className="text-xs max-w-xs truncate text-gray-600">{a.details}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
           </div>
         )}
       </section>
