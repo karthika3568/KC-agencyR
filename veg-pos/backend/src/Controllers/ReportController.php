@@ -226,4 +226,63 @@ class ReportController
             'profit' => round($salesTotal + $commissionTotal - $purchaseTotal, 2),
         ]);
     }
+
+    public function billWiseProfit(): void
+    {
+        AuthMiddleware::authenticate();
+        [$from, $to] = $this->range();
+
+        $sql = "SELECT b.id, b.bill_no, b.bill_date, b.bill_type, b.location_type,
+                       b.party_id, COALESCE(p.name, 'சில்லறை / Walk-in') AS party_name,
+                       b.items_total, b.discount_amount, b.grand_total,
+                       b.commission_amount, b.commission_percent, b.commission_mode,
+                       b.paid_amount, b.balance_due,
+                       pm.name_ta AS payment_method_name,
+                       (SELECT COUNT(*) FROM bill_lines bl WHERE bl.bill_id = b.id) AS item_count,
+                       (SELECT COALESCE(SUM(bl.weight), 0) FROM bill_lines bl WHERE bl.bill_id = b.id AND bl.is_charge_item = 0) AS total_weight
+                FROM bills b
+                LEFT JOIN parties p ON p.id = b.party_id
+                LEFT JOIN payment_methods pm ON pm.id = b.payment_method_id
+                WHERE b.bill_date BETWEEN :from AND :to AND b.status = 'active'
+                ORDER BY b.bill_date DESC, b.id DESC";
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute(['from' => $from, 'to' => $to]);
+        $rows = $stmt->fetchAll();
+
+        $totalSales = 0.0;
+        $totalProfit = 0.0;
+        $totalDiscount = 0.0;
+
+        foreach ($rows as &$row) {
+            $sales = (float) $row['items_total'] - (float) $row['discount_amount'];
+            if ($row['bill_type'] === 'commission') {
+                $profit = (float) $row['commission_amount'];
+                $cost = round($sales - $profit, 2);
+            } else {
+                $cost = round($sales * 0.85, 2);
+                $profit = round($sales - $cost, 2);
+            }
+            $row['net_sales'] = round($sales, 2);
+            $row['estimated_cost'] = $cost;
+            $row['profit'] = $profit;
+            $row['margin_pct'] = $sales > 0 ? round(($profit / $sales) * 100, 1) : 0;
+
+            $totalSales += $sales;
+            $totalProfit += $profit;
+            $totalDiscount += (float) $row['discount_amount'];
+        }
+
+        Response::json([
+            'rows' => $rows,
+            'summary' => [
+                'bill_count' => count($rows),
+                'total_sales' => round($totalSales, 2),
+                'total_profit' => round($totalProfit, 2),
+                'total_discount' => round($totalDiscount, 2),
+                'average_profit_pct' => $totalSales > 0 ? round(($totalProfit / $totalSales) * 100, 1) : 0,
+            ],
+        ]);
+    }
 }
+

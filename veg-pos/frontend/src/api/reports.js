@@ -10,3 +10,4 @@ export const commissionReport = (params) => client.get('/reports/commission', { 
 export const paymentCollectionReport = (params) => client.get('/reports/payment-collection', { params }).then((r) => r.data);
 export const purchaseReport = (params) => client.get('/reports/purchases', { params }).then((r) => r.data);
 export const profitReport = (params) => client.get('/reports/profit', { params }).then((r) => r.data);
+export const billWiseProfitReport = (params) => client.get('/reports/bill-wise-profit', { params }).then((r) => r.data);

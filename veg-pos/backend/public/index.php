@@ -102,6 +102,7 @@ $router->get('/api/reports/commission', fn () => $reports->commissionReport());
 $router->get('/api/reports/payment-collection', fn () => $reports->paymentCollection());
 $router->get('/api/reports/purchases', fn () => $reports->purchaseReport());
 $router->get('/api/reports/profit', fn () => $reports->profitSummary());
+$router->get('/api/reports/bill-wise-profit', fn () => $reports->billWiseProfit());
 
 $settings = new SettingsController($pdo);
 $router->get('/api/settings', fn () => $settings->index());

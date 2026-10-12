@@ -163,7 +163,7 @@ class PurchaseController
 
             $insertLine->execute([
                 'pid' => $purchaseId,
-                'item_id' => $line['item_id'] ?? null,
+                'item_id' => !empty($line['item_id']) ? (int) $line['item_id'] : null,
                 'name_ta' => $line['item_name_ta'] ?? '',
                 'name_en' => $line['item_name_en'] ?? '',
                 'nos' => $nos,
@@ -179,6 +179,8 @@ class PurchaseController
         $paidAmount = round((float) ($body['paid_amount'] ?? 0), 2);
         $balanceDue = round($total - $paidAmount, 2);
 
+        $pmid = !empty($body['payment_method_id']) ? (int) $body['payment_method_id'] : null;
+
         $this->pdo->prepare(
             'UPDATE purchases SET items_total = :items_total, discount_amount = :discount_amount, total = :total,
                 paid_amount = :paid_amount, payment_method_id = :pmid, balance_due = :balance_due
@@ -189,7 +191,7 @@ class PurchaseController
             'discount_amount' => $discountAmount,
             'total' => $total,
             'paid_amount' => $paidAmount,
-            'pmid' => $body['payment_method_id'] ?? null,
+            'pmid' => $pmid,
             'balance_due' => $balanceDue,
         ]);
 
