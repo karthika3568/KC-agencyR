@@ -174,32 +174,49 @@ export default function Billing() {
   const deductionsExceedSales = totalDeductions > grossTotal + 0.009;
 
   const todayTotal = itemsTotal - discountAmount;
-  const grandTotal = todayTotal + previousBalance;
+  const isCommission = cart.billType === 'commission';
+  const currentBillTotal = isCommission ? netTotal : todayTotal;
+
+  // Positive previousBalance = customer owes shop credit.
+  // Negative previousBalance = shop owes customer (advance / supplier balance).
+  const oldCreditBalance = Number(previousBalance) || 0;
+  const grandTotal = currentBillTotal + Math.max(0, oldCreditBalance);
 
   const paid = Number(cart.paidAmount) || 0;
-  const isCommission = cart.billType === 'commission';
-  const finalTotal = isCommission ? netTotal : grandTotal;
-  const balanceDue = finalTotal - paid;
+  const currentBillDue = Math.max(0, currentBillTotal - paid);
+  const excessPaidOverBill = Math.max(0, paid - currentBillTotal);
+
+  // Credit adjustment logic:
+  const creditDeduction = oldCreditBalance > 0 ? Math.min(oldCreditBalance, excessPaidOverBill) : 0;
+  const remainingOldCredit = oldCreditBalance > 0 ? oldCreditBalance - creditDeduction : 0;
+  const changeToReturn = excessPaidOverBill - creditDeduction;
+
+  // Total balance of party after this bill:
+  const newPartyBalance = oldCreditBalance + (currentBillTotal - paid);
   const canSave = !isCommission || !deductionsExceedSales;
 
-  // Auto-sync paidAmount with full finalTotal unless user explicitly entered a custom partial amount
+  // Auto-sync paidAmount with full currentBillTotal for cash/regular payment unless user manually edited or chose credit
   useEffect(() => {
     if (!isPaidManuallyEdited) {
+      const selected = methods.find((m) => m.id == cart.paymentMethodId);
+      const isCredit = selected?.name_ta === 'கடன்' || selected?.name_en?.toLowerCase() === 'credit';
+      const target = isCredit ? 0 : (currentBillTotal > 0 ? currentBillTotal : 0);
       setCart((c) => {
-        const target = finalTotal > 0 ? finalTotal : 0;
         if (Number(c.paidAmount) === Number(target)) return c;
         return { ...c, paidAmount: target };
       });
     }
-  }, [finalTotal, isPaidManuallyEdited]);
+  }, [currentBillTotal, isPaidManuallyEdited, cart.paymentMethodId, methods]);
 
   function handlePaymentMethodChange(methodId) {
+    const selected = methods.find((m) => m.id == methodId);
+    const isCredit = selected?.name_ta === 'கடன்' || selected?.name_en?.toLowerCase() === 'credit';
     setCart((c) => ({
       ...c,
       paymentMethodId: methodId,
-      paidAmount: finalTotal > 0 ? finalTotal : 0,
+      paidAmount: isCredit ? 0 : (currentBillTotal > 0 ? currentBillTotal : 0),
     }));
-    setIsPaidManuallyEdited(false);
+    setIsPaidManuallyEdited(isCredit);
   }
 
   function buildPayload() {
@@ -572,13 +589,24 @@ export default function Billing() {
                     </div>
                   </div>
 
-                  <Row label={t('billing.previous_balance')} value={formatINR(previousBalance)} />
+                  {oldCreditBalance > 0 && (
+                    <Row label="பழைய கடன் பாக்கி (Old Credit)" value={formatINR(oldCreditBalance)} />
+                  )}
+                  {oldCreditBalance < 0 && (
+                    <Row label="முன் அட்வான்ஸ் இருப்பு (Advance)" value={formatINR(Math.abs(oldCreditBalance))} />
+                  )}
 
-                  {/* Grand Total Navy Bar */}
+                  {/* Bill Total Navy Bar */}
                   <div className="bg-[#0a1733] text-white px-3 py-1 rounded-md flex items-center justify-between font-black text-xs mt-1">
-                    <span className="tracking-wide">GRAND TOTAL</span>
-                    <span className="font-mono text-sm tracking-tight">{formatINR(grandTotal)}</span>
+                    <span className="tracking-wide">இன்றைய பில் மொத்தம் (BILL TOTAL)</span>
+                    <span className="font-mono text-sm tracking-tight">{formatINR(currentBillTotal)}</span>
                   </div>
+                  {oldCreditBalance > 0 && (
+                    <div className="flex justify-between items-center text-[11px] text-gray-500 font-bold px-1 pt-0.5">
+                      <span>மொத்த கணக்கு (Total with Old Credit):</span>
+                      <span className="font-mono text-slate-800">{formatINR(oldCreditBalance + currentBillTotal)}</span>
+                    </div>
+                  )}
                 </>
               ) : (
                 <>
@@ -672,11 +700,11 @@ export default function Billing() {
                   />
                   <button
                     type="button"
-                    title="முழு தொகை செலுத்த (Full Paid)"
+                    title="இன்றைய பில் தொகை மட்டும் செலுத்த (Pay Current Bill)"
                     className="px-2 py-0.5 text-[10px] font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded transition-colors"
                     onClick={() => {
                       setIsPaidManuallyEdited(false);
-                      setCart({ ...cart, paidAmount: finalTotal > 0 ? finalTotal : 0 });
+                      setCart({ ...cart, paidAmount: currentBillTotal > 0 ? currentBillTotal : 0 });
                     }}
                   >
                     Full
@@ -696,16 +724,16 @@ export default function Billing() {
                 >
                   கடன் (0)
                 </button>
-                {previousBalance > 0 && (
+                {oldCreditBalance > 0 && (
                   <button
                     type="button"
                     className="px-1.5 py-0.5 text-blue-700 hover:bg-blue-50 border border-blue-200 rounded font-medium"
                     onClick={() => {
                       setIsPaidManuallyEdited(true);
-                      setCart({ ...cart, paidAmount: todayTotal > 0 ? todayTotal : 0 });
+                      setCart({ ...cart, paidAmount: currentBillTotal + oldCreditBalance });
                     }}
                   >
-                    இன்றைய பில் மட்டும் ({formatINR(todayTotal)})
+                    முழு பழைய கடன் + பில் ({formatINR(currentBillTotal + oldCreditBalance)})
                   </button>
                 )}
               </div>
@@ -727,56 +755,102 @@ export default function Billing() {
 
               {/* Balance Due Navy Bar */}
               <div className={`px-3 py-1 rounded-md flex items-center justify-between font-black text-xs ${
-                balanceDue < -0.009 ? 'bg-emerald-950 text-white' : 'bg-[#0a1733] text-white'
+                currentBillDue > 0 ? 'bg-[#0a1733] text-white' : 'bg-emerald-950 text-white'
               }`}>
                 <span className="tracking-wide">
-                  {balanceDue > 0.009
-                    ? 'BALANCE DUE (மீதி பாக்கி)'
-                    : balanceDue < -0.009
-                      ? 'CHANGE / அட்வான்ஸ் (ADVANCE)'
+                  {currentBillDue > 0
+                    ? 'BILL BALANCE DUE (பில் மீதி பாக்கி)'
+                    : changeToReturn > 0
+                      ? 'CHANGE TO RETURN (சில்லறை கொடுக்க)'
                       : 'PAID IN FULL (முழுவதும் செலுத்தப்பட்டது)'}
                 </span>
                 <span className={`font-mono text-sm ${
-                  balanceDue > 0.009 ? 'text-rose-400' : balanceDue < -0.009 ? 'text-amber-300 font-black' : 'text-emerald-300'
+                  currentBillDue > 0 ? 'text-rose-400' : changeToReturn > 0 ? 'text-amber-300 font-black' : 'text-emerald-300'
                 }`}>
-                  {balanceDue < -0.009 ? `+ ${formatINR(Math.abs(balanceDue))}` : formatINR(balanceDue)}
+                  {currentBillDue > 0
+                    ? formatINR(currentBillDue)
+                    : changeToReturn > 0
+                      ? `+ ${formatINR(changeToReturn)}`
+                      : formatINR(0)}
                 </span>
               </div>
 
-              {/* Live Outstanding Deduction / Extra Revenue Breakdown */}
-              {previousBalance > 0 && paid > todayTotal && (
-                <div className="bg-blue-50 border border-blue-200 text-blue-900 rounded p-1.5 text-[11px] space-y-0.5 mt-0.5">
-                  <div className="flex justify-between font-semibold">
-                    <span>இன்றைய பில் ({formatINR(todayTotal)}):</span>
-                    <span className="text-emerald-700 font-bold font-mono">கழிக்கப்பட்டது ✓</span>
-                  </div>
-                  <div className="flex justify-between text-blue-800">
-                    <span>பழைய பாக்கியில் ({formatINR(previousBalance)}) கழித்தது:</span>
-                    <span className="font-mono font-bold text-emerald-600">- {formatINR(Math.min(previousBalance, paid - todayTotal))}</span>
-                  </div>
-                  <div className="flex justify-between font-bold border-t border-blue-200 pt-0.5">
-                    <span>மீதமுள்ள பழைய பாக்கி:</span>
-                    <span className="font-mono text-rose-600 font-black">{formatINR(Math.max(0, previousBalance - (paid - todayTotal)))}</span>
-                  </div>
-                  {paid > grandTotal && (
-                    <div className="flex justify-between font-bold text-amber-900 bg-amber-100/70 p-1 rounded mt-0.5">
-                      <span>கூடுதல் தொகை / அட்வான்ஸ்:</span>
-                      <span className="font-mono text-xs font-black text-emerald-800">₹{(paid - grandTotal).toFixed(2)}</span>
-                    </div>
+              {/* Live Credit & Adjustment Status */}
+              {cart.partyId && (
+                <div className="bg-slate-50 border border-slate-200 text-slate-800 rounded p-1.5 text-[11px] space-y-1 mt-0.5">
+                  {oldCreditBalance > 0 ? (
+                    <>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">பழைய கடன் இருப்பு:</span>
+                        <span className="font-mono font-bold text-slate-800">{formatINR(oldCreditBalance)}</span>
+                      </div>
+
+                      {paid === currentBillTotal && currentBillTotal > 0 && (
+                        <div className="flex justify-between text-emerald-700 font-semibold border-t border-slate-200 pt-0.5">
+                          <span>இன்றைய பில் செலுத்தப்பட்டது:</span>
+                          <span>பழைய கடனில் மாற்றமில்லை ({formatINR(oldCreditBalance)}) ✓</span>
+                        </div>
+                      )}
+
+                      {currentBillDue > 0 && (
+                        <div className="flex justify-between text-rose-700 font-bold border-t border-slate-200 pt-0.5">
+                          <span>இன்றைய பில் கடனில் சேர்க்கப்பட்டது:</span>
+                          <span className="font-mono">+ {formatINR(currentBillDue)} (மொத்த கடன்: {formatINR(newPartyBalance)})</span>
+                        </div>
+                      )}
+
+                      {excessPaidOverBill > 0 && (
+                        <div className="space-y-0.5 border-t border-slate-200 pt-0.5">
+                          <div className="flex justify-between text-emerald-700 font-semibold">
+                            <span>இன்றைய பில் ({formatINR(currentBillTotal)}):</span>
+                            <span>செலுத்தப்பட்டது ✓</span>
+                          </div>
+                          <div className="flex justify-between text-blue-700 font-bold">
+                            <span>பழைய கடனில் கழித்தது:</span>
+                            <span className="font-mono">- {formatINR(creditDeduction)}</span>
+                          </div>
+                          <div className="flex justify-between font-bold text-slate-900">
+                            <span>மீதமுள்ள பழைய கடன்:</span>
+                            <span className="font-mono text-rose-600">{formatINR(remainingOldCredit)}</span>
+                          </div>
+                          {changeToReturn > 0 && (
+                            <div className="flex justify-between text-amber-900 bg-amber-100/70 p-1 rounded font-bold">
+                              <span>கூடுதல் சில்லறை / அட்வான்ஸ்:</span>
+                              <span className="font-mono">{formatINR(changeToReturn)}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  ) : oldCreditBalance < 0 ? (
+                    <>
+                      <div className="flex justify-between text-blue-800 font-semibold">
+                        <span>முன் அட்வான்ஸ் / வரவு இருப்பு:</span>
+                        <span className="font-mono font-bold">{formatINR(Math.abs(oldCreditBalance))}</span>
+                      </div>
+                      {currentBillDue > 0 && (
+                        <div className="flex justify-between text-slate-700 font-bold border-t border-slate-200 pt-0.5">
+                          <span>அட்வான்ஸில் கழிக்கப்பட்ட பின் மீதம்:</span>
+                          <span className="font-mono">{formatINR(Math.abs(newPartyBalance))}</span>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    currentBillDue > 0 && (
+                      <div className="flex justify-between text-rose-700 font-bold">
+                        <span>கடன் பாக்கி:</span>
+                        <span className="font-mono">{formatINR(currentBillDue)}</span>
+                      </div>
+                    )
                   )}
                 </div>
               )}
 
-              {previousBalance <= 0 && paid > finalTotal && (
-                <div className="bg-emerald-50 border border-emerald-300 text-emerald-950 rounded p-1.5 text-[11px] space-y-0.5 mt-0.5">
-                  <div className="flex justify-between font-bold">
-                    <span>பில் தொகை: {formatINR(finalTotal)}</span>
-                    <span className="text-emerald-700 font-mono">செலுத்தியது: {formatINR(paid)}</span>
-                  </div>
-                  <div className="flex justify-between text-emerald-800 font-bold border-t border-emerald-200 pt-0.5">
-                    <span>அதிகப்படியான தொகை (வருவாயில் சேர்க்கப்பட்டது):</span>
-                    <span className="font-mono font-black text-xs text-emerald-700">+ ₹{(paid - finalTotal).toFixed(2)}</span>
-                  </div>
+              {/* Walk-in Customer Extra Paid */}
+              {!cart.partyId && excessPaidOverBill > 0 && (
+                <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded p-1.5 text-[11px] flex justify-between items-center font-bold mt-0.5">
+                  <span>சில்லறை கொடுக்க வேண்டியது (Change):</span>
+                  <span className="font-mono text-emerald-700 text-xs">₹{excessPaidOverBill.toFixed(2)}</span>
                 </div>
               )}
 
@@ -827,7 +901,7 @@ export default function Billing() {
               )}
             </div>
             <div>
-              <span>Final Total: <strong className="text-emerald-400 font-mono text-sm font-black ml-1.5">{formatINR(finalTotal)}</strong></span>
+              <span>Final Total: <strong className="text-emerald-400 font-mono text-sm font-black ml-1.5">{formatINR(currentBillTotal)}</strong></span>
             </div>
           </div>
 

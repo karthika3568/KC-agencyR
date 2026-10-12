@@ -363,8 +363,8 @@ class BillController
                 throw new ValidationException('Discount amount cannot be negative');
             }
             $todayTotal = round($itemsTotal - $discountAmount, 2);
-            $grandTotal = round($todayTotal + $previousBalance, 2);
-            $balanceDue = round($grandTotal - $paidAmount, 2);
+            $grandTotal = round($todayTotal + max(0.0, (float) $previousBalance), 2);
+            $balanceDue = round(max(0.0, $todayTotal - $paidAmount), 2);
 
             $stmt = $this->pdo->prepare(
                 'UPDATE bills SET items_total = :items_total, discount_percent = :discount_percent,

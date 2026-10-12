@@ -568,9 +568,9 @@ export default function SurandaiInvoice({ bill, settings = {}, isCommissionView,
           <thead>
             <tr className="bg-[#e6f4ea] text-[#0e6037] border-b border-[#0e6037] text-center font-bold">
               <th className="border-r border-[#0e6037] py-1 px-1 w-[8%]">வ.எண்</th>
-              <th className="border-r border-[#0e6037] py-1 px-2 w-[46%] text-left">விவரம் (Item)</th>
-              <th className="border-r border-[#0e6037] py-1 px-1 w-[14%] text-center">அளவு / எடை</th>
+              <th className="border-r border-[#0e6037] py-1 px-2 w-[44%] text-left">விவரம் (Item)</th>
               <th className="border-r border-[#0e6037] py-1 px-1 w-[16%] text-right">விலை (₹)</th>
+              <th className="border-r border-[#0e6037] py-1 px-1 w-[16%] text-center">எடை / அளவு (kg)</th>
               <th className="py-1 px-1.5 w-[16%] text-right">தொகை (₹)</th>
             </tr>
           </thead>
@@ -589,10 +589,10 @@ export default function SurandaiInvoice({ bill, settings = {}, isCommissionView,
               }
 
               const itemName = l.item_name_ta || l.item_name_en || l.item_name || '';
-              const unit = l.unit || 'kg';
+              const weightNum = parseFloat(l.weight !== undefined && l.weight !== null ? l.weight : (l.qty || 1));
               const qtyDisplay = l.is_charge_item 
                 ? `${l.nos || 1} nos` 
-                : `${l.weight || 1} ${unit}`;
+                : `${isNaN(weightNum) ? '1' : weightNum} kg`;
               const rateVal = Number(l.rate || 0).toFixed(2);
               const amountVal = l.amount !== undefined ? Number(l.amount) : (l.line_total !== undefined ? Number(l.line_total) : 0);
 
@@ -604,11 +604,11 @@ export default function SurandaiInvoice({ bill, settings = {}, isCommissionView,
                   <td className="border-r border-[#0e6037] py-0.5 px-2 text-left font-bold text-xs truncate">
                     {itemName}
                   </td>
-                  <td className="border-r border-[#0e6037] py-0.5 px-1 text-center font-mono font-bold text-xs">
-                    {qtyDisplay}
-                  </td>
                   <td className="border-r border-[#0e6037] py-0.5 px-1 text-right font-mono font-bold text-xs">
                     {rateVal}
+                  </td>
+                  <td className="border-r border-[#0e6037] py-0.5 px-1 text-center font-mono font-bold text-xs">
+                    {qtyDisplay}
                   </td>
                   <td className="py-0.5 px-1.5 text-right font-mono font-bold text-xs">
                     {amountVal.toFixed(2)}
