@@ -15,7 +15,7 @@ import '../print/print.css';
  * shell and print only this modal's content.
  */
 export function PrintPreviewModal({ invoiceId, onClose }) {
-  const [format, setFormat] = useState('a4');
+  const [format, setFormat] = useState('surandai');
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
 
