@@ -275,7 +275,7 @@ export default function SurandaiInvoice({ bill, settings = {}, isCommissionView,
                 <th className="border-r border-[#0e6037] py-1.5 px-2 w-[16%] text-center">எடை (kg)</th>
                 <th className="border-r border-[#0e6037] py-1.5 px-2 w-[12%] text-center">எண்ணம்</th>
                 <th className="border-r border-[#0e6037] py-1.5 px-2 w-[12%] text-center">ரூ.</th>
-                <th className="py-1.5 px-2 w-[8%] text-center">பைசா</th>
+                <th className="py-1.5 px-2 w-[8%] text-center">பை</th>
               </tr>
             </thead>
             <tbody>
@@ -301,7 +301,6 @@ export default function SurandaiInvoice({ bill, settings = {}, isCommissionView,
                 const nosDisplay = nosNum > 0 ? nosNum : '—';
 
                 const amountVal = l.amount !== undefined ? Number(l.amount) : (l.line_total !== undefined ? Number(l.line_total) : 0);
-                const { rs, paisa } = splitRsPaisa(amountVal);
 
                 return (
                   <tr key={l.id || l.key || index} className="border-none font-medium" style={{ border: 'none', borderBottom: 'none' }}>
@@ -318,10 +317,10 @@ export default function SurandaiInvoice({ bill, settings = {}, isCommissionView,
                       {nosDisplay}
                     </td>
                     <td className="border-r border-[#0e6037] py-2 px-2 text-right font-mono font-bold text-xs">
-                      {rs}
+                      {amountVal > 0 ? amountVal.toFixed(2) : '—'}
                     </td>
                     <td className="py-2 px-2 text-center font-mono font-bold text-xs">
-                      {paisa}
+                      {amountVal > 0 ? '00' : '&nbsp;'}
                     </td>
                   </tr>
                 );
@@ -336,10 +335,10 @@ export default function SurandaiInvoice({ bill, settings = {}, isCommissionView,
                       &nbsp;
                     </td>
                     <td className="border-r border-[#0e6037] py-1 px-2 text-right font-mono font-bold text-xs">
-                      {splitRsPaisa(itemsTotal).rs}
+                      {itemsTotal.toFixed(2)}
                     </td>
                     <td className="py-1 px-2 text-center font-mono font-bold text-xs">
-                      {splitRsPaisa(itemsTotal).paisa}
+                      00
                     </td>
                   </tr>
 
@@ -415,23 +414,23 @@ export default function SurandaiInvoice({ bill, settings = {}, isCommissionView,
                       {totalDeductionsVal.toFixed(2)}
                     </td>
                     <td className="border-r border-[#0e6037] py-1 px-2 text-right font-mono font-bold text-rose-700 text-xs">
-                      - {splitRsPaisa(totalDeductionsVal).rs}
+                      - {totalDeductionsVal.toFixed(2)}
                     </td>
                     <td className="py-1 px-2 text-center font-mono font-bold text-rose-700 text-xs">
-                      {splitRsPaisa(totalDeductionsVal).paisa}
+                      00
                     </td>
                   </tr>
 
-                  {/* Net Grand Total Row: Right side end under ரூ. and பைசா */}
+                  {/* Net Grand Total Row: Right side end under ரூ. and பை */}
                   <tr className="font-black bg-[#e6f4ea] border-t-2 border-[#0e6037]">
                     <td className="border-r border-[#0e6037] py-1.5 px-3 text-right font-black text-sm text-[#0e6037]" colSpan={4}>
                       மொத்தம்
                     </td>
                     <td className="border-r border-[#0e6037] py-1.5 px-2 text-right font-mono font-black text-sm text-[#0e6037]">
-                      {splitRsPaisa(netTotalVal).rs}
+                      {netTotalVal.toFixed(2)}
                     </td>
                     <td className="py-1.5 px-2 text-center font-mono font-black text-sm text-[#0e6037]">
-                      {splitRsPaisa(netTotalVal).paisa}
+                      00
                     </td>
                   </tr>
                 </>
@@ -442,10 +441,10 @@ export default function SurandaiInvoice({ bill, settings = {}, isCommissionView,
                     மொத்தம்
                   </td>
                   <td className="border-r border-[#0e6037] py-1.5 px-2 text-right font-mono font-black text-sm text-[#0e6037]">
-                    {splitRsPaisa(itemsTotal).rs}
+                    {itemsTotal.toFixed(2)}
                   </td>
                   <td className="py-1.5 px-2 text-center font-mono font-black text-sm text-[#0e6037]">
-                    {splitRsPaisa(itemsTotal).paisa}
+                    00
                   </td>
                 </tr>
               )}
