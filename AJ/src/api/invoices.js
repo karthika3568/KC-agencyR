@@ -10,7 +10,10 @@ export const invoicesApi = {
   print: async (id) => (await apiClient.get(`/invoices/${id}/print`)).data,
   cancel: async (id, reason) => (await apiClient.post(`/invoices/${id}/cancel`, { reason })).data,
   editCompleted: async (id, data) => (await apiClient.put(`/invoices/${id}/edit`, data)).data,
-  returnableItems: async (id) => (await apiClient.get(`/invoices/${id}/returnable-items`)).data,
+  returnableItems: async (id) => {
+    const res = (await apiClient.get(`/invoices/${id}/returnable-items`)).data;
+    return Array.isArray(res) ? res : (res?.items || []);
+  },
 
   updateTransport: async (id, data) => (await apiClient.put(`/invoices/${id}/transport`, data)).data,
   generateEInvoice: async (id) => (await apiClient.post(`/invoices/${id}/einvoice/generate`)).data,

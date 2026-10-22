@@ -33,13 +33,9 @@ class CustomerController
         'ledger_name' => 'CUSTOMER',
         'credit_limit' => 'CREDIT LIMIT',
         'opening_balance' => 'OPENING',
-        'customer_group' => 'GROUP',
         'phone' => 'MOBILE',
-        'city' => 'CITY',
         'gstin' => 'GST NO',
         'address' => 'ADDRESS',
-        'doj' => 'DOJ',
-        'dob' => 'DOB',
         'pricing_type' => 'PRICING TYPE',
     ];
 
@@ -66,9 +62,8 @@ class CustomerController
         $branchId = $this->resolveBranchId($claims);
 
         $stmt = $this->pdo->prepare(
-            'SELECT c.*, ci.name AS city_name
+            'SELECT c.*
              FROM customers c
-             LEFT JOIN cities ci ON ci.id = c.city_id
              WHERE c.branch_id = :branch_id
              ORDER BY c.ledger_name'
         );
@@ -87,13 +82,9 @@ class CustomerController
                 $row['ledger_name'],
                 (float) $row['credit_limit'],
                 (float) $row['opening_balance'],
-                $row['customer_group'],
                 $row['phone'],
-                $row['city_name'],
                 $row['gstin'],
                 $row['address'],
-                $row['doj'],
-                $row['dob'],
                 $row['pricing_type'],
             ], null, "A{$rowIndex}");
             $rowIndex++;
@@ -118,19 +109,19 @@ class CustomerController
         $sheet->setTitle('Customers');
         $sheet->fromArray(array_values(self::EXCEL_COLUMNS), null, 'A1');
         $sheet->fromArray(
-            [1, 'MURUGAN PETIKKADA', 0, 0, 'Sundry Debtors', '9383555480', 'THIPPANAMPATTI', '', 'ARIYAPPURAM', '01-04-2016', '01-04-2016', 'normal'],
+            [1, 'MURUGAN PETIKKADA', 0, 0, '9383555480', '', 'ARIYAPPURAM', 'normal'],
             null,
             'A2'
         );
         $sheet->fromArray(
-            [2, 'VASAN MEDICAL', 0, 0, 'Wholesaler', '9944395718', 'THIPPANAMPATTI', '', 'MAINROAD, AVUDAYANOOR', '01-04-2016', '01-04-2016', 'wholesale'],
+            [2, 'VASAN MEDICAL', 0, 0, '9944395718', '', 'MAINROAD, AVUDAYANOOR', 'wholesale'],
             null,
             'A3'
         );
 
         // MOBILE must import as text, not a number (leading zeros/precision) —
         // format the whole column as text so a spreadsheet app doesn't coerce it.
-        $sheet->getStyle('F2:F1000')->getNumberFormat()->setFormatCode('@');
+        $sheet->getStyle('E2:E1000')->getNumberFormat()->setFormatCode('@');
 
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         header('Content-Disposition: attachment; filename="customers_import_template.xlsx"');
@@ -183,25 +174,6 @@ class CustomerController
             $existingByName[$this->normalizeName((string) $row['ledger_name'])] = (int) $row['id'];
         }
 
-        $cityLookup = [];
-        $cityStmt = $this->pdo->query('SELECT id, name FROM cities');
-        foreach ($cityStmt->fetchAll() as $row) {
-            $cityLookup[strtolower(trim((string) $row['name']))] = (int) $row['id'];
-        }
-
-        // Group is free text on the customer row (no separate master table —
-        // nothing else in the app manages/lists groups); "reuse existing
-        // group" just means matching an already-used spelling case/space-
-        // insensitively and storing that spelling, not creating a near-dup
-        // like "Wholesaler" vs "wholesaler" side by side.
-        $groupLookup = [];
-        $groupStmt = $this->pdo->query(
-            "SELECT DISTINCT customer_group FROM customers WHERE customer_group IS NOT NULL AND customer_group <> ''"
-        );
-        foreach ($groupStmt->fetchAll() as $row) {
-            $groupLookup[$this->normalizeName((string) $row['customer_group'])] = $row['customer_group'];
-        }
-
         $results = [];
         $toUpsert = [];
 
@@ -210,7 +182,7 @@ class CustomerController
                 continue; // skip blank rows
             }
             $record = array_combine($header, array_pad($row, count($header), null));
-            [$mapped, $rowErrors] = $this->mapImportRow($record, $existingByPhone, $existingByName, $cityLookup, $groupLookup);
+            [$mapped, $rowErrors] = $this->mapImportRow($record, $existingByPhone, $existingByName);
 
             $results[] = [
                 'row' => $rowNumber + 2,
@@ -274,9 +246,7 @@ class CustomerController
     private function mapImportRow(
         array $record,
         array &$existingByPhone,
-        array &$existingByName,
-        array &$cityLookup,
-        array &$groupLookup
+        array &$existingByName
     ): array {
         $errors = [];
 
@@ -317,29 +287,6 @@ class CustomerController
             $errors[] = "invalid GSTIN format '{$gstin}'";
         }
 
-        $cityName = trim((string) ($record['city'] ?? ''));
-        $cityId = $cityName !== '' ? ($cityLookup[strtolower($cityName)] ?? null) : null;
-        // Unmatched city is not an error — city_id is optional/supplementary
-        // and there is no safe way to auto-create a city without a route
-        // (cities.route_id is required and no route is given in this format).
-
-        $groupRaw = trim((string) ($record['customer_group'] ?? ''));
-        $group = null;
-        if ($groupRaw !== '') {
-            $normalized = $this->normalizeName($groupRaw);
-            $group = $groupLookup[$normalized] ?? $groupRaw;
-            $groupLookup[$normalized] = $group; // reuse this exact spelling for later rows in the same file
-        }
-
-        $doj = $this->parseExcelDate($record['doj'] ?? null);
-        $dob = $this->parseExcelDate($record['dob'] ?? null);
-        if (($record['doj'] ?? '') !== '' && $record['doj'] !== null && $doj === null) {
-            $errors[] = "invalid DOJ date '{$record['doj']}'";
-        }
-        if (($record['dob'] ?? '') !== '' && $record['dob'] !== null && $dob === null) {
-            $errors[] = "invalid DOB date '{$record['dob']}'";
-        }
-
         $pricingType = strtolower(trim((string) ($record['pricing_type'] ?? '')));
         if ($pricingType !== '' && !in_array($pricingType, ['normal', 'retail', 'wholesale'], true)) {
             $errors[] = "pricing_type must be normal, retail, or wholesale (got '{$pricingType}')";
@@ -354,12 +301,8 @@ class CustomerController
             'phone' => $phone !== '' ? $phone : null,
             'credit_limit' => $creditLimit,
             'opening_balance' => $openingBalance,
-            'customer_group' => $group,
-            'city_id' => $cityId,
             'gstin' => $gstin,
             'address' => ($record['address'] ?? '') !== '' ? trim((string) $record['address']) : null,
-            'doj' => $doj,
-            'dob' => $dob,
             'pricing_type' => $pricingType,
         ];
 

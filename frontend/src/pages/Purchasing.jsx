@@ -9,6 +9,8 @@ import { Button } from '../components/Button.jsx';
 import { usePermission } from '../hooks/usePermission';
 import { resolveUnitPricing } from '../utils/pricing';
 import { downloadReportPdf, downloadGrnPdf } from '../utils/reportPdf';
+import { Pagination } from '../components/Pagination';
+import { useClientPagination } from '../hooks/useClientPagination';
 
 function priceGrnLine(line) {
   const qty = Number(line.qty || 0);
@@ -335,9 +337,9 @@ function GrnFormCard({ editing, onDone, items, unitsByItemId, onPickItem }) {
   const saving = createMutation.isPending || updateMutation.isPending;
 
   return (
-    <div className="card p-5 space-y-4 sticky top-6">
-      <div className="flex items-center justify-between border-b border-border-soft pb-3">
-        <h2 className="font-semibold text-ink text-base flex items-center gap-2">
+    <div className="card p-3.5 space-y-2.5 sticky top-3">
+      <div className="flex items-center justify-between border-b border-border-soft pb-2">
+        <h2 className="font-semibold text-ink text-sm sm:text-base flex items-center gap-2">
           {isEdit ? <Pencil className="w-4 h-4 text-cyan-400" /> : <Plus className="w-4 h-4 text-emerald-400" />}
           {isEdit ? `Edit ${editing.grn_no}` : 'New GRN (Goods Received)'}
         </h2>
@@ -348,7 +350,7 @@ function GrnFormCard({ editing, onDone, items, unitsByItemId, onPickItem }) {
         )}
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-2">
         {error && <div className="text-xs text-red-400 bg-red-950/40 p-2.5 rounded border border-red-800/40">{error}</div>}
 
         <div>
@@ -511,6 +513,14 @@ function GrnPanel({ canManage, canEdit, canViewCost, canDelete }) {
     );
   });
 
+  const {
+    page,
+    setPage,
+    total,
+    paginatedItems: pagedPurchases,
+    resetPage,
+  } = useClientPagination(filteredPurchases, 10);
+
   const toggleSelect = (id) => setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   const toggleSelectAll = () => setSelectedIds((prev) => (
     prev.length === filteredPurchases.length ? [] : filteredPurchases.map((p) => p.id)
@@ -595,7 +605,7 @@ function GrnPanel({ canManage, canEdit, canViewCost, canDelete }) {
   };
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+    <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
       {/* Left Column Form */}
       <div className="lg:col-span-5">
         {(canManage || editingGrn) && (
@@ -611,73 +621,73 @@ function GrnPanel({ canManage, canEdit, canViewCost, canDelete }) {
       </div>
 
       {/* Right Column Table */}
-      <div className="lg:col-span-7 space-y-4">
-        <div className="card p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="relative w-full sm:w-72">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
+      <div className="lg:col-span-7 space-y-2.5">
+        <div className="card p-2.5 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <div className="relative w-full sm:w-64">
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
             <input
               type="text"
               placeholder="Search GRNs..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="input pl-9 w-full text-xs"
+              className="input pl-8 w-full text-xs"
             />
           </div>
           <span className="text-xs text-ink-muted">{filteredPurchases.length} record(s)</span>
         </div>
 
         <div className="card overflow-hidden">
-          <div className="px-5 py-4 border-b border-border-soft flex flex-wrap items-center justify-between gap-2">
-            <h3 className="font-semibold text-ink text-sm">GRN Register</h3>
-            <div className="flex flex-wrap items-center gap-2">
-              <button onClick={handlePrint} className="rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200">Print</button>
-              <button onClick={handleExportPdf} className="rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200">Download PDF</button>
-              <button onClick={handleExportExcel} disabled={exporting} className="rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
+          <div className="px-3.5 py-2 border-b border-border-soft flex flex-wrap items-center justify-between gap-2">
+            <h3 className="font-semibold text-ink text-xs sm:text-sm">GRN Register</h3>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button onClick={handlePrint} className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200">Print</button>
+              <button onClick={handleExportPdf} className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200">Download PDF</button>
+              <button onClick={handleExportExcel} disabled={exporting} className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
                 {exporting ? 'Exporting…' : 'Export Excel'}
               </button>
-              <button onClick={handleExportSelectedExcel} disabled={exporting} className="rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
+              <button onClick={handleExportSelectedExcel} disabled={exporting} className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
                 Export Selected
               </button>
               {selectedIds.length > 0 && <span className="text-xs text-ink-muted">{selectedIds.length} selected</span>}
             </div>
           </div>
-          {exportError && <div className="mx-5 mt-3 text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{exportError}</div>}
-          <div className="overflow-x-auto">
+          {exportError && <div className="mx-3.5 mt-2 text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{exportError}</div>}
+          <div className="max-h-[calc(100vh-230px)] overflow-y-auto">
             <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-border-soft bg-surface-subtle/30 text-ink-muted font-medium">
-                  <th className="w-8 px-4 py-3">
+              <thead className="sticky top-0 bg-page z-10">
+                <tr className="border-b border-border-soft uppercase text-ink-muted font-medium">
+                  <th className="w-8 px-3 py-1.5">
                     {filteredPurchases.length > 0 && (
                       <input type="checkbox" checked={selectedIds.length === filteredPurchases.length} onChange={toggleSelectAll} />
                     )}
                   </th>
-                  <th className="px-4 py-3">GRN #</th>
-                  <th className="px-4 py-3">Supplier</th>
-                  {canViewCost && <th className="px-4 py-3">Grand Total</th>}
-                  {canViewCost && <th className="px-4 py-3">Pending</th>}
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3 text-right">Actions</th>
+                  <th className="px-3 py-1.5">GRN #</th>
+                  <th className="px-3 py-1.5">Supplier</th>
+                  {canViewCost && <th className="px-3 py-1.5">Grand Total</th>}
+                  {canViewCost && <th className="px-3 py-1.5">Pending</th>}
+                  <th className="px-3 py-1.5">Status</th>
+                  <th className="px-3 py-1.5 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-soft/60">
-                {filteredPurchases.map((p) => (
+                {pagedPurchases.map((p) => (
                   <tr
                     key={p.id}
-                    className={`hover:bg-surface-subtle/20 transition ${
+                    className={`hover:bg-page/50 transition ${
                       p.status === 'cancelled' ? 'opacity-50 line-through' : ''
                     }`}
                   >
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-1.5">
                       <input type="checkbox" checked={selectedIds.includes(p.id)} onChange={() => toggleSelect(p.id)} />
                     </td>
-                    <td className="px-4 py-3 font-mono font-medium text-ink">
+                    <td className="px-3 py-1.5 font-mono font-medium text-ink">
                       {p.grn_no}
                       {p.supplier_invoice_no && <div className="text-[10px] text-ink-muted font-mono">{p.supplier_invoice_no}</div>}
                     </td>
-                    <td className="px-4 py-3 font-medium text-ink">{p.supplier_name}</td>
-                    {canViewCost && <td className="px-4 py-3 font-medium text-ink">₹{Number(p.grand_total).toFixed(2)}</td>}
+                    <td className="px-3 py-1.5 font-medium text-ink">{p.supplier_name}</td>
+                    {canViewCost && <td className="px-3 py-1.5 font-medium text-ink">₹{Number(p.grand_total).toFixed(2)}</td>}
                     {canViewCost && (
-                      <td className="px-4 py-3 font-semibold">
+                      <td className="px-3 py-1.5 font-semibold">
                         {Number(p.pending_balance) > 0 ? (
                           <span className="text-red-400">₹{Number(p.pending_balance).toFixed(2)}</span>
                         ) : (
@@ -685,7 +695,7 @@ function GrnPanel({ canManage, canEdit, canViewCost, canDelete }) {
                         )}
                       </td>
                     )}
-                    <td className="px-4 py-3 capitalize">
+                    <td className="px-3 py-1.5 capitalize">
                       {p.status === 'active' ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
@@ -698,7 +708,7 @@ function GrnPanel({ canManage, canEdit, canViewCost, canDelete }) {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right space-x-1">
+                    <td className="px-3 py-1.5 text-right space-x-1">
                       {canEdit && p.status === 'active' && (
                         <button
                           onClick={() => openEdit(p)}
@@ -730,6 +740,7 @@ function GrnPanel({ canManage, canEdit, canViewCost, canDelete }) {
               </tbody>
             </table>
           </div>
+          <Pagination page={page} pageSize={10} total={total} onPageChange={setPage} />
         </div>
       </div>
     </div>
@@ -806,6 +817,14 @@ function SupplierPaymentsPanel({ canManage }) {
       p.reference_no?.toLowerCase().includes(searchQuery.toLowerCase())
     );
   });
+
+  const {
+    page,
+    setPage,
+    total,
+    paginatedItems: pagedPayments,
+    resetPage,
+  } = useClientPagination(filteredPayments, 10);
 
   const togglePaymentSelect = (id) => setSelectedPaymentIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   const togglePaymentSelectAll = () => setSelectedPaymentIds((prev) => (
@@ -906,29 +925,29 @@ function SupplierPaymentsPanel({ canManage }) {
   };
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+    <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
       {/* Left Column Form */}
       <div className="lg:col-span-5">
         {canManage && (
-          <div className="card p-5 space-y-4 sticky top-6">
-            <div className="border-b border-border-soft pb-3">
-              <h2 className="font-semibold text-ink text-base flex items-center gap-2">
+          <div className="card p-3.5 space-y-2.5 sticky top-3">
+            <div className="border-b border-border-soft pb-2">
+              <h2 className="font-semibold text-ink text-sm flex items-center gap-1.5">
                 <CreditCard className="w-4 h-4 text-emerald-400" />
                 Record Supplier Payment
               </h2>
             </div>
 
-            <form onSubmit={submit} className="space-y-3">
-              {error && <div className="text-xs text-red-400 bg-red-950/40 p-2.5 rounded border border-red-800/40">{error}</div>}
+            <form onSubmit={submit} className="space-y-2">
+              {error && <div className="text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{error}</div>}
               {result && (
-                <div className="text-xs text-emerald-400 bg-emerald-950/40 p-2.5 rounded border border-emerald-800/40 flex items-center gap-2">
+                <div className="text-xs text-emerald-400 bg-emerald-950/40 p-2 rounded border border-emerald-800/40 flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4" />
                   Allocated ₹{result.allocated_total} across {Object.keys(result.allocations).length} GRN(s).
                 </div>
               )}
 
               <div>
-                <label className="text-xs font-medium text-ink-muted block mb-1">Supplier *</label>
+                <label className="text-xs font-medium text-ink-muted block mb-0.5">Supplier *</label>
                 <select
                   required
                   value={supplierId}
@@ -948,7 +967,7 @@ function SupplierPaymentsPanel({ canManage }) {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-ink-muted block mb-1">Payment Amount (₹) *</label>
+                <label className="text-xs font-medium text-ink-muted block mb-0.5">Payment Amount (₹) *</label>
                 <input
                   required
                   type="number"
@@ -963,7 +982,7 @@ function SupplierPaymentsPanel({ canManage }) {
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-xs font-medium text-ink-muted block mb-1">Payment Mode</label>
+                  <label className="text-xs font-medium text-ink-muted block mb-0.5">Payment Mode</label>
                   <select
                     value={paymentMode}
                     onChange={(e) => setPaymentMode(e.target.value)}
@@ -976,7 +995,7 @@ function SupplierPaymentsPanel({ canManage }) {
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-ink-muted block mb-1">Ref / UTR #</label>
+                  <label className="text-xs font-medium text-ink-muted block mb-0.5">Ref / UTR #</label>
                   <input
                     type="text"
                     placeholder="Ref #"
@@ -994,17 +1013,17 @@ function SupplierPaymentsPanel({ canManage }) {
                     <table className="w-full text-left text-[11px]">
                       <thead>
                         <tr className="bg-surface-subtle/30 text-ink-muted">
-                          <th className="px-3 py-1.5">GRN #</th>
-                          <th className="px-3 py-1.5">Pending</th>
-                          <th className="px-3 py-1.5">Applied</th>
+                          <th className="px-3 py-1">GRN #</th>
+                          <th className="px-3 py-1">Pending</th>
+                          <th className="px-3 py-1">Applied</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border-soft/40">
                         {preview.map((g) => (
                           <tr key={g.id}>
-                            <td className="px-3 py-1.5 font-mono text-ink">{g.grn_no}</td>
-                            <td className="px-3 py-1.5 text-ink-muted">₹{g.pending_balance}</td>
-                            <td className="px-3 py-1.5 font-semibold text-emerald-400">₹{g.applied.toFixed(2)}</td>
+                            <td className="px-3 py-1 font-mono text-ink">{g.grn_no}</td>
+                            <td className="px-3 py-1 text-ink-muted">₹{g.pending_balance}</td>
+                            <td className="px-3 py-1 font-semibold text-emerald-400">₹{g.applied.toFixed(2)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1013,7 +1032,7 @@ function SupplierPaymentsPanel({ canManage }) {
                 </div>
               )}
 
-              <div className="pt-2">
+              <div className="pt-1.5">
                 <Button
                   type="submit"
                   variant="primary"
@@ -1030,8 +1049,8 @@ function SupplierPaymentsPanel({ canManage }) {
       </div>
 
       {/* Right Column Table */}
-      <div className="lg:col-span-7 space-y-4">
-        <div className="card p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+      <div className="lg:col-span-7 space-y-2.5">
+        <div className="card p-2.5 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="relative w-full sm:w-72">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
             <input
@@ -1046,59 +1065,59 @@ function SupplierPaymentsPanel({ canManage }) {
         </div>
 
         <div className="card overflow-hidden">
-          <div className="px-5 py-4 border-b border-border-soft flex flex-wrap items-center justify-between gap-2">
-            <h3 className="font-semibold text-ink text-sm">Supplier Payment Register</h3>
-            <div className="flex flex-wrap items-center gap-2">
-              <button onClick={handlePaymentsPrint} className="rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200">Print</button>
-              <button onClick={handlePaymentsExportPdf} className="rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200">Download PDF</button>
-              <button onClick={handlePaymentsExportExcel} disabled={exporting} className="rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
+          <div className="px-3.5 py-2 border-b border-border-soft flex flex-wrap items-center justify-between gap-2">
+            <h3 className="font-semibold text-ink text-xs sm:text-sm">Supplier Payment Register</h3>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button onClick={handlePaymentsPrint} className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200">Print</button>
+              <button onClick={handlePaymentsExportPdf} className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200">Download PDF</button>
+              <button onClick={handlePaymentsExportExcel} disabled={exporting} className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
                 {exporting ? 'Exporting…' : 'Export Excel'}
               </button>
-              <button onClick={handlePaymentsExportSelectedExcel} disabled={exporting} className="rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
+              <button onClick={handlePaymentsExportSelectedExcel} disabled={exporting} className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
                 Export Selected
               </button>
               {selectedPaymentIds.length > 0 && <span className="text-xs text-ink-muted">{selectedPaymentIds.length} selected</span>}
             </div>
           </div>
-          {exportError && <div className="mx-5 mt-3 text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{exportError}</div>}
-          <div className="overflow-x-auto">
+          {exportError && <div className="mx-3.5 mt-2 text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{exportError}</div>}
+          <div className="max-h-[calc(100vh-240px)] overflow-y-auto">
             <table className="w-full text-left text-xs">
-              <thead>
+              <thead className="sticky top-0 bg-page z-10 shadow-sm">
                 <tr className="border-b border-border-soft bg-surface-subtle/30 text-ink-muted font-medium">
-                  <th className="w-8 px-4 py-3">
+                  <th className="w-8 px-3 py-1.5">
                     {filteredPayments.length > 0 && (
                       <input type="checkbox" checked={selectedPaymentIds.length === filteredPayments.length} onChange={togglePaymentSelectAll} />
                     )}
                   </th>
-                  <th className="px-4 py-3">Code</th>
-                  <th className="px-4 py-3">Supplier</th>
-                  <th className="px-4 py-3">Mode</th>
-                  <th className="px-4 py-3">Reference</th>
-                  <th className="px-4 py-3">Amount</th>
-                  <th className="px-4 py-3">Date</th>
+                  <th className="px-3 py-1.5">Code</th>
+                  <th className="px-3 py-1.5">Supplier</th>
+                  <th className="px-3 py-1.5">Mode</th>
+                  <th className="px-3 py-1.5">Reference</th>
+                  <th className="px-3 py-1.5">Amount</th>
+                  <th className="px-3 py-1.5">Date</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-soft/60">
-                {filteredPayments.map((p) => (
+                {pagedPayments.map((p) => (
                   <tr key={p.id} className="hover:bg-surface-subtle/20 transition">
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-1.5">
                       <input type="checkbox" checked={selectedPaymentIds.includes(p.id)} onChange={() => togglePaymentSelect(p.id)} />
                     </td>
-                    <td className="px-4 py-3 font-mono font-medium text-ink">{p.payment_code}</td>
-                    <td className="px-4 py-3 font-medium text-ink">{p.supplier_name}</td>
-                    <td className="px-4 py-3">
-                      <span className="px-2 py-0.5 rounded text-[10px] uppercase font-medium bg-slate-800 text-slate-300 border border-slate-700">
+                    <td className="px-3 py-1.5 font-mono font-medium text-ink">{p.payment_code}</td>
+                    <td className="px-3 py-1.5 font-medium text-ink">{p.supplier_name}</td>
+                    <td className="px-3 py-1.5">
+                      <span className="px-1.5 py-0.5 rounded text-[10px] uppercase font-medium bg-slate-800 text-slate-300 border border-slate-700">
                         {p.payment_mode?.replace('_', ' ')}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-ink-muted font-mono">{p.reference_no || '-'}</td>
-                    <td className="px-4 py-3 font-semibold text-emerald-400">₹{Number(p.amount).toFixed(2)}</td>
-                    <td className="px-4 py-3 text-ink-muted">{p.paid_at}</td>
+                    <td className="px-3 py-1.5 text-ink-muted font-mono">{p.reference_no || '-'}</td>
+                    <td className="px-3 py-1.5 font-semibold text-emerald-400">₹{Number(p.amount).toFixed(2)}</td>
+                    <td className="px-3 py-1.5 text-ink-muted">{p.paid_at}</td>
                   </tr>
                 ))}
                 {filteredPayments.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-ink-muted text-xs">
+                    <td colSpan={7} className="px-3 py-6 text-center text-ink-muted text-xs">
                       No supplier payment records logged yet.
                     </td>
                   </tr>
@@ -1106,6 +1125,7 @@ function SupplierPaymentsPanel({ canManage }) {
               </tbody>
             </table>
           </div>
+          <Pagination page={page} pageSize={10} total={total} onPageChange={setPage} />
         </div>
       </div>
     </div>
@@ -1120,14 +1140,14 @@ export function Purchasing() {
   const canSettle = usePermission('purchases.settle_supplier_payment');
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border-soft/40 pb-4">
+    <div className="space-y-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border-soft/40 pb-2">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-ink flex items-center gap-2.5">
-            <ShoppingBag className="w-7 h-7 text-indigo-400" />
+          <h1 className="text-xl font-bold tracking-tight text-ink flex items-center gap-2">
+            <ShoppingBag className="w-5 h-5 text-indigo-400" />
             Purchasing &amp; Goods Receipt
           </h1>
-          <p className="text-xs text-ink-muted mt-1">Manage Goods Received Notes (GRN), inventory batch creation, and supplier settlements</p>
+          <p className="text-xs text-ink-muted">Manage Goods Received Notes (GRN), inventory batch creation, and supplier settlements</p>
         </div>
       </div>
 

@@ -39,8 +39,18 @@ class InvoiceController
         $claims = JwtAuthMiddleware::authenticate();
         PermissionMiddleware::require($claims, 'pos.access');
         $branchId = $this->resolveBranchId($claims);
+
+        if (isset($_GET['page'])) {
+            $page = max(1, (int) $_GET['page']);
+            $limit = 10;
+            $search = $_GET['search'] ?? null;
+            $status = $_GET['status'] ?? null;
+            Response::json($this->invoices->paginate($branchId, $status, $search, $page, $limit));
+        }
+
         Response::json($this->invoices->all($branchId, $_GET['status'] ?? null));
     }
+
 
     public function show(string $id): void
     {
@@ -55,8 +65,26 @@ class InvoiceController
     {
         $claims = JwtAuthMiddleware::authenticate();
         PermissionMiddleware::require($claims, 'returns.sales_return');
-        $this->requireOwnedInvoice($claims, (int) $id);
-        Response::json($this->invoices->returnableItems((int) $id));
+        $invoice = $this->requireOwnedInvoice($claims, $id);
+
+        if ($invoice['status'] !== 'completed') {
+            Response::error('Only completed invoices can have items returned.', 422);
+        }
+
+        $numericId = (int) $invoice['id'];
+        $items = $this->invoices->returnableItems($numericId);
+
+        Response::json([
+            'invoice' => [
+                'id' => $numericId,
+                'invoice_no' => $invoice['invoice_no'],
+                'customer_id' => $invoice['customer_id'] !== null ? (int) $invoice['customer_id'] : null,
+                'customer_name' => $invoice['customer_name'] ?? null,
+                'status' => $invoice['status'],
+                'branch_id' => (int) $invoice['branch_id'],
+            ],
+            'items' => $items,
+        ]);
     }
 
     public function store(): void
@@ -417,15 +445,27 @@ class InvoiceController
 
     // -------------------------------------------------------------
 
-    private function requireOwnedInvoice(array $claims, int $id): array
+    private function requireOwnedInvoice(array $claims, int|string $id): array
     {
-        $invoice = $this->invoices->find($id);
+        $canSwitch = in_array('branches.switch_context', (array) ($claims['permissions'] ?? []), true);
+        $userBranchId = (int) $claims['branch_id'];
+        $trimmed = trim((string) $id);
+
+        $invoice = null;
+        if (is_numeric($trimmed) && (int) $trimmed > 0) {
+            $invoice = $this->invoices->find((int) $trimmed);
+        }
+
+        if (!$invoice && $trimmed !== '') {
+            $branchScope = $canSwitch ? null : $userBranchId;
+            $invoice = $this->invoices->findByInvoiceNo($trimmed, $branchScope);
+        }
+
         if (!$invoice) {
             Response::error('Not found', 404);
         }
 
-        $canSwitch = in_array('branches.switch_context', (array) ($claims['permissions'] ?? []), true);
-        if (!$canSwitch && (int) $invoice['branch_id'] !== (int) $claims['branch_id']) {
+        if (!$canSwitch && (int) $invoice['branch_id'] !== $userBranchId) {
             Response::error('Not found', 404);
         }
 
@@ -480,9 +520,40 @@ class InvoiceController
 
         $lines = [];
         foreach ($cartInput as $line) {
-            if (empty($line['item_id']) || empty($line['qty'])) {
-                return [[], [], 'Each cart line needs item_id and qty'];
+            $isManual = empty($line['item_id']) && !empty($line['item_name']);
+            if (empty($line['qty'])) {
+                return [[], [], 'Each cart line needs qty'];
             }
+            if (!$isManual && empty($line['item_id'])) {
+                return [[], [], 'Each cart line needs item_id or item_name'];
+            }
+
+            if ($isManual) {
+                $qty = (float) $line['qty'];
+                $rate = (float) ($line['rate'] ?? 0);
+                $gross = round($qty * $rate, 2);
+                $discountAmount = isset($line['discount_amount']) && $line['discount_amount'] !== '' ? (float) $line['discount_amount'] : 0.0;
+                $taxable = round($gross - $discountAmount, 2);
+                $unitId = !empty($line['unit_id']) ? (int) $line['unit_id'] : 1;
+                $lines[] = [
+                    'item_id' => null,
+                    'unit_id' => $unitId,
+                    'item_name_snapshot' => (string) $line['item_name'],
+                    'hsn_snapshot' => $line['hsn_code'] ?? null,
+                    'qty' => $qty,
+                    'free_qty' => 0.0,
+                    'rate' => $rate,
+                    'mrp' => $rate,
+                    'discount_percent' => 0.0,
+                    'discount_amount' => $discountAmount,
+                    'tax_percent' => 0.0,
+                    'tax_amount' => 0.0,
+                    'cess_amount' => 0.0,
+                    'line_total' => $taxable,
+                ];
+                continue;
+            }
+
             $stmt = $this->pdo->prepare(
                 'SELECT i.*, tc.gst_percent, tc.cess_percent
                  FROM items i LEFT JOIN tax_codes tc ON tc.id = i.tax_code_id

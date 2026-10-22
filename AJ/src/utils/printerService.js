@@ -98,7 +98,7 @@ async function ensureConnected() {
 function buildReceiptText(invoice) {
   const items = invoice.items || [];
   const line = (l, r) => `[L]${l}[R]${r}\n`;
-  let body = '[C]<b>AJ AGENCY</b>\n[C]DISTRIBUTOR BILLING & INVENTORY\n[C]--------------------------------\n';
+  let body = '[C]<b>KC AGENCY</b>\n[C]DISTRIBUTOR BILLING & INVENTORY\n[C]--------------------------------\n';
   body += line('Bill No:', invoice.invoice_no || 'HELD');
   body += line('Date:', invoice.invoice_date || '');
   body += `[L]Customer: ${invoice.customer_name || 'Walk-in'}\n[C]--------------------------------\n`;
@@ -129,5 +129,5 @@ export async function printInvoiceReceipt(invoice) {
 export async function testPrint() {
   await ensureConnected();
   await BluetoothEscposPrinter.printerAlign(1); // 0=left, 1=center, 2=right
-  await BluetoothEscposPrinter.printText('[C]<b>Test Print OK</b>\n[C]AJ Agency POS\n\n\n', {});
+  await BluetoothEscposPrinter.printText('[C]<b>Test Print OK</b>\n[C]KC Agency POS\n\n\n', {});
 }

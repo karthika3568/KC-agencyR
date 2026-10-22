@@ -1,5 +1,5 @@
 -- =====================================================================
--- AJ Agency POS / Distributor Billing System — Complete Database Schema
+-- KC Agency POS / Distributor Billing System — Complete Database Schema
 -- Consolidated from schema.sql + schema_phase2.sql .. schema_phase15.sql
 -- (the exact, already-applied migration sequence for this project,
 -- concatenated in order — nothing rewritten, nothing invented).
@@ -167,16 +167,6 @@ CREATE TABLE IF NOT EXISTS brands (
   UNIQUE KEY uq_brands_code (code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE IF NOT EXISTS product_lines (
-  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  branch_id INT UNSIGNED NULL,
-  code VARCHAR(20) NULL,
-  name VARCHAR(100) NOT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_product_lines_code (code),
-  CONSTRAINT fk_product_lines_branch FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
 CREATE TABLE IF NOT EXISTS tax_codes (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   code VARCHAR(20) NOT NULL,
@@ -203,7 +193,6 @@ CREATE TABLE IF NOT EXISTS items (
   item_name VARCHAR(150) NOT NULL,
   category_id INT UNSIGNED NULL,
   brand_id INT UNSIGNED NULL,
-  product_line_id INT UNSIGNED NULL,
   hsn_code VARCHAR(20) NULL,
   barcode VARCHAR(50) NULL,
   base_unit_id INT UNSIGNED NOT NULL,
@@ -224,7 +213,6 @@ CREATE TABLE IF NOT EXISTS items (
   UNIQUE KEY uq_items_barcode (barcode),
   CONSTRAINT fk_items_category FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL,
   CONSTRAINT fk_items_brand FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE SET NULL,
-  CONSTRAINT fk_items_product_line FOREIGN KEY (product_line_id) REFERENCES product_lines(id) ON DELETE SET NULL,
   CONSTRAINT fk_items_base_unit FOREIGN KEY (base_unit_id) REFERENCES stock_units(id),
   CONSTRAINT fk_items_secondary_unit FOREIGN KEY (secondary_unit_id) REFERENCES stock_units(id) ON DELETE SET NULL,
   CONSTRAINT fk_items_tax_code FOREIGN KEY (tax_code_id) REFERENCES tax_codes(id) ON DELETE SET NULL
@@ -246,44 +234,22 @@ CREATE TABLE IF NOT EXISTS item_unit_conversions (
 -- Party masters — branch-scoped (section 4.2 of spec)
 -- ---------------------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS routes (
-  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  branch_id INT UNSIGNED NOT NULL,
-  name VARCHAR(100) NOT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT fk_routes_branch FOREIGN KEY (branch_id) REFERENCES branches(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS cities (
-  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  route_id INT UNSIGNED NOT NULL,
-  name VARCHAR(100) NOT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT fk_cities_route FOREIGN KEY (route_id) REFERENCES routes(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS customers (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   branch_id INT UNSIGNED NOT NULL,
-  city_id INT UNSIGNED NULL,
-  route_id INT UNSIGNED NULL,
   ledger_name VARCHAR(150) NOT NULL,
   print_name VARCHAR(150) NULL,
-  customer_group VARCHAR(100) NULL,
   phone VARCHAR(20) NULL,
   gstin VARCHAR(20) NULL,
   address VARCHAR(255) NULL,
-  doj DATE NULL,
-  dob DATE NULL,
   pricing_type ENUM('normal','retail','wholesale') NOT NULL DEFAULT 'normal',
   credit_limit DECIMAL(12,2) NOT NULL DEFAULT 0,
   opening_balance DECIMAL(12,2) NOT NULL DEFAULT 0,
   is_local_customer TINYINT(1) NOT NULL DEFAULT 1,
   status ENUM('active','inactive') NOT NULL DEFAULT 'active',
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT fk_customers_branch FOREIGN KEY (branch_id) REFERENCES branches(id),
-  CONSTRAINT fk_customers_city FOREIGN KEY (city_id) REFERENCES cities(id) ON DELETE SET NULL,
-  CONSTRAINT fk_customers_route FOREIGN KEY (route_id) REFERENCES routes(id) ON DELETE SET NULL
+  CONSTRAINT fk_customers_branch FOREIGN KEY (branch_id) REFERENCES branches(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS suppliers (
@@ -427,7 +393,7 @@ CREATE TABLE IF NOT EXISTS invoices (
 CREATE TABLE IF NOT EXISTS invoice_items (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   invoice_id INT UNSIGNED NOT NULL,
-  item_id INT UNSIGNED NOT NULL,
+  item_id INT UNSIGNED NULL,
   unit_id INT UNSIGNED NOT NULL,
   item_name_snapshot VARCHAR(150) NOT NULL,
   hsn_snapshot VARCHAR(20) NULL,
@@ -638,14 +604,12 @@ CREATE TABLE IF NOT EXISTS stock_issue_notes (
   issue_no VARCHAR(30) NULL,
   branch_id INT UNSIGNED NOT NULL,
   employee_id INT UNSIGNED NOT NULL,
-  route_id INT UNSIGNED NULL,
   issued_by INT UNSIGNED NOT NULL,
   issued_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   notes VARCHAR(255) NULL,
   UNIQUE KEY uq_stock_issue_no (issue_no),
   CONSTRAINT fk_sin_branch FOREIGN KEY (branch_id) REFERENCES branches(id),
   CONSTRAINT fk_sin_employee FOREIGN KEY (employee_id) REFERENCES users(id),
-  CONSTRAINT fk_sin_route FOREIGN KEY (route_id) REFERENCES routes(id) ON DELETE SET NULL,
   CONSTRAINT fk_sin_issued_by FOREIGN KEY (issued_by) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -778,13 +742,11 @@ CREATE TABLE IF NOT EXISTS customer_collections (
   amount DECIMAL(12,2) NOT NULL,
   payment_method ENUM('cash','upi','card','other') NOT NULL,
   collected_by INT UNSIGNED NOT NULL,
-  route_id INT UNSIGNED NULL,
   collected_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uq_customer_collections_no (receipt_no),
   CONSTRAINT fk_cc_customer FOREIGN KEY (customer_id) REFERENCES customers(id),
   CONSTRAINT fk_cc_branch FOREIGN KEY (branch_id) REFERENCES branches(id),
-  CONSTRAINT fk_cc_collected_by FOREIGN KEY (collected_by) REFERENCES users(id),
-  CONSTRAINT fk_cc_route FOREIGN KEY (route_id) REFERENCES routes(id) ON DELETE SET NULL
+  CONSTRAINT fk_cc_collected_by FOREIGN KEY (collected_by) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS collection_allocations (
@@ -950,7 +912,7 @@ ALTER TABLE invoices ADD INDEX idx_invoices_branch_status_date (branch_id, statu
 -- Source: schema_phase8.sql
 -- ---------------------------------------------------------------------
 -- =====================================================================
--- AJ Agency POS — Phase 8 Schema (branch mapping, category-brand mapping,
+-- KC Agency POS — Phase 8 Schema (branch mapping, category-brand mapping,
 -- item-supplier mapping). Run AFTER schema.sql..schema_phase7.sql.
 -- MySQL 8 / MariaDB-safe.
 -- =====================================================================
@@ -993,7 +955,7 @@ CREATE TABLE IF NOT EXISTS category_brands (
 -- supplier a given GRN was actually bought from).
 -- ---------------------------------------------------------------------
 
-ALTER TABLE items ADD COLUMN supplier_id INT UNSIGNED NULL AFTER product_line_id;
+ALTER TABLE items ADD COLUMN supplier_id INT UNSIGNED NULL AFTER brand_id;
 ALTER TABLE items ADD CONSTRAINT fk_items_supplier FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL;
 
 SET FOREIGN_KEY_CHECKS = 1;
@@ -1075,10 +1037,11 @@ CREATE TABLE IF NOT EXISTS customer_prebookings (
   prebooking_no VARCHAR(30) NULL,
   customer_id INT UNSIGNED NOT NULL,
   branch_id INT UNSIGNED NOT NULL,
-  route_id INT UNSIGNED NULL,
   employee_id INT UNSIGNED NULL,
   booking_source ENUM('salesman','phone','whatsapp','walk_in','direct') NOT NULL DEFAULT 'direct',
   status ENUM('pending','confirmed','processing','ready','completed','cancelled') NOT NULL DEFAULT 'pending',
+  invoice_id INT UNSIGNED NULL,
+  van_issue_id INT UNSIGNED NULL,
   notes VARCHAR(255) NULL,
   created_by INT UNSIGNED NOT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1086,8 +1049,9 @@ CREATE TABLE IF NOT EXISTS customer_prebookings (
   UNIQUE KEY uq_customer_prebookings_no (prebooking_no),
   CONSTRAINT fk_cpb_customer FOREIGN KEY (customer_id) REFERENCES customers(id),
   CONSTRAINT fk_cpb_branch FOREIGN KEY (branch_id) REFERENCES branches(id),
-  CONSTRAINT fk_cpb_route FOREIGN KEY (route_id) REFERENCES routes(id),
   CONSTRAINT fk_cpb_employee FOREIGN KEY (employee_id) REFERENCES users(id),
+  CONSTRAINT fk_cpb_invoice FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE SET NULL,
+  CONSTRAINT fk_cpb_van_issue FOREIGN KEY (van_issue_id) REFERENCES stock_issue_notes(id) ON DELETE SET NULL,
   CONSTRAINT fk_cpb_created_by FOREIGN KEY (created_by) REFERENCES users(id),
   KEY idx_cpb_branch_status (branch_id, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -1125,17 +1089,7 @@ ON DUPLICATE KEY UPDATE permission_id = VALUES(permission_id);
 -- Supplier Purchase Request upgrade: branch/route/supplier mapping +
 -- an explicit approval step before a GRN can be created from it.
 -- ---------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS supplier_routes (
-  supplier_id INT UNSIGNED NOT NULL,
-  route_id INT UNSIGNED NOT NULL,
-  PRIMARY KEY (supplier_id, route_id),
-  CONSTRAINT fk_sr_supplier FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE CASCADE,
-  CONSTRAINT fk_sr_route FOREIGN KEY (route_id) REFERENCES routes(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
 ALTER TABLE purchase_requests
-  ADD COLUMN route_id INT UNSIGNED NULL AFTER branch_id,
-  ADD CONSTRAINT fk_pr_route FOREIGN KEY (route_id) REFERENCES routes(id),
   MODIFY COLUMN status ENUM('open','approved','partially_received','converted_to_grn','cancelled') NOT NULL DEFAULT 'open',
   ADD COLUMN approved_by INT UNSIGNED NULL AFTER created_by,
   ADD COLUMN approved_at TIMESTAMP NULL AFTER approved_by,

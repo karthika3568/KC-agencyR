@@ -14,13 +14,20 @@ export function StatusFooter() {
   });
 
   return (
-    <footer className="flex items-center justify-between border-t border-border-soft bg-white px-4 py-2 text-xs text-ink-muted">
-      <span>AJ Agency v1.0.0 &middot; Distributor Billing &amp; Inventory</span>
-      <span className="flex items-center gap-1.5">
-        <span className="h-2 w-2 rounded-full bg-success" />
-        Online
-      </span>
-      <span>{formatted}</span>
+    <footer className="flex shrink-0 items-center justify-between border-t border-border-soft bg-white/80 px-5 py-2 text-[11px] font-medium text-ink-muted backdrop-blur-sm">
+      <div className="flex items-center gap-2">
+        <span className="font-semibold text-ink">KC Agency</span>
+        <span>&middot;</span>
+        <span className="hidden sm:inline">Distributor Billing &amp; Inventory</span>
+      </div>
+      <div className="flex items-center gap-4">
+        <span className="flex items-center gap-1.5 font-semibold text-emerald-600">
+          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+          Online
+        </span>
+        <span className="text-ink-light hidden sm:inline">&middot;</span>
+        <span className="hidden sm:inline text-ink-muted">{formatted}</span>
+      </div>
     </footer>
   );
 }

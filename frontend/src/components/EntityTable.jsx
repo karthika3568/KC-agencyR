@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Plus, Pencil, Trash2, Check, X } from 'lucide-react';
 import { Button } from './Button.jsx';
+import { Pagination } from './Pagination.jsx';
+import { useClientPagination } from '../hooks/useClientPagination';
 
 function FieldInput({ f, value, onChange }) {
   if (f.type === 'select') {
@@ -27,7 +29,7 @@ function FieldInput({ f, value, onChange }) {
 
 /**
  * Generic "add row + list + edit + delete" manager for simple catalog/party
- * lookup tables (categories, brands, tax codes, routes, ...). Pass onUpdate
+ * lookup tables (categories, brands, tax codes, ...). Pass onUpdate
  * to enable inline row editing — every table using this component gets
  * real Edit, not just Create, for free.
  */
@@ -77,41 +79,49 @@ export function EntityTable({ title, fields, columns, rows, onCreate, onUpdate, 
     await onDelete(id);
   };
 
+  const {
+    page,
+    setPage,
+    total,
+    paginatedItems: pagedRows,
+  } = useClientPagination(rows, 10);
+
   return (
     <div className="card">
-      <div className="border-b border-border-soft px-4 py-3 font-semibold text-ink">{title}</div>
+      <div className="border-b border-border-soft px-4 py-2.5 font-semibold text-ink text-sm">{title}</div>
 
       {canManage && (
-        <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-2 border-b border-border-soft px-4 py-3">
+        <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-2 border-b border-border-soft px-4 py-2.5">
           {fields.map((f) => (
             <div key={f.name}>
-              <label className="mb-1 block text-xs font-medium text-ink-muted">{f.label}</label>
+              <label className="mb-0.5 block text-[11px] font-medium text-ink-muted">{f.label}</label>
               <FieldInput f={f} value={form[f.name]} onChange={(v) => handleChange(f.name, v)} />
             </div>
           ))}
           <Button type="submit" disabled={submitting} size="sm" icon={<Plus size={14} />}>
             Add
           </Button>
-          {error && <span className="text-sm text-danger">{error}</span>}
+          {error && <span className="text-xs text-danger">{error}</span>}
         </form>
       )}
 
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-border-soft bg-page/60 text-left text-xs uppercase text-ink-muted">
-            {columns.map((c) => (
-              <th key={c.key} className="px-4 py-2 font-medium">
-                {c.label}
-              </th>
-            ))}
-            {canManage && <th className="px-4 py-2 text-right">Actions</th>}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) =>
+      <div className="overflow-x-auto max-h-[calc(100vh-220px)] overflow-y-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-border-soft bg-lavender-50 text-left text-[11px] uppercase text-ink-muted font-semibold tracking-wider sticky top-0 bg-lavender-50 z-10">
+              {columns.map((c) => (
+                <th key={c.key} className="px-3 py-2 font-semibold">
+                  {c.label}
+                </th>
+              ))}
+              {canManage && <th className="px-3 py-2 text-right">Actions</th>}
+            </tr>
+          </thead>
+          <tbody>
+          {pagedRows.map((row) =>
             editingId === row.id ? (
-              <tr key={row.id} className="border-b border-border-soft bg-gold/5 last:border-0">
-                <td colSpan={columns.length} className="px-4 py-2">
+              <tr key={row.id} className="border-b border-border-soft bg-primary-soft/30 last:border-0">
+                <td colSpan={columns.length} className="px-4 py-2.5">
                   <div className="flex flex-wrap items-end gap-2">
                     {fields.map((f) => (
                       <div key={f.name}>
@@ -122,38 +132,38 @@ export function EntityTable({ title, fields, columns, rows, onCreate, onUpdate, 
                     {editError && <span className="text-sm text-danger">{editError}</span>}
                   </div>
                 </td>
-                <td className="px-4 py-2 text-right">
+                <td className="px-4 py-2.5 text-right">
                   <div className="flex justify-end gap-1">
-                    <button onClick={() => saveEdit(row.id)} title="Save" className="rounded p-1.5 text-success hover:bg-success-bg">
+                    <button onClick={() => saveEdit(row.id)} title="Save" className="rounded-lg p-1.5 text-success hover:bg-success-bg">
                       <Check size={16} />
                     </button>
-                    <button onClick={() => setEditingId(null)} title="Cancel" className="rounded p-1.5 text-ink-muted hover:bg-page">
+                    <button onClick={() => setEditingId(null)} title="Cancel" className="rounded-lg p-1.5 text-ink-muted hover:bg-lavender-100">
                       <X size={16} />
                     </button>
                   </div>
                 </td>
               </tr>
             ) : (
-              <tr key={row.id} className="border-b border-border-soft last:border-0">
+              <tr key={row.id} className="border-b border-border-soft hover:bg-lavender-50/50 transition-colors last:border-0">
                 {columns.map((c) => (
-                  <td key={c.key} className="px-4 py-2 text-ink">
+                  <td key={c.key} className="px-3 py-1.5 text-ink">
                     {c.render ? c.render(row) : row[c.key]}
                   </td>
                 ))}
                 {canManage && (
-                  <td className="px-4 py-2 text-right">
+                  <td className="px-3 py-1.5 text-right">
                     <div className="flex justify-end gap-1">
                       {onUpdate && (
-                        <button onClick={() => startEdit(row)} title="Edit" className="rounded p-1.5 text-ink-muted hover:bg-page hover:text-gold">
-                          <Pencil size={15} />
+                        <button onClick={() => startEdit(row)} title="Edit" className="rounded-lg p-1 text-ink-muted hover:bg-lavender-100 hover:text-primary transition-colors">
+                          <Pencil size={14} />
                         </button>
                       )}
                       <button
                         onClick={() => handleDelete(row.id, row[columns[0].key])}
                         title="Delete"
-                        className="rounded p-1.5 text-ink-muted hover:bg-red-50 hover:text-danger"
+                        className="rounded-lg p-1 text-ink-muted hover:bg-danger-bg hover:text-danger transition-colors"
                       >
-                        <Trash2 size={15} />
+                        <Trash2 size={14} />
                       </button>
                     </div>
                   </td>
@@ -171,5 +181,7 @@ export function EntityTable({ title, fields, columns, rows, onCreate, onUpdate, 
         </tbody>
       </table>
     </div>
-  );
+    <Pagination page={page} pageSize={10} total={total} onPageChange={setPage} />
+  </div>
+);
 }

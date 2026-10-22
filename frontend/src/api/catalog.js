@@ -11,7 +11,6 @@ function makeCrud(path) {
 
 export const categoriesApi = makeCrud('/categories');
 export const brandsApi = makeCrud('/brands');
-export const productLinesApi = makeCrud('/product-lines');
 export const taxCodesApi = makeCrud('/tax-codes');
 export const stockUnitsApi = makeCrud('/stock-units');
 

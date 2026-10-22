@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, Fragment } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Package, Search, Plus, Trash2, CheckCircle2, AlertTriangle, Truck, SlidersHorizontal, X, FileSpreadsheet, FileDown } from 'lucide-react';
+import { Package, Search, Plus, Trash2, CheckCircle2, AlertTriangle, Truck, SlidersHorizontal, X, FileSpreadsheet, FileDown, Printer, ChevronDown, ChevronRight } from 'lucide-react';
 import { itemsApi } from '../api/catalog';
 import { usersApi } from '../api/users';
 import { stockAdjustmentsApi, stockHubApi, vanStockApi, vanStockIssuesApi } from '../api/purchasing';
@@ -8,6 +8,9 @@ import { Tabs } from '../components/Tabs';
 import { usePermission } from '../hooks/usePermission';
 import { Button } from '../components/Button.jsx';
 import { downloadReportPdf, downloadVanIssuePdf } from '../utils/reportPdf';
+import { Pagination } from '../components/Pagination';
+import { useClientPagination } from '../hooks/useClientPagination';
+import { PrintPreviewModal } from '../components/PrintPreviewModal';
 
 function StockHubPanel() {
   const [ownerType, setOwnerType] = useState('');
@@ -29,6 +32,14 @@ function StockHubPanel() {
       r.owner_name?.toLowerCase().includes(searchQuery.toLowerCase())
     );
   });
+
+  const {
+    page,
+    setPage,
+    total,
+    paginatedItems: pagedRows,
+    resetPage,
+  } = useClientPagination(filteredRows, 10);
 
   const [exportError, setExportError] = useState('');
   const [exportingExcel, setExportingExcel] = useState(false);
@@ -69,9 +80,9 @@ function StockHubPanel() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2.5">
       {low.length > 0 && (
-        <div className="bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs p-3.5 rounded-lg flex items-start gap-2.5">
+        <div className="bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs p-2.5 rounded-lg flex items-start gap-2">
           <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
           <div>
             <strong className="font-semibold text-amber-300">{low.length} Item(s) At or Below Minimum Stock:</strong>
@@ -80,20 +91,20 @@ function StockHubPanel() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+      <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
         {/* Left Column Controls */}
         <div className="lg:col-span-4">
-          <div className="card p-5 space-y-4 sticky top-6">
-            <div className="border-b border-border-soft pb-3">
-              <h2 className="font-semibold text-ink text-base flex items-center gap-2">
+          <div className="card p-3.5 space-y-2.5 sticky top-3">
+            <div className="border-b border-border-soft pb-2">
+              <h2 className="font-semibold text-ink text-sm sm:text-base flex items-center gap-2">
                 <SlidersHorizontal className="w-4 h-4 text-indigo-400" />
                 Filter Stock Hub
               </h2>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2">
               <div>
-                <label className="text-xs font-medium text-ink-muted block mb-1">Owner Location Type</label>
+                <label className="text-xs font-medium text-ink-muted block mb-0.5">Owner Location Type</label>
                 <select
                   value={ownerType}
                   onChange={(e) => setOwnerType(e.target.value)}
@@ -105,7 +116,7 @@ function StockHubPanel() {
                 </select>
               </div>
 
-              <div className="p-3 rounded-lg bg-surface-subtle/30 border border-border-soft/60 space-y-2 text-xs">
+              <div className="p-2.5 rounded-lg bg-surface-subtle/30 border border-border-soft/60 space-y-1 text-xs">
                 <div className="text-ink-muted">Total Distinct Records: <strong className="text-ink">{rows.length}</strong></div>
                 <div className="text-ink-muted">Low Stock Threshold Alerts: <strong className="text-amber-400">{low.length}</strong></div>
               </div>
@@ -114,25 +125,25 @@ function StockHubPanel() {
         </div>
 
         {/* Right Column Table */}
-        <div className="lg:col-span-8 space-y-4">
-          <div className="card p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="relative w-full sm:w-72">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
+        <div className="lg:col-span-8 space-y-2.5">
+          <div className="card p-2.5 flex flex-col sm:flex-row items-center justify-between gap-2">
+            <div className="relative w-full sm:w-64">
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
               <input
                 type="text"
                 placeholder="Search stock by item or owner..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="input pl-9 w-full text-xs"
+                className="input pl-8 w-full text-xs"
               />
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-ink-muted">{filteredRows.length} item(s) in view</span>
-              <button onClick={handleExportExcel} disabled={exportingExcel} className="flex items-center gap-1.5 rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
+              <button onClick={handleExportExcel} disabled={exportingExcel} className="flex items-center gap-1.5 rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
                 <FileSpreadsheet className="h-3.5 w-3.5" />
                 {exportingExcel ? 'Exporting…' : 'Export Excel'}
               </button>
-              <button onClick={handleExportPdf} disabled={filteredRows.length === 0} className="flex items-center gap-1.5 rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
+              <button onClick={handleExportPdf} disabled={filteredRows.length === 0} className="flex items-center gap-1.5 rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
                 <FileDown className="h-3.5 w-3.5" />
                 Export PDF
               </button>
@@ -141,43 +152,43 @@ function StockHubPanel() {
           {exportError && <div className="text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{exportError}</div>}
 
           <div className="card overflow-hidden">
-            <div className="px-5 py-4 border-b border-border-soft flex items-center justify-between">
-              <h3 className="font-semibold text-ink text-sm">Real-time Stock Inventory</h3>
+            <div className="px-3.5 py-2 border-b border-border-soft flex items-center justify-between">
+              <h3 className="font-semibold text-ink text-xs sm:text-sm">Real-time Stock Inventory</h3>
             </div>
-            <div className="overflow-x-auto">
+            <div className="max-h-[calc(100vh-230px)] overflow-y-auto">
               <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-border-soft bg-surface-subtle/30 text-ink-muted font-medium">
-                    <th className="px-4 py-3">Item Details</th>
-                    <th className="px-4 py-3">Owner Type</th>
-                    <th className="px-4 py-3">Location / Owner</th>
-                    <th className="px-4 py-3">On Hand Qty</th>
-                    <th className="px-4 py-3">Unit</th>
+                <thead className="sticky top-0 bg-page z-10">
+                  <tr className="border-b border-border-soft uppercase text-ink-muted font-medium">
+                    <th className="px-3 py-1.5">Item Details</th>
+                    <th className="px-3 py-1.5">Owner Type</th>
+                    <th className="px-3 py-1.5">Location / Owner</th>
+                    <th className="px-3 py-1.5">On Hand Qty</th>
+                    <th className="px-3 py-1.5">Unit</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border-soft/60">
-                  {filteredRows.map((r) => {
+                  {pagedRows.map((r) => {
                     const isQtyLow = Number(r.quantity_on_hand) <= 0;
                     return (
-                      <tr key={r.id} className="hover:bg-surface-subtle/20 transition">
-                        <td className="px-4 py-3 font-medium text-ink">
+                      <tr key={r.id} className="hover:bg-page/50 transition">
+                        <td className="px-3 py-1.5 font-medium text-ink">
                           {r.item_name}
                           <span className="text-ink-muted text-[10px] ml-1.5 font-mono">({r.item_code})</span>
                         </td>
-                        <td className="px-4 py-3 capitalize text-ink-muted">
+                        <td className="px-3 py-1.5 capitalize text-ink-muted">
                           <span className="px-2 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 border border-slate-700">
                             {r.owner_type}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-ink font-medium">{r.owner_name}</td>
-                        <td className="px-4 py-3 font-semibold">
+                        <td className="px-3 py-1.5 text-ink font-medium">{r.owner_name}</td>
+                        <td className="px-3 py-1.5 font-semibold">
                           {isQtyLow ? (
                             <span className="text-red-400">{r.quantity_on_hand}</span>
                           ) : (
                             <span className="text-emerald-400">{r.quantity_on_hand}</span>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-ink-muted">{r.unit_code}</td>
+                        <td className="px-3 py-1.5 text-ink-muted">{r.unit_code}</td>
                       </tr>
                     );
                   })}
@@ -191,6 +202,7 @@ function StockHubPanel() {
                 </tbody>
               </table>
             </div>
+            <Pagination page={page} pageSize={10} total={total} onPageChange={setPage} />
           </div>
         </div>
       </div>
@@ -272,31 +284,39 @@ function StockAdjustmentPanel({ canManage }) {
     );
   });
 
+  const {
+    page,
+    setPage,
+    total,
+    paginatedItems: pagedAdjustments,
+    resetPage,
+  } = useClientPagination(filteredAdjustments, 10);
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-2.5">
       {successMsg && (
-        <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs px-4 py-2.5 rounded-lg flex items-center gap-2">
+        <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4" />
           {successMsg}
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+      <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
         {/* Left Column Form */}
         <div className="lg:col-span-4">
-          <div className="card p-5 space-y-4 sticky top-6">
-            <div className="border-b border-border-soft pb-3">
-              <h2 className="font-semibold text-ink text-base flex items-center gap-2">
+          <div className="card p-3.5 space-y-2.5 sticky top-3">
+            <div className="border-b border-border-soft pb-2">
+              <h2 className="font-semibold text-ink text-sm sm:text-base flex items-center gap-2">
                 <Plus className="w-4 h-4 text-emerald-400" />
                 New Stock Adjustment
               </h2>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-3">
-              {formError && <div className="text-xs text-red-400 bg-red-950/40 p-2.5 rounded border border-red-800/40">{formError}</div>}
+            <form onSubmit={handleSubmit} className="space-y-2">
+              {formError && <div className="text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{formError}</div>}
 
               <div>
-                <label className="text-xs font-medium text-ink-muted block mb-1">Select Item *</label>
+                <label className="text-xs font-medium text-ink-muted block mb-0.5">Select Item *</label>
                 <select
                   required
                   value={itemId}
@@ -314,7 +334,7 @@ function StockAdjustmentPanel({ canManage }) {
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-xs font-medium text-ink-muted block mb-1">Type *</label>
+                  <label className="text-xs font-medium text-ink-muted block mb-0.5">Type *</label>
                   <select
                     value={adjustmentType}
                     onChange={(e) => setAdjustmentType(e.target.value)}
@@ -325,7 +345,7 @@ function StockAdjustmentPanel({ canManage }) {
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-ink-muted block mb-1">Qty *</label>
+                  <label className="text-xs font-medium text-ink-muted block mb-0.5">Qty *</label>
                   <input
                     required
                     type="number"
@@ -340,7 +360,7 @@ function StockAdjustmentPanel({ canManage }) {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-ink-muted block mb-1">Reason *</label>
+                <label className="text-xs font-medium text-ink-muted block mb-0.5">Reason *</label>
                 <select
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
@@ -354,9 +374,9 @@ function StockAdjustmentPanel({ canManage }) {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-ink-muted block mb-1">Remarks / Note</label>
+                <label className="text-xs font-medium text-ink-muted block mb-0.5">Remarks / Note</label>
                 <textarea
-                  rows="2"
+                  rows="1"
                   placeholder="Additional explanation..."
                   value={remarks}
                   onChange={(e) => setRemarks(e.target.value)}
@@ -365,7 +385,7 @@ function StockAdjustmentPanel({ canManage }) {
               </div>
 
               {canManage && (
-                <div className="pt-2">
+                <div className="pt-1">
                   <Button type="submit" variant="primary" loading={createMutation.isPending} className="w-full">
                     Save Stock Adjustment
                   </Button>
@@ -376,42 +396,42 @@ function StockAdjustmentPanel({ canManage }) {
         </div>
 
         {/* Right Column Table */}
-        <div className="lg:col-span-8 space-y-4">
-          <div className="card p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="relative w-full sm:w-72">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
+        <div className="lg:col-span-8 space-y-2.5">
+          <div className="card p-2.5 flex flex-col sm:flex-row items-center justify-between gap-2">
+            <div className="relative w-full sm:w-64">
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
               <input
                 type="text"
                 placeholder="Search adjustments..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="input pl-9 w-full text-xs"
+                className="input pl-8 w-full text-xs"
               />
             </div>
             <span className="text-xs text-ink-muted">{filteredAdjustments.length} adjustment record(s)</span>
           </div>
 
           <div className="card overflow-hidden">
-            <div className="px-5 py-4 border-b border-border-soft flex items-center justify-between">
-              <h3 className="font-semibold text-ink text-sm">Stock Adjustment History</h3>
+            <div className="px-3.5 py-2 border-b border-border-soft flex items-center justify-between">
+              <h3 className="font-semibold text-ink text-xs sm:text-sm">Stock Adjustment History</h3>
             </div>
-            <div className="overflow-x-auto">
+            <div className="max-h-[calc(100vh-230px)] overflow-y-auto">
               <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-border-soft bg-surface-subtle/30 text-ink-muted font-medium">
-                    <th className="px-4 py-3">Item</th>
-                    <th className="px-4 py-3">Type</th>
-                    <th className="px-4 py-3">Qty</th>
-                    <th className="px-4 py-3">Reason</th>
-                    <th className="px-4 py-3">By</th>
-                    <th className="px-4 py-3">Date</th>
+                <thead className="sticky top-0 bg-page z-10">
+                  <tr className="border-b border-border-soft uppercase text-ink-muted font-medium">
+                    <th className="px-3 py-1.5">Item</th>
+                    <th className="px-3 py-1.5">Type</th>
+                    <th className="px-3 py-1.5">Qty</th>
+                    <th className="px-3 py-1.5">Reason</th>
+                    <th className="px-3 py-1.5">By</th>
+                    <th className="px-3 py-1.5">Date</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border-soft/60">
-                  {filteredAdjustments.map((a) => (
-                    <tr key={a.id} className="hover:bg-surface-subtle/20 transition">
-                      <td className="px-4 py-3 font-medium text-ink">{a.item_name}</td>
-                      <td className="px-4 py-3 capitalize">
+                  {pagedAdjustments.map((a) => (
+                    <tr key={a.id} className="hover:bg-page/50 transition">
+                      <td className="px-3 py-1.5 font-medium text-ink">{a.item_name}</td>
+                      <td className="px-3 py-1.5 capitalize">
                         {a.adjustment_type === 'addition' ? (
                           <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                             Addition
@@ -422,10 +442,10 @@ function StockAdjustmentPanel({ canManage }) {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 font-semibold text-ink">{a.qty}</td>
-                      <td className="px-4 py-3 text-ink-muted capitalize">{a.reason?.replace('_', ' ')}</td>
-                      <td className="px-4 py-3 text-ink-muted">{a.created_by_name}</td>
-                      <td className="px-4 py-3 text-ink-muted">{a.created_at}</td>
+                      <td className="px-3 py-1.5 font-semibold text-ink">{a.qty}</td>
+                      <td className="px-3 py-1.5 text-ink-muted capitalize">{a.reason?.replace('_', ' ')}</td>
+                      <td className="px-3 py-1.5 text-ink-muted">{a.created_by_name}</td>
+                      <td className="px-3 py-1.5 text-ink-muted">{a.created_at}</td>
                     </tr>
                   ))}
                   {filteredAdjustments.length === 0 && (
@@ -438,6 +458,7 @@ function StockAdjustmentPanel({ canManage }) {
                 </tbody>
               </table>
             </div>
+            <Pagination page={page} pageSize={10} total={total} onPageChange={setPage} />
           </div>
         </div>
       </div>
@@ -512,6 +533,20 @@ function VanStockPanel({ canManage }) {
   const pending = pendingQuery.data || [];
   const issues = issuesQuery.data || [];
   const selectedEmployee = users.find((u) => String(u.id) === String(employeeId));
+
+  const {
+    page: pendingPage,
+    setPage: setPendingPage,
+    total: pendingTotal,
+    paginatedItems: pagedPending,
+  } = useClientPagination(pending, 10);
+
+  const {
+    page: issuesPage,
+    setPage: setIssuesPage,
+    total: issuesTotal,
+    paginatedItems: pagedIssues,
+  } = useClientPagination(issues, 10);
 
   const handleSelectEmployee = (value) => {
     setEmployeeId(value);
@@ -616,6 +651,14 @@ function VanStockPanel({ canManage }) {
   const [selectedIssueIds, setSelectedIssueIds] = useState([]);
   const [issueExportError, setIssueExportError] = useState('');
   const [issueExporting, setIssueExporting] = useState(false);
+  const [printingIssue, setPrintingIssue] = useState(null);
+  const [expandedIssueIds, setExpandedIssueIds] = useState([]);
+
+  const toggleExpandIssue = (id) => {
+    setExpandedIssueIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
 
   const toggleSelectIssue = (id) => setSelectedIssueIds((prev) => (
     prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
@@ -672,29 +715,29 @@ function VanStockPanel({ canManage }) {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2.5">
       {message && (
-        <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs px-4 py-2.5 rounded-lg flex items-center gap-2">
+        <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4" />
           {message}
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+      <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
         {/* Left Column Form */}
         <div className="lg:col-span-5">
           {canManage && (
-            <div className="card p-5 space-y-4 sticky top-6">
-              <div className="border-b border-border-soft pb-3 flex items-center justify-between">
-                <h2 className="font-semibold text-ink text-base flex items-center gap-2">
+            <div className="card p-3.5 space-y-2.5 sticky top-3">
+              <div className="border-b border-border-soft pb-2 flex items-center justify-between">
+                <h2 className="font-semibold text-ink text-sm sm:text-base flex items-center gap-2">
                   <Truck className="w-4 h-4 text-indigo-400" />
                   Van Stock Operations
                 </h2>
-                <div className="flex gap-1 bg-surface-subtle p-1 rounded-lg">
+                <div className="flex gap-1 bg-surface-subtle p-0.5 rounded-lg">
                   <button
                     type="button"
                     onClick={() => setMode('issue')}
-                    className={`px-2.5 py-1 rounded text-xs font-semibold transition ${
+                    className={`px-2 py-0.5 rounded text-xs font-semibold transition ${
                       mode === 'issue' ? 'bg-indigo-500 text-white' : 'text-ink-muted hover:text-ink'
                     }`}
                   >
@@ -703,7 +746,7 @@ function VanStockPanel({ canManage }) {
                   <button
                     type="button"
                     onClick={() => setMode('return')}
-                    className={`px-2.5 py-1 rounded text-xs font-semibold transition ${
+                    className={`px-2 py-0.5 rounded text-xs font-semibold transition ${
                       mode === 'return' ? 'bg-indigo-500 text-white' : 'text-ink-muted hover:text-ink'
                     }`}
                   >
@@ -712,11 +755,11 @@ function VanStockPanel({ canManage }) {
                 </div>
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-3">
+              <form onSubmit={handleSubmit} className="space-y-2">
                 {formError && <div className="text-xs text-red-400 bg-red-950/40 p-2.5 rounded border border-red-800/40">{formError}</div>}
 
                 <div>
-                  <label className="text-xs font-medium text-ink-muted block mb-1">Salesman *</label>
+                  <label className="text-xs font-medium text-ink-muted block mb-0.5">Salesman *</label>
                   <select
                     required
                     value={employeeId}
@@ -732,7 +775,7 @@ function VanStockPanel({ canManage }) {
                   </select>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <label className="text-xs font-medium text-ink-muted block">Stock Lines *</label>
                   {lines.map((line, idx) => (
                     <div key={idx} className="flex items-center gap-2">
@@ -777,7 +820,7 @@ function VanStockPanel({ canManage }) {
                   </button>
                 </div>
 
-                <div className="pt-2">
+                <div className="pt-1">
                   <Button
                     type="submit"
                     variant="primary"
@@ -794,22 +837,22 @@ function VanStockPanel({ canManage }) {
         </div>
 
         {/* Right Column Table */}
-        <div className="lg:col-span-7 space-y-4">
+        <div className="lg:col-span-7 space-y-2.5">
           <div className="card overflow-hidden">
-            <div className="px-5 py-4 border-b border-border-soft flex flex-wrap items-center justify-between gap-2">
-              <h3 className="font-semibold text-ink text-sm">Salesman Active Van Stock</h3>
+            <div className="px-3.5 py-2 border-b border-border-soft flex flex-wrap items-center justify-between gap-2">
+              <h3 className="font-semibold text-ink text-xs sm:text-sm">Salesman Active Van Stock</h3>
               <span className="text-xs text-ink-muted">
                 {selectedEmployee ? `Salesman: ${selectedEmployee.name}` : 'Select salesman to view live balance'}
               </span>
             </div>
             {employeeId && (
-              <div className="px-5 py-3 border-b border-border-soft flex flex-wrap items-center gap-2 bg-surface-subtle/20">
-                <button onClick={handlePrint} className="rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200">Print</button>
-                <button onClick={handleExportPdf} className="rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200">Download PDF</button>
-                <button onClick={handleExportExcel} disabled={exporting} className="rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
+              <div className="px-3.5 py-1.5 border-b border-border-soft flex flex-wrap items-center gap-1.5 bg-surface-subtle/20">
+                <button onClick={handlePrint} className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200">Print</button>
+                <button onClick={handleExportPdf} className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200">Download PDF</button>
+                <button onClick={handleExportExcel} disabled={exporting} className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
                   {exporting ? 'Exporting…' : 'Export Excel'}
                 </button>
-                <button onClick={handleExportSelectedExcel} disabled={exporting} className="rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
+                <button onClick={handleExportSelectedExcel} disabled={exporting} className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
                   Export Selected
                 </button>
                 {selectedItemIds.length > 0 && (
@@ -817,32 +860,32 @@ function VanStockPanel({ canManage }) {
                 )}
               </div>
             )}
-            {exportError && <div className="mx-5 mt-3 text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{exportError}</div>}
-            <div className="overflow-x-auto">
+            {exportError && <div className="mx-3.5 mt-2 text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{exportError}</div>}
+            <div className="max-h-[calc(100vh-320px)] overflow-y-auto">
               <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-border-soft bg-surface-subtle/30 text-ink-muted font-medium">
-                    <th className="w-8 px-4 py-3">
+                <thead className="sticky top-0 bg-page z-10">
+                  <tr className="border-b border-border-soft uppercase text-ink-muted font-medium">
+                    <th className="w-8 px-3 py-1.5">
                       {pending.length > 0 && (
                         <input type="checkbox" checked={selectedItemIds.length === pending.length} onChange={toggleSelectAll} />
                       )}
                     </th>
-                    <th className="px-4 py-3">Item</th>
-                    <th className="px-4 py-3">SKU</th>
-                    <th className="px-4 py-3">Unit</th>
-                    <th className="px-4 py-3">Salesman On-hand Qty</th>
+                    <th className="px-3 py-1.5">Item</th>
+                    <th className="px-3 py-1.5">SKU</th>
+                    <th className="px-3 py-1.5">Unit</th>
+                    <th className="px-3 py-1.5">Salesman On-hand Qty</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border-soft/60">
-                  {pending.map((p) => (
-                    <tr key={p.item_id} className="hover:bg-surface-subtle/20 transition">
-                      <td className="px-4 py-3">
+                  {pagedPending.map((p) => (
+                    <tr key={p.item_id} className="hover:bg-page/50 transition">
+                      <td className="px-3 py-1.5">
                         <input type="checkbox" checked={selectedItemIds.includes(p.item_id)} onChange={() => toggleSelectItem(p.item_id)} />
                       </td>
-                      <td className="px-4 py-3 font-medium text-ink">{p.item_name}</td>
-                      <td className="px-4 py-3 text-ink-muted">{p.item_code || '-'}</td>
-                      <td className="px-4 py-3 text-ink-muted">{p.unit_code || '-'}</td>
-                      <td className="px-4 py-3 font-semibold text-emerald-400">{p.quantity_on_hand}</td>
+                      <td className="px-3 py-1.5 font-medium text-ink">{p.item_name}</td>
+                      <td className="px-3 py-1.5 text-ink-muted">{p.item_code || '-'}</td>
+                      <td className="px-3 py-1.5 text-ink-muted">{p.unit_code || '-'}</td>
+                      <td className="px-3 py-1.5 font-semibold text-emerald-400">{p.quantity_on_hand}</td>
                     </tr>
                   ))}
                   {(!employeeId || pending.length === 0) && (
@@ -855,59 +898,165 @@ function VanStockPanel({ canManage }) {
                 </tbody>
               </table>
             </div>
+            <Pagination page={pendingPage} pageSize={10} total={pendingTotal} onPageChange={setPendingPage} />
           </div>
 
           <div className="card overflow-hidden">
-            <div className="px-5 py-4 border-b border-border-soft flex flex-wrap items-center justify-between gap-2">
-              <h3 className="font-semibold text-ink text-sm">Issue Transactions</h3>
+            <div className="px-3.5 py-2 border-b border-border-soft flex flex-wrap items-center justify-between gap-2">
+              <h3 className="font-semibold text-ink text-xs sm:text-sm">Issue Transactions</h3>
               <span className="text-xs text-ink-muted">
                 {selectedEmployee ? `Salesman: ${selectedEmployee.name}` : 'All salesmen'}
               </span>
             </div>
-            <div className="px-5 py-3 border-b border-border-soft flex flex-wrap items-center gap-2 bg-surface-subtle/20">
-              <button onClick={() => handleIssuesPdfOrPrint(true)} className="rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200">Print</button>
-              <button onClick={() => handleIssuesPdfOrPrint(false)} className="rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200">Download PDF</button>
-              <button onClick={handleExportIssuesExcel} disabled={issueExporting} className="rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
+            <div className="px-3.5 py-1.5 border-b border-border-soft flex flex-wrap items-center gap-1.5 bg-surface-subtle/20">
+              <button onClick={() => handleIssuesPdfOrPrint(true)} className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200">Print</button>
+              <button onClick={() => handleIssuesPdfOrPrint(false)} className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200">Download PDF</button>
+              <button onClick={handleExportIssuesExcel} disabled={issueExporting} className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
                 {issueExporting ? 'Exporting…' : 'Export Excel'}
               </button>
-              <button onClick={handleExportSelectedIssuesExcel} disabled={issueExporting} className="rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
+              <button onClick={handleExportSelectedIssuesExcel} disabled={issueExporting} className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
                 Export Selected
               </button>
               {selectedIssueIds.length > 0 && <span className="text-xs text-ink-muted">{selectedIssueIds.length} selected</span>}
             </div>
-            {issueExportError && <div className="mx-5 mt-3 text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{issueExportError}</div>}
-            <div className="overflow-x-auto">
+            {issueExportError && <div className="mx-3.5 mt-2 text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{issueExportError}</div>}
+            <div className="max-h-[calc(100vh-320px)] overflow-y-auto">
               <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-border-soft bg-surface-subtle/30 text-ink-muted font-medium">
-                    <th className="w-8 px-4 py-3">
+                <thead className="sticky top-0 bg-page z-10">
+                  <tr className="border-b border-border-soft uppercase text-ink-muted font-medium">
+                    <th className="w-8 px-3 py-1.5">
                       {issues.length > 0 && (
                         <input type="checkbox" checked={selectedIssueIds.length === issues.length} onChange={toggleSelectAllIssues} />
                       )}
                     </th>
-                    <th className="px-4 py-3">Issue #</th>
-                    <th className="px-4 py-3">Salesman</th>
-                    <th className="px-4 py-3">Date</th>
-                    <th className="px-4 py-3">Items</th>
-                    <th className="px-4 py-3">Total Qty</th>
+                    <th className="w-6 px-1 py-1.5 text-center"></th>
+                    <th className="px-3 py-1.5">Issue #</th>
+                    <th className="px-3 py-1.5">Salesman</th>
+                    <th className="px-3 py-1.5">Date</th>
+                    <th className="px-3 py-1.5 text-center">Items</th>
+                    <th className="px-3 py-1.5 text-right">Total Qty</th>
+                    <th className="px-3 py-1.5 text-right">Total Amount</th>
+                    <th className="px-3 py-1.5 text-center">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border-soft/60">
-                  {issues.map((i) => (
-                    <tr key={i.id} className="hover:bg-surface-subtle/20 transition">
-                      <td className="px-4 py-3">
-                        <input type="checkbox" checked={selectedIssueIds.includes(i.id)} onChange={() => toggleSelectIssue(i.id)} />
-                      </td>
-                      <td className="px-4 py-3 font-mono font-medium text-ink">{i.issue_no}</td>
-                      <td className="px-4 py-3 text-ink">{i.employee_name}</td>
-                      <td className="px-4 py-3 text-ink-muted">{i.issued_at}</td>
-                      <td className="px-4 py-3 text-ink-muted">{i.item_count}</td>
-                      <td className="px-4 py-3 font-semibold text-ink">{i.total_qty}</td>
-                    </tr>
-                  ))}
+                  {pagedIssues.map((i) => {
+                    const isExpanded = expandedIssueIds.includes(i.id);
+                    return (
+                      <Fragment key={i.id}>
+                        <tr className="hover:bg-page/50 transition">
+                          <td className="px-3 py-1.5">
+                            <input type="checkbox" checked={selectedIssueIds.includes(i.id)} onChange={() => toggleSelectIssue(i.id)} />
+                          </td>
+                          <td className="px-1 py-1.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => toggleExpandIssue(i.id)}
+                              className="p-1 rounded hover:bg-surface-subtle text-ink-muted hover:text-ink transition cursor-pointer"
+                              title={isExpanded ? 'Collapse product details' : 'View product prices & details'}
+                            >
+                              {isExpanded ? <ChevronDown className="w-3.5 h-3.5 text-indigo-400" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                            </button>
+                          </td>
+                          <td className="px-3 py-1.5 font-mono font-medium text-ink">{i.issue_no}</td>
+                          <td className="px-3 py-1.5 text-ink">{i.employee_name}</td>
+                          <td className="px-3 py-1.5 text-ink-muted whitespace-nowrap">{i.issued_at}</td>
+                          <td className="px-3 py-1.5 text-center text-ink-muted font-medium">{i.item_count}</td>
+                          <td className="px-3 py-1.5 text-right font-semibold text-ink">{i.total_qty}</td>
+                          <td className="px-3 py-1.5 text-right font-bold text-emerald-400 whitespace-nowrap">
+                            ₹{Number(i.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          <td className="px-3 py-1.5 text-center whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => setPrintingIssue(i)}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition cursor-pointer"
+                              title="Print Stock Issue Bill"
+                            >
+                              <Printer className="w-3.5 h-3.5" />
+                              <span>Print Bill</span>
+                            </button>
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <tr className="bg-surface-subtle/20 border-b border-border-soft">
+                            <td colSpan={9} className="p-3">
+                              <div className="bg-surface border border-border-soft rounded-lg p-3 space-y-2 shadow-xs">
+                                <div className="flex items-center justify-between border-b border-border-soft pb-1.5">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-semibold text-xs text-ink">
+                                      Product Breakdown — <span className="font-mono text-indigo-400">{i.issue_no}</span>
+                                    </span>
+                                    <span className="text-[11px] text-ink-muted">
+                                      ({i.items?.length || 0} product{i.items?.length === 1 ? '' : 's'})
+                                    </span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setPrintingIssue(i)}
+                                    className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition cursor-pointer"
+                                  >
+                                    <Printer className="w-3 h-3" />
+                                    <span>Print Bill</span>
+                                  </button>
+                                </div>
+                                <table className="w-full text-left text-xs border border-border-soft rounded overflow-hidden">
+                                  <thead className="bg-surface-subtle text-ink-muted uppercase text-[10px] font-semibold">
+                                    <tr>
+                                      <th className="px-2.5 py-1.5 w-10 text-center">#</th>
+                                      <th className="px-2.5 py-1.5">Product</th>
+                                      <th className="px-2.5 py-1.5">SKU</th>
+                                      <th className="px-2.5 py-1.5 text-center">Unit</th>
+                                      <th className="px-2.5 py-1.5 text-right">Quantity</th>
+                                      <th className="px-2.5 py-1.5 text-right">Unit Price</th>
+                                      <th className="px-2.5 py-1.5 text-right">Amount</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-border-soft/60">
+                                    {i.items?.map((item, idx) => (
+                                      <tr key={item.id || idx} className="hover:bg-page/40 transition">
+                                        <td className="px-2.5 py-1.5 text-center text-ink-muted">{idx + 1}</td>
+                                        <td className="px-2.5 py-1.5 font-medium text-ink">{item.item_name}</td>
+                                        <td className="px-2.5 py-1.5 text-ink-muted font-mono">{item.item_code || '-'}</td>
+                                        <td className="px-2.5 py-1.5 text-center text-ink-muted">{item.unit_code || '-'}</td>
+                                        <td className="px-2.5 py-1.5 text-right font-medium text-ink">{item.qty}</td>
+                                        <td className="px-2.5 py-1.5 text-right text-ink">
+                                          ₹{Number(item.unit_price || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </td>
+                                        <td className="px-2.5 py-1.5 text-right font-semibold text-ink">
+                                          ₹{Number(item.line_amount || (Number(item.qty || 0) * Number(item.unit_price || 0))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                    {(!i.items || i.items.length === 0) && (
+                                      <tr>
+                                        <td colSpan={7} className="px-3 py-4 text-center text-ink-muted text-xs italic">
+                                          No item lines recorded for this transaction.
+                                        </td>
+                                      </tr>
+                                    )}
+                                  </tbody>
+                                  <tfoot className="border-t border-border-soft bg-surface-subtle/50 font-semibold text-ink text-xs">
+                                    <tr>
+                                      <td colSpan={4} className="px-2.5 py-1.5 text-right text-ink-muted">Total:</td>
+                                      <td className="px-2.5 py-1.5 text-right font-bold text-ink">{i.total_qty}</td>
+                                      <td></td>
+                                      <td className="px-2.5 py-1.5 text-right text-emerald-400 font-bold">
+                                        ₹{Number(i.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                      </td>
+                                    </tr>
+                                  </tfoot>
+                                </table>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
                   {issues.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-ink-muted text-xs">
+                      <td colSpan={9} className="px-4 py-8 text-center text-ink-muted text-xs">
                         No issue transactions found.
                       </td>
                     </tr>
@@ -915,9 +1064,17 @@ function VanStockPanel({ canManage }) {
                 </tbody>
               </table>
             </div>
+            <Pagination page={issuesPage} pageSize={10} total={issuesTotal} onPageChange={setIssuesPage} />
           </div>
         </div>
       </div>
+
+      {printingIssue && (
+        <PrintPreviewModal
+          stockIssue={printingIssue}
+          onClose={() => setPrintingIssue(null)}
+        />
+      )}
     </div>
   );
 }
@@ -928,14 +1085,14 @@ export function Inventory() {
   const canIssue = usePermission('inventory.issue_van_stock');
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border-soft/40 pb-4">
+    <div className="space-y-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border-soft/40 pb-2">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-ink flex items-center gap-2.5">
-            <Package className="w-7 h-7 text-indigo-400" />
+          <h1 className="text-xl font-bold tracking-tight text-ink flex items-center gap-2">
+            <Package className="w-5 h-5 text-indigo-400" />
             Inventory &amp; Stock Hub
           </h1>
-          <p className="text-xs text-ink-muted mt-1">Monitor real-time warehouse inventory, stock adjustments, and van stock allocations</p>
+          <p className="text-[11px] text-ink-muted mt-0.5">Monitor real-time warehouse inventory, stock adjustments, and van stock allocations</p>
         </div>
       </div>
 

@@ -7,6 +7,8 @@ import { Tabs } from '../components/Tabs';
 import { Button } from '../components/Button.jsx';
 import { usePermission } from '../hooks/usePermission';
 import { downloadReportPdf, downloadReportExcel, NUMERIC_REPORT_KEYS } from '../utils/reportPdf';
+import { Pagination } from '../components/Pagination';
+import { useClientPagination } from '../hooks/useClientPagination';
 
 /**
  * Custom hook to manage table row checkbox selection.
@@ -131,43 +133,43 @@ function DateRangeBar({ from, to, setFrom, setTo, onApply, onReset, onExport, pd
   };
 
   return (
-    <div className="mb-3 flex flex-col gap-2">
-      <div className="flex flex-wrap items-end gap-2">
+    <div className="mb-2 flex flex-col gap-1.5">
+      <div className="flex flex-wrap items-end gap-1.5">
         <div>
           <label className="block text-xs text-ink-muted">From</label>
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="input w-40" />
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="input w-36 text-xs py-1" />
         </div>
         <div>
           <label className="block text-xs text-ink-muted">To</label>
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="input w-40" />
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="input w-36 text-xs py-1" />
         </div>
         <Button size="sm" onClick={onApply}>Apply</Button>
-        <button type="button" onClick={onReset} className="text-sm font-medium text-ink-muted hover:underline">Reset</button>
+        <button type="button" onClick={onReset} className="text-xs font-medium text-ink-muted hover:underline">Reset</button>
 
         {canExport && (
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-1.5">
             <button
               onClick={handleExportExcel}
               disabled={exportingExcel}
-              className={`flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-60 ${
+              className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-60 ${
                 selectedCount > 0
                   ? 'bg-gold text-white hover:bg-gold-soft shadow-sm'
                   : 'bg-gray-100 text-ink hover:bg-gray-200'
               }`}
             >
-              <FileSpreadsheet className="h-4 w-4" />
+              <FileSpreadsheet className="h-3.5 w-3.5" />
               {exportingExcel ? 'Exporting…' : selectedCount > 0 ? `Export Excel (${selectedCount} selected)` : 'Export Excel'}
             </button>
             <button
               onClick={handleExportPdf}
               disabled={exportingPdf || (!pdfConfig?.rows?.length && !selectedCount)}
-              className={`flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-60 ${
+              className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-60 ${
                 selectedCount > 0
                   ? 'bg-gold text-white hover:bg-gold-soft shadow-sm'
                   : 'bg-gray-100 text-ink hover:bg-gray-200'
               }`}
             >
-              <FileDown className="h-4 w-4" />
+              <FileDown className="h-3.5 w-3.5" />
               {exportingPdf ? 'Exporting…' : selectedCount > 0 ? `Export PDF (${selectedCount} selected)` : 'Export PDF'}
             </button>
           </div>
@@ -175,7 +177,7 @@ function DateRangeBar({ from, to, setFrom, setTo, onApply, onReset, onExport, pd
       </div>
 
       {selectedCount > 0 && (
-        <div className="flex items-center justify-between rounded-lg bg-gold/10 px-3 py-1.5 text-xs font-semibold text-gold-dark border border-gold/30">
+        <div className="flex items-center justify-between rounded-lg bg-gold/10 px-3 py-1 text-xs font-semibold text-gold-dark border border-gold/30">
           <span>✓ {selectedCount} row(s) selected for export</span>
           <button
             type="button"
@@ -220,92 +222,102 @@ function GenericTable({ rows, columns, totalKeys, selection }) {
     return t;
   }, [rows, totalKeys, selectedCount, selection?.selectedRows]);
 
+  const {
+    page,
+    setPage,
+    total,
+    paginatedItems: pagedRows,
+  } = useClientPagination(rows, 10);
+
   const firstKey = columns[0]?.key;
 
   return (
-    <div className="overflow-x-auto card">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-border-soft text-left text-xs uppercase text-ink-muted">
-            {selection && (
-              <th className="w-10 px-3 py-2 text-center">
-                <input
-                  type="checkbox"
-                  checked={selection.isAllSelected}
-                  ref={(el) => {
-                    if (el) el.indeterminate = selection.isSomeSelected;
-                  }}
-                  onChange={selection.toggleSelectAll}
-                  className="h-4 w-4 rounded border-border-soft text-gold focus:ring-gold cursor-pointer"
-                  title="Select / Deselect all rows"
-                />
-              </th>
-            )}
-            {columns.map((c) => (
-              <th key={c.key} className={`whitespace-nowrap px-4 py-2 ${totalKeys?.includes(c.key) ? 'text-right' : ''}`}>
-                {c.label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, i) => {
-            const rowKey = selection?.getKey ? selection.getKey(r, i) : i;
-            const isSelected = selection?.selectedKeys.has(rowKey);
+    <div className="card overflow-hidden">
+      <div className="max-h-[calc(100vh-220px)] overflow-y-auto">
+        <table className="w-full text-xs">
+          <thead className="sticky top-0 bg-page z-10 shadow-sm">
+            <tr className="border-b border-border-soft text-left uppercase text-ink-muted font-medium bg-surface-subtle/30">
+              {selection && (
+                <th className="w-8 px-3 py-1.5 text-center">
+                  <input
+                    type="checkbox"
+                    checked={selection.isAllSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = selection.isSomeSelected;
+                    }}
+                    onChange={selection.toggleSelectAll}
+                    className="h-3.5 w-3.5 rounded border-border-soft text-gold focus:ring-gold cursor-pointer"
+                    title="Select / Deselect all rows"
+                  />
+                </th>
+              )}
+              {columns.map((c) => (
+                <th key={c.key} className={`whitespace-nowrap px-3 py-1.5 ${totalKeys?.includes(c.key) ? 'text-right' : ''}`}>
+                  {c.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border-soft/60">
+            {pagedRows.map((r, i) => {
+              const rowKey = selection?.getKey ? selection.getKey(r, i) : i;
+              const isSelected = selection?.selectedKeys.has(rowKey);
 
-            return (
-              <tr
-                key={rowKey}
-                onClick={() => selection?.toggleSelectRow(rowKey)}
-                className={`border-b border-border-soft transition-colors cursor-pointer ${
-                  isSelected ? 'bg-gold/10 font-medium' : 'hover:bg-page'
-                }`}
-              >
-                {selection && (
-                  <td className="w-10 px-3 py-2 text-center" onClick={(e) => e.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => selection.toggleSelectRow(rowKey)}
-                      className="h-4 w-4 rounded border-border-soft text-gold focus:ring-gold cursor-pointer"
-                    />
-                  </td>
-                )}
+              return (
+                <tr
+                  key={rowKey}
+                  onClick={() => selection?.toggleSelectRow(rowKey)}
+                  className={`border-b border-border-soft transition-colors cursor-pointer ${
+                    isSelected ? 'bg-gold/10 font-medium' : 'hover:bg-page'
+                  }`}
+                >
+                  {selection && (
+                    <td className="w-8 px-3 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => selection.toggleSelectRow(rowKey)}
+                        className="h-3.5 w-3.5 rounded border-border-soft text-gold focus:ring-gold cursor-pointer"
+                      />
+                    </td>
+                  )}
+                  {columns.map((c) => (
+                    <td key={c.key} className={`whitespace-nowrap px-3 py-1.5 ${totalKeys?.includes(c.key) ? 'text-right' : ''}`}>
+                      {totalKeys?.includes(c.key) ? Number(r[c.key] ?? 0).toFixed(2) : (r[c.key] ?? '-')}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={columns.length + (selection ? 1 : 0)} className="px-3 py-6 text-center text-ink-muted">
+                  No data for this range.
+                </td>
+              </tr>
+            )}
+          </tbody>
+          {totals && rows.length > 0 && (
+            <tfoot className="sticky bottom-0 bg-surface z-10 shadow-inner">
+              <tr className="border-t-2 border-border-soft bg-surface-subtle font-semibold text-ink">
+                {selection && <td className="w-8 px-3 py-1.5"></td>}
                 {columns.map((c) => (
-                  <td key={c.key} className={`whitespace-nowrap px-4 py-2 ${totalKeys?.includes(c.key) ? 'text-right' : ''}`}>
-                    {totalKeys?.includes(c.key) ? Number(r[c.key] ?? 0).toFixed(2) : (r[c.key] ?? '-')}
+                  <td key={c.key} className={`whitespace-nowrap px-3 py-1.5 ${totalKeys.includes(c.key) ? 'text-right' : ''}`}>
+                    {totalKeys.includes(c.key)
+                      ? totals[c.key].toFixed(2)
+                      : c.key === firstKey
+                      ? selectedCount > 0
+                        ? `Total (${selectedCount} selected)`
+                        : 'Grand Total'
+                      : ''}
                   </td>
                 ))}
               </tr>
-            );
-          })}
-          {rows.length === 0 && (
-            <tr>
-              <td colSpan={columns.length + (selection ? 1 : 0)} className="px-4 py-6 text-center text-ink-muted">
-                No data for this range.
-              </td>
-            </tr>
+            </tfoot>
           )}
-        </tbody>
-        {totals && rows.length > 0 && (
-          <tfoot>
-            <tr className="border-t-2 border-ink bg-surface-subtle/30 font-semibold text-ink">
-              {selection && <td className="w-10 px-3 py-2"></td>}
-              {columns.map((c) => (
-                <td key={c.key} className={`whitespace-nowrap px-4 py-2 ${totalKeys.includes(c.key) ? 'text-right' : ''}`}>
-                  {totalKeys.includes(c.key)
-                    ? totals[c.key].toFixed(2)
-                    : c.key === firstKey
-                    ? selectedCount > 0
-                      ? `Total (${selectedCount} selected)`
-                      : 'Grand Total'
-                    : ''}
-                </td>
-              ))}
-            </tr>
-          </tfoot>
-        )}
-      </table>
+        </table>
+      </div>
+      <Pagination page={page} pageSize={10} total={total} onPageChange={setPage} />
     </div>
   );
 }
@@ -405,13 +417,9 @@ const SALES_REPORTS = [
     columns: { branch_name: 'Branch', total_bills: 'Bills', total_items: 'Items', quantity: 'Qty', gross_sales: 'Gross Sales', discount: 'Discount', gst: 'GST', net_sales: 'Net Sales', paid_amount: 'Paid', credit_amount: 'Credit' },
   },
   {
-    key: 'route', label: 'Route Wise', apiPath: 'route-wise-sales', fetch: reportsApi.routeWiseSales, rowKey: 'route_name',
-    columns: { route_name: 'Route', total_bills: 'Bills', customers: 'Customers', quantity: 'Qty', gross_sales: 'Gross Sales', discount: 'Discount', gst: 'GST', net_sales: 'Net Sales', paid_amount: 'Paid', credit_amount: 'Credit' },
-  },
-  {
     key: 'customer', label: 'Customer Wise', apiPath: 'customer-wise-sales', fetch: reportsApi.customerWiseSales, rowKey: 'customer_code',
-    columns: { customer_code: 'Code', customer_name: 'Customer', branch_name: 'Branch', route_name: 'Route', bills: 'Bills', items: 'Items', quantity: 'Qty', gross_sales: 'Gross Sales', discount: 'Discount', gst: 'GST', net_sales: 'Net Sales', paid_amount: 'Paid', credit_amount: 'Credit' },
-    searchable: ['customer_name', 'route_name', 'branch_name'],
+    columns: { customer_code: 'Code', customer_name: 'Customer', branch_name: 'Branch', bills: 'Bills', items: 'Items', quantity: 'Qty', gross_sales: 'Gross Sales', discount: 'Discount', gst: 'GST', net_sales: 'Net Sales', paid_amount: 'Paid', credit_amount: 'Credit' },
+    searchable: ['customer_name', 'branch_name'],
   },
   {
     key: 'supplier', label: 'Supplier Wise', apiPath: 'supplier-wise-sales', fetch: reportsApi.supplierWiseSales, rowKey: 'supplier_name',
@@ -465,6 +473,18 @@ function SalesWiseReportPanel({ report, canExport }) {
     const q = search.trim().toLowerCase();
     return rows.filter((r) => report.searchable.some((k) => String(r[k] || '').toLowerCase().includes(q)));
   }, [rows, search, report.searchable]);
+
+  const {
+    page,
+    setPage,
+    total,
+    paginatedItems: pagedRows,
+    resetPage,
+  } = useClientPagination(filteredRows, 10);
+
+  useEffect(() => {
+    resetPage();
+  }, [search, appliedFrom, appliedTo, resetPage]);
 
   const selection = useTableSelection(filteredRows, (r, i) => r[report.rowKey] || i);
   const selectedCount = selection.selectedCount;
@@ -624,7 +644,7 @@ function SalesWiseReportPanel({ report, canExport }) {
             {query.isError && (
               <tr><td colSpan={Object.keys(report.columns).length + 1} className="px-4 py-6 text-center text-red-400">{query.error?.response?.data?.error || 'Failed to load this report.'}</td></tr>
             )}
-            {!query.isLoading && !query.isError && filteredRows.map((r, i) => {
+            {!query.isLoading && !query.isError && pagedRows.map((r, i) => {
               const rowKey = selection.getKey(r, i);
               const isSelected = selection.selectedKeys.has(rowKey);
 
@@ -675,6 +695,7 @@ function SalesWiseReportPanel({ report, canExport }) {
             </tfoot>
           )}
         </table>
+        <Pagination page={page} pageSize={10} total={total} onPageChange={setPage} />
       </div>
     </div>
   );
@@ -1020,6 +1041,18 @@ function PricingPanel({ type, label, canExport }) {
   const saveMutation = useMutation({ mutationFn: (items) => pricingApi.bulkSave(type, items) });
 
   const rows = query.data || [];
+  const {
+    page,
+    setPage,
+    total,
+    paginatedItems: pagedRows,
+    resetPage,
+  } = useClientPagination(rows, 10);
+
+  useEffect(() => {
+    resetPage();
+  }, [search, type, resetPage]);
+
   const selection = useTableSelection(rows, (r) => r.id);
   const selectedCount = selection.selectedCount;
 
@@ -1187,7 +1220,7 @@ function PricingPanel({ type, label, canExport }) {
             {!query.isLoading && rows.length === 0 && (
               <tr><td colSpan={6} className="px-4 py-6 text-center text-ink-muted">No items found.</td></tr>
             )}
-            {!query.isLoading && rows.map((r) => {
+            {!query.isLoading && pagedRows.map((r) => {
               const edited = Object.prototype.hasOwnProperty.call(edits, r.id);
               const value = edited ? edits[r.id] : (r.price ?? '');
               const isSelected = selection.selectedKeys.has(r.id);
@@ -1230,6 +1263,7 @@ function PricingPanel({ type, label, canExport }) {
             })}
           </tbody>
         </table>
+        <Pagination page={page} pageSize={10} total={total} onPageChange={setPage} />
       </div>
     </div>
   );
@@ -1257,8 +1291,10 @@ export function Reports() {
   if (canAll) tabs.push({ key: 'low-stock', label: 'Low Stock', content: <LowStockPanel canExport={canExport} /> });
 
   return (
-    <div>
-      <h1 className="mb-4 text-2xl font-bold text-ink">Reports</h1>
+    <div className="space-y-2.5">
+      <div className="border-b border-border-soft pb-2">
+        <h1 className="text-xl font-bold text-ink">Reports</h1>
+      </div>
       {tabs.length === 0 ? <p className="text-ink-muted">You don't have access to any reports.</p> : <Tabs tabs={tabs} />}
     </div>
   );

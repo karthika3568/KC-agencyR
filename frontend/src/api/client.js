@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { useBranchStore } from '../store/branchStore';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost/pos/backend/public/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api';
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -23,3 +23,28 @@ apiClient.interceptors.request.use((config) => {
 
   return config;
 });
+
+/**
+ * Resolves request options from either a plain params object or a TanStack Query context.
+ * Prevents TanStack Query internals (queryKey, pageParam, meta) from leaking into URL search params
+ * while attaching any AbortSignal properly to axios request config for cancellation support.
+ */
+export function cleanQueryConfig(paramsOrContext) {
+  if (!paramsOrContext || typeof paramsOrContext !== 'object') {
+    return {};
+  }
+  if (Array.isArray(paramsOrContext.queryKey)) {
+    const config = {};
+    if (paramsOrContext.signal) {
+      config.signal = paramsOrContext.signal;
+    }
+    return config;
+  }
+  const { signal, ...rest } = paramsOrContext;
+  const config = { params: rest };
+  if (signal) {
+    config.signal = signal;
+  }
+  return config;
+}
+

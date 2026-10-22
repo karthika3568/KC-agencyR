@@ -225,42 +225,6 @@ class ReportsController
         ], $stmt->fetchAll(), 'branch_wise_sales.xlsx');
     }
 
-    public function routeWiseSales(): void
-    {
-        $claims = JwtAuthMiddleware::authenticate();
-        PermissionMiddleware::require($claims, 'reports.view_all');
-        [$from, $to] = $this->dateRange();
-
-        $stmt = $this->pdo->prepare(
-            "SELECT COALESCE(r.name, 'Unassigned') AS route_name,
-                    COUNT(DISTINCT inv.id) AS total_bills,
-                    COUNT(DISTINCT inv.customer_id) AS customers,
-                    " . self::SALES_AGGREGATE_SQL . ",
-                    MAX(pay.paid_amount) AS paid_amount, MAX(pay.credit_amount) AS credit_amount
-             FROM invoice_items ii
-             JOIN invoices inv ON inv.id = ii.invoice_id
-             LEFT JOIN customers c ON c.id = inv.customer_id
-             LEFT JOIN routes r ON r.id = c.route_id
-             LEFT JOIN (
-                 SELECT cu.route_id, SUM(iv.paid_amount) AS paid_amount, SUM(iv.balance_due) AS credit_amount
-                 FROM invoices iv
-                 LEFT JOIN customers cu ON cu.id = iv.customer_id
-                 WHERE iv.status = 'completed' AND iv.invoice_date BETWEEN :from2 AND :to2
-                 GROUP BY cu.route_id
-             ) pay ON pay.route_id <=> c.route_id
-             WHERE inv.branch_id = :b AND inv.status = 'completed' AND inv.invoice_date BETWEEN :from AND :to
-             GROUP BY c.route_id, r.name
-             ORDER BY net_sales DESC"
-        );
-        $stmt->execute(['b' => $this->resolveBranchId($claims), 'from' => $from, 'to' => $to, 'from2' => $from, 'to2' => $to]);
-
-        $this->output($claims, [
-            'route_name' => 'Route', 'total_bills' => 'Total Bills', 'customers' => 'Customers',
-            'quantity' => 'Quantity', 'gross_sales' => 'Gross Sales', 'discount' => 'Discount',
-            'gst' => 'GST', 'net_sales' => 'Net Sales', 'paid_amount' => 'Paid Amount', 'credit_amount' => 'Credit Amount',
-        ], $stmt->fetchAll(), 'route_wise_sales.xlsx');
-    }
-
     public function customerWiseSales(): void
     {
         $claims = JwtAuthMiddleware::authenticate();
@@ -269,7 +233,7 @@ class ReportsController
 
         $stmt = $this->pdo->prepare(
             "SELECT c.id AS customer_code, c.ledger_name AS customer_name,
-                    br.branch_name AS branch_name, COALESCE(r.name, 'Unassigned') AS route_name,
+                    br.branch_name AS branch_name,
                     COUNT(DISTINCT inv.id) AS bills,
                     COUNT(DISTINCT ii.item_id) AS items,
                     " . self::SALES_AGGREGATE_SQL . ",
@@ -278,7 +242,6 @@ class ReportsController
              JOIN invoices inv ON inv.id = ii.invoice_id
              JOIN customers c ON c.id = inv.customer_id
              JOIN branches br ON br.id = c.branch_id
-             LEFT JOIN routes r ON r.id = c.route_id
              LEFT JOIN (
                  SELECT customer_id, SUM(paid_amount) AS paid_amount, SUM(balance_due) AS credit_amount
                  FROM invoices
@@ -286,14 +249,14 @@ class ReportsController
                  GROUP BY customer_id
              ) pay ON pay.customer_id = c.id
              WHERE inv.branch_id = :b AND inv.status = 'completed' AND inv.invoice_date BETWEEN :from AND :to
-             GROUP BY c.id, c.ledger_name, br.branch_name, r.name
+             GROUP BY c.id, c.ledger_name, br.branch_name
              ORDER BY net_sales DESC"
         );
         $branchId = $this->resolveBranchId($claims);
         $stmt->execute(['b' => $branchId, 'b2' => $branchId, 'from' => $from, 'to' => $to, 'from2' => $from, 'to2' => $to]);
 
         $this->output($claims, [
-            'customer_code' => 'Customer Code', 'customer_name' => 'Customer', 'branch_name' => 'Branch', 'route_name' => 'Route',
+            'customer_code' => 'Customer Code', 'customer_name' => 'Customer', 'branch_name' => 'Branch',
             'bills' => 'Bills', 'items' => 'Items',
             'quantity' => 'Quantity', 'gross_sales' => 'Gross Sales', 'discount' => 'Discount',
             'gst' => 'GST', 'net_sales' => 'Net Sales', 'paid_amount' => 'Paid Amount', 'credit_amount' => 'Credit Amount',

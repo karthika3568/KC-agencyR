@@ -11,7 +11,7 @@ class ItemModel
 {
     /** Columns a caller may write directly on the items row. */
     private const WRITABLE_COLUMNS = [
-        'item_name', 'category_id', 'brand_id', 'product_line_id', 'supplier_id', 'hsn_code', 'barcode',
+        'item_name', 'category_id', 'brand_id', 'supplier_id', 'hsn_code', 'barcode',
         'base_unit_id', 'secondary_unit_id', 'conversion_factor', 'purchase_price', 'cost_price',
         'wholesale_price', 'retail_price', 'mrp', 'net_srate', 'net_purrate',
         'secondary_mrp', 'secondary_net_srate', 'secondary_net_purrate',
@@ -94,14 +94,13 @@ class ItemModel
     private const LIST_SELECT = "
         SELECT i.*,
                (SELECT COALESCE(SUM(sm.qty_change), 0) FROM stock_movements sm WHERE sm.item_id = i.id AND sm.movement_type = 'opening_stock') AS opening_stock,
-               c.name AS category_name, b.name AS brand_name, pl.name AS product_line_name,
+               c.name AS category_name, b.name AS brand_name,
                s.name AS supplier_name,
                bu.short_code AS base_unit_code, su.short_code AS secondary_unit_code,
                tc.code AS tax_code, tc.gst_percent, tc.cess_percent
         FROM items i
         LEFT JOIN categories c ON c.id = i.category_id
         LEFT JOIN brands b ON b.id = i.brand_id
-        LEFT JOIN product_lines pl ON pl.id = i.product_line_id
         LEFT JOIN suppliers s ON s.id = i.supplier_id
         LEFT JOIN stock_units bu ON bu.id = i.base_unit_id
         LEFT JOIN stock_units su ON su.id = i.secondary_unit_id

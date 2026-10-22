@@ -1,18 +1,21 @@
-import { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useState, useMemo } from 'react';
+import { useSearchParams, Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  RefreshCw, Plus, Trash2, Eye, Printer, Ban, CheckCircle2, Image as ImageIcon, X, Search
+  RefreshCw, Plus, Trash2, Eye, Printer, Ban, CheckCircle2, Image as ImageIcon, X, Search,
+  Truck, Receipt, AlertTriangle
 } from 'lucide-react';
 import { itemsApi } from '../api/catalog';
-import { customersApi, suppliersApi, routesApi } from '../api/parties';
+import { customersApi, suppliersApi } from '../api/parties';
 import { usersApi } from '../api/users';
-import { purchaseRequestsApi, purchasesApi, routeSuppliersApi, customerPrebookingsApi } from '../api/purchasing';
+import { purchaseRequestsApi, purchasesApi, customerPrebookingsApi, stockHubApi } from '../api/purchasing';
 import { resolveImageUrl } from '../utils/media';
 import { Tabs } from '../components/Tabs.jsx';
 import { Card } from '../components/Card.jsx';
 import { Badge } from '../components/Badge.jsx';
 import { Button } from '../components/Button.jsx';
+import { Pagination } from '../components/Pagination.jsx';
+import { useClientPagination } from '../hooks/useClientPagination';
 import { usePermission } from '../hooks/usePermission';
 
 const BOOKING_SOURCES = [
@@ -36,7 +39,7 @@ const REQUEST_STATUS_VARIANT = {
   open: 'warning', approved: 'gold', partially_received: 'gold', converted_to_grn: 'success', cancelled: 'danger',
 };
 
-function ItemLineEditor({ lines, setLines, items, rateLabel = 'Rate' }) {
+function ItemLineEditor({ lines, setLines, items, stockByItemId = {}, rateLabel = 'Rate' }) {
   const addLine = () => setLines((prev) => [...prev, { item_id: '', qty: 1, rate: 0 }]);
   const updateLine = (idx, patch) => setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
   const removeLine = (idx) => setLines((prev) => prev.filter((_, i) => i !== idx));
@@ -47,6 +50,10 @@ function ItemLineEditor({ lines, setLines, items, rateLabel = 'Rate' }) {
       {lines.map((line, idx) => {
         const item = itemById(line.item_id);
         const lineTotal = Number(line.qty || 0) * Number(line.rate || 0);
+        const stockInfo = line.item_id ? stockByItemId[Number(line.item_id)] : null;
+        const availableStock = stockInfo ? stockInfo.qty : 0;
+        const isOverStock = stockInfo && Number(line.qty) > availableStock;
+
         return (
           <div key={idx} className="flex flex-wrap items-center gap-2 rounded-lg border border-border-soft p-2">
             <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded bg-page">
@@ -68,11 +75,15 @@ function ItemLineEditor({ lines, setLines, items, rateLabel = 'Rate' }) {
               className="input w-48 text-xs"
             >
               <option value="">Select item</option>
-              {items.map((i) => (
-                <option key={i.id} value={i.id}>
-                  {i.item_name} ({i.item_code})
-                </option>
-              ))}
+              {items.map((i) => {
+                const s = stockByItemId[i.id];
+                const stockStr = s !== undefined ? ` [Stock: ${s.qty}]` : '';
+                return (
+                  <option key={i.id} value={i.id}>
+                    {i.item_name} ({i.item_code}){stockStr}
+                  </option>
+                );
+              })}
             </select>
             <input
               type="number"
@@ -92,6 +103,21 @@ function ItemLineEditor({ lines, setLines, items, rateLabel = 'Rate' }) {
               onChange={(e) => updateLine(idx, { rate: e.target.value })}
               className="input w-24 text-xs"
             />
+            {stockInfo && (
+              <span
+                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium ${
+                  availableStock <= 0
+                    ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                    : isOverStock
+                    ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                    : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                }`}
+                title={availableStock <= 0 ? 'Out of stock in warehouse' : isOverStock ? 'Order quantity exceeds warehouse stock' : 'Stock available in warehouse'}
+              >
+                Stock: {availableStock} {stockInfo.unit}
+                {isOverStock && <AlertTriangle size={11} className="text-amber-400" />}
+              </span>
+            )}
             {item?.gst_percent > 0 && <Badge variant="gst">GST {item.gst_percent}%</Badge>}
             <span className="ml-auto text-xs font-semibold text-ink">₹{lineTotal.toFixed(2)}</span>
             <button type="button" onClick={() => removeLine(idx)} className="text-danger hover:opacity-80">
@@ -134,7 +160,7 @@ function PrebookingPrintView({ data, onClose }) {
           </Button>
         </div>
         <div className="mb-4 text-center">
-          <div className="font-display text-2xl font-bold text-gold">AJ AGENCY</div>
+          <div className="font-display text-2xl font-bold text-gold">KC AGENCY</div>
           <div className="text-xs text-ink-muted">Distributor Management System</div>
           <div className="mt-2 inline-block rounded bg-page px-3 py-1 text-xs font-bold uppercase tracking-wide">
             Pre-Booking / Order Request
@@ -146,10 +172,11 @@ function PrebookingPrintView({ data, onClose }) {
           <div><b>Date:</b> {data.created_at}</div>
           <div><b>Customer:</b> {data.customer_name}</div>
           <div><b>Phone:</b> {data.customer_phone || '-'}</div>
-          <div><b>Route:</b> {data.route_name || '-'}</div>
           <div><b>Booking Source:</b> {data.booking_source}</div>
           <div><b>Salesman/Employee:</b> {data.employee_name || '-'}</div>
           <div><b>Status:</b> {data.status}</div>
+          {data.issue_no && <div><b>Van Issue:</b> {data.issue_no}</div>}
+          {data.invoice_no && <div><b>Invoice Bill:</b> {data.invoice_no}</div>}
         </div>
         <table className="mb-3 w-full border-collapse text-xs">
           <thead>
@@ -191,15 +218,13 @@ function PrebookingPrintView({ data, onClose }) {
   );
 }
 
-function PrebookingEditModal({ booking, onClose }) {
+function PrebookingEditModal({ booking, stockByItemId = {}, onClose }) {
   const queryClient = useQueryClient();
   const customersQuery = useQuery({ queryKey: ['customers'], queryFn: customersApi.list });
-  const routesQuery = useQuery({ queryKey: ['routes'], queryFn: routesApi.list });
   const usersQuery = useQuery({ queryKey: ['users'], queryFn: usersApi.list });
   const itemsQuery = useQuery({ queryKey: ['items', ''], queryFn: () => itemsApi.list('') });
 
   const [customerId, setCustomerId] = useState(booking?.customer_id ?? '');
-  const [routeId, setRouteId] = useState(booking?.route_id ?? '');
   const [employeeId, setEmployeeId] = useState(booking?.employee_id ?? '');
   const [bookingSource, setBookingSource] = useState(booking?.booking_source ?? 'direct');
   const [notes, setNotes] = useState(booking?.notes ?? '');
@@ -212,7 +237,6 @@ function PrebookingEditModal({ booking, onClose }) {
 
   const items = itemsQuery.data || [];
   const customers = customersQuery.data || [];
-  const routes = routesQuery.data || [];
   const users = usersQuery.data || [];
 
   const validLines = lines.filter((l) => l.item_id);
@@ -228,7 +252,6 @@ function PrebookingEditModal({ booking, onClose }) {
     setError('');
     const payload = {
       customer_id: Number(customerId),
-      route_id: routeId ? Number(routeId) : null,
       employee_id: employeeId ? Number(employeeId) : null,
       booking_source: bookingSource,
       notes: notes || null,
@@ -265,14 +288,7 @@ function PrebookingEditModal({ booking, onClose }) {
               {BOOKING_SOURCES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
           </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-ink-muted">Route</span>
-            <select value={routeId} onChange={(e) => setRouteId(e.target.value)} className="input">
-              <option value="">--</option>
-              {routes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1">
+          <label className="flex flex-col gap-1 col-span-2">
             <span className="text-xs font-medium text-ink-muted">Salesman / Employee</span>
             <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className="input">
               <option value="">--</option>
@@ -283,7 +299,7 @@ function PrebookingEditModal({ booking, onClose }) {
 
         <div className="mb-3">
           <div className="mb-1 text-xs font-medium text-ink-muted">Items</div>
-          <ItemLineEditor lines={lines} setLines={setLines} items={items} />
+          <ItemLineEditor lines={lines} setLines={setLines} items={items} stockByItemId={stockByItemId} />
         </div>
 
         <label className="mb-3 flex flex-col gap-1">
@@ -312,6 +328,103 @@ function PrebookingEditModal({ booking, onClose }) {
   );
 }
 
+function PrebookingDispatchModal({ booking, onClose, onSuccess }) {
+  const usersQuery = useQuery({ queryKey: ['users'], queryFn: usersApi.list });
+  const [salesmanId, setSalesmanId] = useState(booking?.employee_id || '');
+  const [notes, setNotes] = useState(`Dispatched order ${booking?.prebooking_no || ''}`);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const users = usersQuery.data || [];
+
+  const handleDispatch = async () => {
+    if (!salesmanId) {
+      setError('Please select a salesman / van employee');
+      return;
+    }
+    setError('');
+    setIsSubmitting(true);
+    try {
+      await customerPrebookingsApi.dispatchVan(booking.id, {
+        employee_id: Number(salesmanId),
+        notes,
+      });
+      onSuccess?.();
+      onClose();
+    } catch (err) {
+      setError(err?.response?.data?.error || 'Failed to dispatch to van');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-4">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto card p-5 space-y-4">
+        <div className="flex items-center justify-between border-b border-border-soft pb-2.5">
+          <div className="flex items-center gap-2">
+            <Truck className="w-5 h-5 text-gold" />
+            <span className="text-base font-semibold text-ink">Dispatch to Van / Salesman</span>
+          </div>
+          <button onClick={onClose} className="rounded p-1 text-ink-muted hover:bg-page"><X size={18} /></button>
+        </div>
+
+        <div className="text-xs text-ink-muted">
+          Order <b className="text-ink">{booking.prebooking_no}</b> for <b className="text-ink">{booking.customer_name}</b> will be issued from branch warehouse stock directly to the selected salesman / van.
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-ink-muted block mb-1">Select Salesman / Van Driver *</label>
+          <select
+            value={salesmanId}
+            onChange={(e) => setSalesmanId(e.target.value)}
+            className="input w-full text-xs"
+          >
+            <option value="">-- Select Salesman / Van --</option>
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name} ({u.role || 'Staff'})
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-ink-muted block mb-1">Dispatch Notes</label>
+          <input
+            type="text"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            className="input w-full text-xs"
+            placeholder="e.g. Van delivery morning route"
+          />
+        </div>
+
+        <div className="rounded-lg bg-page p-3 border border-border-soft">
+          <div className="text-xs font-semibold text-ink mb-1.5">Items to Issue:</div>
+          <div className="max-h-40 overflow-y-auto space-y-1 text-xs">
+            {(booking.items || []).map((it, idx) => (
+              <div key={idx} className="flex justify-between text-ink-muted">
+                <span>{it.item_name}</span>
+                <span className="font-semibold text-ink">{it.qty} Qty</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {error && <div className="text-xs text-rose-400 bg-rose-950/40 p-2 rounded border border-rose-800/40">{error}</div>}
+
+        <div className="flex justify-end gap-2 pt-2 border-t border-border-soft">
+          <Button variant="secondary" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" onClick={handleDispatch} loading={isSubmitting} disabled={!salesmanId}>
+            Confirm Dispatch
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CustomerPrebookingPanel() {
   const canCreate = usePermission('orders.create_prebooking');
   const canManageStatus = usePermission('orders.manage_prebooking_status');
@@ -321,10 +434,10 @@ function CustomerPrebookingPanel() {
   const [editingBooking, setEditingBooking] = useState(null);
   const [printingId, setPrintingId] = useState(null);
   const [viewingId, setViewingId] = useState(null);
+  const [dispatchingBooking, setDispatchingBooking] = useState(null);
 
   // Left side form state
   const [customerId, setCustomerId] = useState('');
-  const [routeId, setRouteId] = useState('');
   const [employeeId, setEmployeeId] = useState('');
   const [bookingSource, setBookingSource] = useState('direct');
   const [notes, setNotes] = useState('');
@@ -334,9 +447,24 @@ function CustomerPrebookingPanel() {
 
   const listQuery = useQuery({ queryKey: ['customer-prebookings'], queryFn: customerPrebookingsApi.list });
   const customersQuery = useQuery({ queryKey: ['customers'], queryFn: customersApi.list });
-  const routesQuery = useQuery({ queryKey: ['routes'], queryFn: routesApi.list });
   const usersQuery = useQuery({ queryKey: ['users'], queryFn: usersApi.list });
   const itemsQuery = useQuery({ queryKey: ['items', ''], queryFn: () => itemsApi.list('') });
+  const stockQuery = useQuery({
+    queryKey: ['stock-hub', 'branch'],
+    queryFn: () => stockHubApi.list({ owner_type: 'branch' }),
+  });
+
+  const stockByItemId = useMemo(() => {
+    const map = {};
+    (stockQuery.data || []).forEach((row) => {
+      const id = Number(row.item_id);
+      if (!map[id]) {
+        map[id] = { qty: 0, unit: row.unit_code || '' };
+      }
+      map[id].qty += Number(row.quantity_on_hand || 0);
+    });
+    return map;
+  }, [stockQuery.data]);
 
   const printQuery = useQuery({
     queryKey: ['customer-prebooking', printingId],
@@ -369,7 +497,6 @@ function CustomerPrebookingPanel() {
 
   const resetForm = () => {
     setCustomerId('');
-    setRouteId('');
     setEmployeeId('');
     setBookingSource('direct');
     setNotes('');
@@ -384,7 +511,6 @@ function CustomerPrebookingPanel() {
 
   const items = itemsQuery.data || [];
   const customers = customersQuery.data || [];
-  const routes = routesQuery.data || [];
   const users = usersQuery.data || [];
 
   const handleFormSubmit = async (e) => {
@@ -403,7 +529,6 @@ function CustomerPrebookingPanel() {
     try {
       await createMutation.mutateAsync({
         customer_id: Number(customerId),
-        route_id: routeId ? Number(routeId) : null,
         employee_id: employeeId ? Number(employeeId) : null,
         booking_source: bookingSource,
         notes: notes || null,
@@ -429,31 +554,33 @@ function CustomerPrebookingPanel() {
     );
   });
 
+  const prebookingPagination = useClientPagination(rows, 10);
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-2.5">
       {successMsg && (
-        <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs px-4 py-2.5 rounded-lg flex items-center gap-2">
+        <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4" />
           {successMsg}
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+      <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
         {/* Left Column Form */}
         <div className="lg:col-span-5">
-          <div className="card p-5 space-y-4 sticky top-6">
-            <div className="border-b border-border-soft pb-3">
-              <h2 className="font-semibold text-ink text-base flex items-center gap-2">
+          <div className="card p-3.5 space-y-2.5 sticky top-3">
+            <div className="border-b border-border-soft pb-2">
+              <h2 className="font-semibold text-ink text-sm sm:text-base flex items-center gap-2">
                 <Plus className="w-4 h-4 text-emerald-400" />
                 New Customer Pre-Booking
               </h2>
             </div>
 
-            <form onSubmit={handleFormSubmit} className="space-y-3">
-              {formError && <div className="text-xs text-red-400 bg-red-950/40 p-2.5 rounded border border-red-800/40">{formError}</div>}
+            <form onSubmit={handleFormSubmit} className="space-y-2">
+              {formError && <div className="text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{formError}</div>}
 
               <div>
-                <label className="text-xs font-medium text-ink-muted block mb-1">Customer *</label>
+                <label className="text-xs font-medium text-ink-muted block mb-0.5">Customer *</label>
                 <select
                   required
                   value={customerId}
@@ -471,7 +598,7 @@ function CustomerPrebookingPanel() {
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-xs font-medium text-ink-muted block mb-1">Booking Source</label>
+                  <label className="text-xs font-medium text-ink-muted block mb-0.5">Booking Source</label>
                   <select
                     value={bookingSource}
                     onChange={(e) => setBookingSource(e.target.value)}
@@ -484,45 +611,30 @@ function CustomerPrebookingPanel() {
                     ))}
                   </select>
                 </div>
+
                 <div>
-                  <label className="text-xs font-medium text-ink-muted block mb-1">Route</label>
+                  <label className="text-xs font-medium text-ink-muted block mb-0.5">Salesman / Employee</label>
                   <select
-                    value={routeId}
-                    onChange={(e) => setRouteId(e.target.value)}
+                    value={employeeId}
+                    onChange={(e) => setEmployeeId(e.target.value)}
                     className="input w-full"
                   >
                     <option value="">-- None --</option>
-                    {routes.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.name}
+                    {users.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name}
                       </option>
                     ))}
                   </select>
                 </div>
               </div>
 
-              <div>
-                <label className="text-xs font-medium text-ink-muted block mb-1">Salesman / Employee</label>
-                <select
-                  value={employeeId}
-                  onChange={(e) => setEmployeeId(e.target.value)}
-                  className="input w-full"
-                >
-                  <option value="">-- None --</option>
-                  {users.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <ItemLineEditor lines={lines} setLines={setLines} items={items} />
+              <ItemLineEditor lines={lines} setLines={setLines} items={items} stockByItemId={stockByItemId} />
 
               <div>
-                <label className="text-xs font-medium text-ink-muted block mb-1">Notes / Instructions</label>
+                <label className="text-xs font-medium text-ink-muted block mb-0.5">Notes / Instructions</label>
                 <textarea
-                  rows="2"
+                  rows="1"
                   placeholder="Delivery notes, special instructions..."
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
@@ -531,7 +643,7 @@ function CustomerPrebookingPanel() {
               </div>
 
               {canCreate && (
-                <div className="pt-2">
+                <div className="pt-1">
                   <Button type="submit" variant="primary" loading={createMutation.isPending} disabled={!customerId} className="w-full">
                     Create Pre-Booking
                   </Button>
@@ -542,16 +654,19 @@ function CustomerPrebookingPanel() {
         </div>
 
         {/* Right Column Table */}
-        <div className="lg:col-span-7 space-y-4">
-          <div className="card p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="relative w-full sm:w-72">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
+        <div className="lg:col-span-7 space-y-2.5">
+          <div className="card p-2.5 flex flex-col sm:flex-row items-center justify-between gap-2">
+            <div className="relative w-full sm:w-64">
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
               <input
                 type="text"
                 placeholder="Search pre-bookings..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="input pl-9 w-full text-xs"
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  prebookingPagination.resetPage();
+                }}
+                className="input pl-8 w-full text-xs"
               />
             </div>
             <div className="flex items-center gap-2">
@@ -563,41 +678,52 @@ function CustomerPrebookingPanel() {
           </div>
 
           <div className="card overflow-hidden">
-            <div className="px-5 py-4 border-b border-border-soft flex items-center justify-between">
-              <h3 className="font-semibold text-ink text-sm">Customer Pre-Bookings Register</h3>
+            <div className="px-3.5 py-2 border-b border-border-soft flex items-center justify-between">
+              <h3 className="font-semibold text-ink text-xs sm:text-sm">Customer Pre-Bookings Register</h3>
             </div>
-            <div className="overflow-x-auto">
+            <div className="max-h-[calc(100vh-240px)] overflow-y-auto">
               <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-border-soft bg-surface-subtle/30 text-ink-muted font-medium">
-                    <th className="px-4 py-3">Order #</th>
-                    <th className="px-4 py-3">Date</th>
-                    <th className="px-4 py-3">Customer</th>
-                    <th className="px-4 py-3">Est. Total</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3 text-right">Actions</th>
+                <thead className="sticky top-0 bg-page z-10">
+                  <tr className="border-b border-border-soft uppercase text-ink-muted font-medium">
+                    <th className="px-3 py-1.5">Order #</th>
+                    <th className="px-3 py-1.5">Date</th>
+                    <th className="px-3 py-1.5">Customer</th>
+                    <th className="px-3 py-1.5">Est. Total</th>
+                    <th className="px-3 py-1.5">Status</th>
+                    <th className="px-3 py-1.5 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border-soft/60">
-                  {rows.map((r) => {
+                  {prebookingPagination.pagedItems.map((r) => {
                     const statusKey = r.status || 'pending';
                     return (
-                      <tr key={r.id} className="hover:bg-surface-subtle/20 transition">
-                        <td className="px-4 py-3 font-mono font-medium text-ink">{r.prebooking_no}</td>
-                        <td className="px-4 py-3 text-ink-muted">{r.created_at?.slice(0, 10)}</td>
-                        <td className="px-4 py-3 font-medium text-ink">
+                      <tr key={r.id} className="hover:bg-page/50 transition">
+                        <td className="px-3 py-1.5 font-mono font-medium text-ink">{r.prebooking_no}</td>
+                        <td className="px-3 py-1.5 text-ink-muted">{r.created_at?.slice(0, 10)}</td>
+                        <td className="px-3 py-1.5 font-medium text-ink">
                           {r.customer_name}
-                          {r.route_name && <div className="text-[10px] text-ink-muted">{r.route_name}</div>}
                         </td>
-                        <td className="px-4 py-3 font-semibold text-emerald-400">
+                        <td className="px-3 py-1.5 font-semibold text-emerald-400">
                           ₹{Number(r.estimated_total || 0).toFixed(2)}
                         </td>
-                        <td className="px-4 py-3">
-                          <Badge variant={PREBOOKING_STATUS_VARIANT[statusKey] || 'warning'}>
-                            {statusKey.replace(/_/g, ' ')}
-                          </Badge>
+                        <td className="px-3 py-1.5">
+                          <div className="flex flex-col gap-1 items-start">
+                            <Badge variant={PREBOOKING_STATUS_VARIANT[statusKey] || 'warning'}>
+                              {statusKey.replace(/_/g, ' ')}
+                            </Badge>
+                            {r.issue_no && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20" title={`Van Issue: ${r.issue_no}`}>
+                                <Truck size={10} /> {r.issue_no}
+                              </span>
+                            )}
+                            {r.invoice_no && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20" title={`Invoice: ${r.invoice_no}`}>
+                                <Receipt size={10} /> {r.invoice_no}
+                              </span>
+                            )}
+                          </div>
                         </td>
-                        <td className="px-4 py-3 text-right space-x-1">
+                        <td className="px-3 py-1.5 text-right space-x-1">
                           <button
                             title="View Details"
                             onClick={() => setViewingId(r.id)}
@@ -612,6 +738,24 @@ function CustomerPrebookingPanel() {
                           >
                             <Printer className="w-3.5 h-3.5" />
                           </button>
+                          {statusKey !== 'completed' && statusKey !== 'cancelled' && !r.invoice_id && (
+                            <Link
+                              to={`/pos?prebooking_id=${r.id}`}
+                              title="Convert to Bill in POS"
+                              className="p-1 rounded hover:bg-surface-subtle text-ink-muted hover:text-emerald-400 transition inline-block align-middle"
+                            >
+                              <Receipt className="w-3.5 h-3.5" />
+                            </Link>
+                          )}
+                          {statusKey !== 'completed' && statusKey !== 'cancelled' && !r.van_issue_id && (
+                            <button
+                              title="Dispatch to Van"
+                              onClick={() => setDispatchingBooking(r)}
+                              className="p-1 rounded hover:bg-surface-subtle text-ink-muted hover:text-gold transition inline-block align-middle"
+                            >
+                              <Truck className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                           {canCreate && statusKey === 'pending' && (
                             <button
                               title="Edit"
@@ -647,7 +791,7 @@ function CustomerPrebookingPanel() {
                       </tr>
                     );
                   })}
-                  {rows.length === 0 && (
+                  {prebookingPagination.total === 0 && (
                     <tr>
                       <td colSpan={6} className="px-4 py-8 text-center text-ink-muted text-xs">
                         No customer pre-bookings found.
@@ -657,12 +801,24 @@ function CustomerPrebookingPanel() {
                 </tbody>
               </table>
             </div>
+            <Pagination page={prebookingPagination.page} pageSize={10} total={prebookingPagination.total} onPageChange={prebookingPagination.setPage} />
           </div>
         </div>
       </div>
 
       {editingBooking && (
-        <PrebookingEditModal booking={editingBooking} onClose={() => setEditingBooking(null)} />
+        <PrebookingEditModal booking={editingBooking} stockByItemId={stockByItemId} onClose={() => setEditingBooking(null)} />
+      )}
+      {dispatchingBooking && (
+        <PrebookingDispatchModal
+          booking={dispatchingBooking}
+          onClose={() => setDispatchingBooking(null)}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ['customer-prebookings'] });
+            queryClient.invalidateQueries({ queryKey: ['stock-hub'] });
+            showSuccess('Order dispatched to van! Stock issued successfully.');
+          }}
+        />
       )}
       {printingId && printQuery.data && (
         <PrebookingPrintView data={printQuery.data} onClose={() => setPrintingId(null)} />
@@ -672,13 +828,26 @@ function CustomerPrebookingPanel() {
           <div className="max-h-[85vh] w-[560px] overflow-auto card p-5">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-lg font-semibold text-ink">{viewQuery.data.prebooking_no}</span>
-              <Badge variant={PREBOOKING_STATUS_VARIANT[viewQuery.data.status] || 'warning'}>
-                {viewQuery.data.status}
-              </Badge>
+              <div className="flex items-center gap-1.5">
+                <Badge variant={PREBOOKING_STATUS_VARIANT[viewQuery.data.status] || 'warning'}>
+                  {viewQuery.data.status}
+                </Badge>
+                {viewQuery.data.issue_no && (
+                  <span className="text-[11px] font-medium text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30 flex items-center gap-1">
+                    <Truck size={12} /> {viewQuery.data.issue_no}
+                  </span>
+                )}
+                {viewQuery.data.invoice_no && (
+                  <span className="text-[11px] font-medium text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30 flex items-center gap-1">
+                    <Receipt size={12} /> {viewQuery.data.invoice_no}
+                  </span>
+                )}
+              </div>
             </div>
             <div className="mb-3 text-xs text-ink-muted">
-              {viewQuery.data.customer_name} · {viewQuery.data.route_name || 'No route'} · via{' '}
+              {viewQuery.data.customer_name} · via{' '}
               {viewQuery.data.booking_source}
+              {viewQuery.data.employee_name && ` · Salesman: ${viewQuery.data.employee_name}`}
             </div>
             <table className="mb-3 w-full text-xs">
               <thead>
@@ -686,6 +855,7 @@ function CustomerPrebookingPanel() {
                   <th className="py-1">Item</th>
                   <th className="py-1">Qty</th>
                   <th className="py-1">Rate</th>
+                  <th className="py-1 text-right">Amount</th>
                 </tr>
               </thead>
               <tbody>
@@ -694,12 +864,36 @@ function CustomerPrebookingPanel() {
                     <td className="py-1">{l.item_name}</td>
                     <td className="py-1">{l.qty}</td>
                     <td className="py-1">₹{l.rate}</td>
+                    <td className="py-1 text-right">₹{(Number(l.qty) * Number(l.rate)).toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
             {viewQuery.data.notes && <p className="mb-3 text-xs text-ink-muted">Notes: {viewQuery.data.notes}</p>}
-            <div className="flex justify-end">
+            <div className="flex items-center justify-between pt-2 border-t border-border-soft">
+              <div className="flex items-center gap-2">
+                {viewQuery.data.status !== 'completed' && viewQuery.data.status !== 'cancelled' && !viewQuery.data.invoice_id && (
+                  <Link
+                    to={`/pos?prebooking_id=${viewQuery.data.id}`}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 text-xs font-semibold hover:bg-emerald-500/25 transition border border-emerald-500/30"
+                  >
+                    <Receipt size={14} /> Convert to Bill in POS
+                  </Link>
+                )}
+                {viewQuery.data.status !== 'completed' && viewQuery.data.status !== 'cancelled' && !viewQuery.data.van_issue_id && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const booking = viewQuery.data;
+                      setViewingId(null);
+                      setDispatchingBooking(booking);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/15 text-amber-400 text-xs font-semibold hover:bg-amber-500/25 transition border border-amber-500/30"
+                  >
+                    <Truck size={14} /> Dispatch to Van
+                  </button>
+                )}
+              </div>
               <Button variant="secondary" onClick={() => setViewingId(null)}>
                 Close
               </Button>
@@ -730,7 +924,7 @@ function RequestPrintView({ data, onClose }) {
           </Button>
         </div>
         <div className="mb-4 text-center">
-          <div className="font-display text-2xl font-bold text-gold">AJ AGENCY</div>
+          <div className="font-display text-2xl font-bold text-gold">KC AGENCY</div>
           <div className="text-xs text-ink-muted">Distributor Management System</div>
           <div className="mt-2 inline-block rounded bg-page px-3 py-1 text-xs font-bold uppercase tracking-wide">
             Supplier Purchase Request / Indent
@@ -742,7 +936,6 @@ function RequestPrintView({ data, onClose }) {
           <div><b>Date:</b> {data.created_at}</div>
           <div><b>Supplier:</b> {data.supplier_name}</div>
           <div><b>Supplier Phone:</b> {data.supplier_phone || '-'}</div>
-          <div><b>Route:</b> {data.route_name || '-'}</div>
           <div><b>Requested By:</b> {data.created_by_name || '-'}</div>
           <div><b>Status:</b> {data.status}</div>
         </div>
@@ -893,7 +1086,6 @@ function SupplierRequestPanel() {
   const canGrn = usePermission('purchases.create_grn');
   const queryClient = useQueryClient();
 
-  const [routeId, setRouteId] = useState('');
   const [supplierId, setSupplierId] = useState('');
   const [notes, setNotes] = useState('');
   const [lines, setLines] = useState([{ item_id: '', qty: 1, rate: 0 }]);
@@ -904,14 +1096,8 @@ function SupplierRequestPanel() {
   const [converting, setConverting] = useState(null);
 
   const requestsQuery = useQuery({ queryKey: ['purchase-requests'], queryFn: purchaseRequestsApi.list });
-  const routesQuery = useQuery({ queryKey: ['routes'], queryFn: routesApi.list });
   const suppliersQuery = useQuery({ queryKey: ['suppliers'], queryFn: suppliersApi.list });
   const itemsQuery = useQuery({ queryKey: ['items', ''], queryFn: () => itemsApi.list('') });
-  const mappedSuppliersQuery = useQuery({
-    queryKey: ['route-suppliers', routeId],
-    queryFn: () => routeSuppliersApi.get(routeId),
-    enabled: !!routeId,
-  });
   const printQuery = useQuery({
     queryKey: ['purchase-request', printingId],
     queryFn: () => purchaseRequestsApi.get(printingId),
@@ -947,7 +1133,6 @@ function SupplierRequestPanel() {
 
   const resetForm = () => {
     setSupplierId('');
-    setRouteId('');
     setNotes('');
     setLines([{ item_id: '', qty: 1, rate: 0 }]);
     setFormError('');
@@ -958,14 +1143,9 @@ function SupplierRequestPanel() {
     setTimeout(() => setSuccessMsg(''), 3000);
   };
 
-  const allSuppliers = suppliersQuery.data || [];
-  const mappedIds = mappedSuppliersQuery.data?.supplier_ids;
-  const suppliers =
-    routeId && mappedIds && mappedIds.length > 0 ? allSuppliers.filter((s) => mappedIds.includes(s.id)) : allSuppliers;
-
+  const suppliers = suppliersQuery.data || [];
   const requests = requestsQuery.data || [];
   const items = itemsQuery.data || [];
-  const routes = routesQuery.data || [];
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -983,7 +1163,6 @@ function SupplierRequestPanel() {
     try {
       await createMutation.mutateAsync({
         supplier_id: Number(supplierId),
-        route_id: routeId ? Number(routeId) : null,
         notes: notes || null,
         items: validLines.map((l) => ({ item_id: Number(l.item_id), qty: Number(l.qty), rate: Number(l.rate) })),
       });
@@ -998,55 +1177,38 @@ function SupplierRequestPanel() {
     return (
       (r.request_no || '').toLowerCase().includes(q) ||
       (r.supplier_name || '').toLowerCase().includes(q) ||
-      (r.route_name || '').toLowerCase().includes(q) ||
       (r.status || '').toLowerCase().includes(q)
     );
   });
 
+  const requestPagination = useClientPagination(filteredRequests, 10);
+
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-2.5">
       {successMsg && (
-        <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs px-4 py-2.5 rounded-lg flex items-center gap-2">
+        <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4" />
           {successMsg}
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+      <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
         {/* Left Column Form */}
         <div className="lg:col-span-5">
-          <div className="card p-5 space-y-4 sticky top-6">
-            <div className="border-b border-border-soft pb-3">
-              <h2 className="font-semibold text-ink text-base flex items-center gap-2">
+          <div className="card p-3.5 space-y-2.5 sticky top-3">
+            <div className="border-b border-border-soft pb-2">
+              <h2 className="font-semibold text-ink text-sm sm:text-base flex items-center gap-2">
                 <Plus className="w-4 h-4 text-emerald-400" />
                 New Purchase Indent / Request
               </h2>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-3">
-              {formError && <div className="text-xs text-red-400 bg-red-950/40 p-2.5 rounded border border-red-800/40">{formError}</div>}
+            <form onSubmit={handleSubmit} className="space-y-2">
+              {formError && <div className="text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{formError}</div>}
 
               <div>
-                <label className="text-xs font-medium text-ink-muted block mb-1">Route (Optional Filter)</label>
-                <select
-                  value={routeId}
-                  onChange={(e) => {
-                    setRouteId(e.target.value);
-                    setSupplierId('');
-                  }}
-                  className="input w-full"
-                >
-                  <option value="">All Routes</option>
-                  {routes.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-ink-muted block mb-1">Supplier *</label>
+                <label className="text-xs font-medium text-ink-muted block mb-0.5">Supplier *</label>
                 <select
                   required
                   value={supplierId}
@@ -1054,7 +1216,7 @@ function SupplierRequestPanel() {
                   className="input w-full"
                 >
                   <option value="">
-                    Select Supplier {routeId ? '(mapped to route)' : ''}
+                    Select Supplier
                   </option>
                   {suppliers.map((s) => (
                     <option key={s.id} value={s.id}>
@@ -1067,9 +1229,9 @@ function SupplierRequestPanel() {
               <ItemLineEditor lines={lines} setLines={setLines} items={items} rateLabel="Purchase Rate" />
 
               <div>
-                <label className="text-xs font-medium text-ink-muted block mb-1">Notes / Remarks</label>
+                <label className="text-xs font-medium text-ink-muted block mb-0.5">Notes / Remarks</label>
                 <textarea
-                  rows="2"
+                  rows="1"
                   placeholder="Urgent stock requirement, delivery window..."
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
@@ -1078,7 +1240,7 @@ function SupplierRequestPanel() {
               </div>
 
               {canCreate && (
-                <div className="pt-2">
+                <div className="pt-1">
                   <Button type="submit" variant="primary" loading={createMutation.isPending} disabled={!supplierId} className="w-full">
                     Generate Purchase Request
                   </Button>
@@ -1089,57 +1251,59 @@ function SupplierRequestPanel() {
         </div>
 
         {/* Right Column Table */}
-        <div className="lg:col-span-7 space-y-4">
-          <div className="card p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="relative w-full sm:w-72">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
+        <div className="lg:col-span-7 space-y-2.5">
+          <div className="card p-2.5 flex flex-col sm:flex-row items-center justify-between gap-2">
+            <div className="relative w-full sm:w-64">
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
               <input
                 type="text"
                 placeholder="Search purchase requests..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="input pl-9 w-full text-xs"
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  requestPagination.resetPage();
+                }}
+                className="input pl-8 w-full text-xs"
               />
             </div>
             <span className="text-xs text-ink-muted">{filteredRequests.length} request(s)</span>
           </div>
 
           <div className="card overflow-hidden">
-            <div className="px-5 py-4 border-b border-border-soft flex items-center justify-between">
-              <h3 className="font-semibold text-ink text-sm">Purchase Indents Register</h3>
+            <div className="px-3.5 py-2 border-b border-border-soft flex items-center justify-between">
+              <h3 className="font-semibold text-ink text-xs sm:text-sm">Purchase Indents Register</h3>
             </div>
-            <div className="overflow-x-auto">
+            <div className="max-h-[calc(100vh-240px)] overflow-y-auto">
               <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-border-soft bg-surface-subtle/30 text-ink-muted font-medium">
-                    <th className="px-4 py-3">Request #</th>
-                    <th className="px-4 py-3">Supplier</th>
-                    <th className="px-4 py-3">Items</th>
-                    <th className="px-4 py-3">Est. Total</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3 text-right">Actions</th>
+                <thead className="sticky top-0 bg-page z-10">
+                  <tr className="border-b border-border-soft uppercase text-ink-muted font-medium">
+                    <th className="px-3 py-1.5">Request #</th>
+                    <th className="px-3 py-1.5">Supplier</th>
+                    <th className="px-3 py-1.5">Items</th>
+                    <th className="px-3 py-1.5">Est. Total</th>
+                    <th className="px-3 py-1.5">Status</th>
+                    <th className="px-3 py-1.5 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border-soft/60">
-                  {filteredRequests.map((r) => {
+                  {requestPagination.pagedItems.map((r) => {
                     const statusKey = r.status || 'open';
                     return (
-                      <tr key={r.id} className="hover:bg-surface-subtle/20 transition">
-                        <td className="px-4 py-3 font-mono font-medium text-ink">{r.request_no}</td>
-                        <td className="px-4 py-3 font-medium text-ink">
+                      <tr key={r.id} className="hover:bg-page/50 transition">
+                        <td className="px-3 py-1.5 font-mono font-medium text-ink">{r.request_no}</td>
+                        <td className="px-3 py-1.5 font-medium text-ink">
                           {r.supplier_name}
-                          {r.route_name && <div className="text-[10px] text-ink-muted">{r.route_name}</div>}
                         </td>
-                        <td className="px-4 py-3 text-ink-muted">{r.item_count} item(s)</td>
-                        <td className="px-4 py-3 font-semibold text-emerald-400">
+                        <td className="px-3 py-1.5 text-ink-muted">{r.item_count} item(s)</td>
+                        <td className="px-3 py-1.5 font-semibold text-emerald-400">
                           ₹{Number(r.estimated_total || 0).toFixed(2)}
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-3 py-1.5">
                           <Badge variant={REQUEST_STATUS_VARIANT[statusKey] || 'warning'}>
                             {statusKey.replace(/_/g, ' ')}
                           </Badge>
                         </td>
-                        <td className="px-4 py-3 text-right space-x-1">
+                        <td className="px-3 py-1.5 text-right space-x-1">
                           <button
                             title="Print Indent"
                             onClick={() => setPrintingId(r.id)}
@@ -1178,7 +1342,7 @@ function SupplierRequestPanel() {
                       </tr>
                     );
                   })}
-                  {filteredRequests.length === 0 && (
+                  {requestPagination.total === 0 && (
                     <tr>
                       <td colSpan={6} className="px-4 py-8 text-center text-ink-muted text-xs">
                         No purchase requests logged yet.
@@ -1188,6 +1352,7 @@ function SupplierRequestPanel() {
                 </tbody>
               </table>
             </div>
+            <Pagination page={requestPagination.page} pageSize={10} total={requestPagination.total} onPageChange={requestPagination.setPage} />
           </div>
         </div>
       </div>
@@ -1210,20 +1375,21 @@ export function OrderManagement() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border-soft/40 pb-4">
+    <div className="space-y-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border-soft/40 pb-2">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-ink flex items-center gap-2.5">
-            <RefreshCw className="w-7 h-7 text-indigo-400" />
+          <h1 className="text-xl font-bold tracking-tight text-ink flex items-center gap-2">
+            <RefreshCw className="w-5 h-5 text-indigo-400" />
             Orders &amp; Indents Management
           </h1>
-          <p className="text-xs text-ink-muted mt-1">
+          <p className="text-[11px] text-ink-muted mt-0.5">
             Customer pre-bookings and supplier purchase requests — pending business before a sale or purchase happens
           </p>
         </div>
         <Button
           variant="secondary"
-          icon={<RefreshCw size={14} />}
+          size="sm"
+          icon={<RefreshCw size={13} />}
           onClick={() => {
             queryClient.invalidateQueries({ queryKey: ['customer-prebookings'] });
             queryClient.invalidateQueries({ queryKey: ['purchase-requests'] });

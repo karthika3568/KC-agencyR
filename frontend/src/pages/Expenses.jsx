@@ -5,6 +5,8 @@ import { expenseCategoriesApi, expensesApi, otherIncomeApi } from '../api/postsa
 import { Tabs } from '../components/Tabs';
 import { usePermission } from '../hooks/usePermission';
 import { Button } from '../components/Button.jsx';
+import { Pagination } from '../components/Pagination';
+import { useClientPagination } from '../hooks/useClientPagination';
 
 function ExpensesPanel({ canManage }) {
   const queryClient = useQueryClient();
@@ -83,33 +85,41 @@ function ExpensesPanel({ canManage }) {
     );
   });
 
+  const {
+    page,
+    setPage,
+    total,
+    paginatedItems: pagedExpenses,
+    resetPage,
+  } = useClientPagination(filteredExpenses, 10);
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-2.5">
       {successMsg && (
-        <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs px-4 py-2.5 rounded-lg flex items-center gap-2">
+        <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs px-3.5 py-2 rounded-lg flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4" />
           {successMsg}
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+      <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
         {/* Left Column Form */}
         <div className="lg:col-span-4">
-          <div className="card p-5 space-y-4 sticky top-6">
-            <div className="border-b border-border-soft pb-3">
-              <h2 className="font-semibold text-ink text-base flex items-center gap-2">
+          <div className="card p-3.5 space-y-2.5 sticky top-3">
+            <div className="border-b border-border-soft pb-2">
+              <h2 className="font-semibold text-ink text-sm flex items-center gap-1.5">
                 <TrendingDown className="w-4 h-4 text-red-400" />
                 Add Operating Expense
               </h2>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-3">
+            <form onSubmit={handleSubmit} className="space-y-2">
               {formError && (
-                <div className="text-xs text-red-400 bg-red-950/40 p-2.5 rounded border border-red-800/40">{formError}</div>
+                <div className="text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{formError}</div>
               )}
 
               <div>
-                <label className="text-xs font-medium text-ink-muted block mb-1">Expense Category *</label>
+                <label className="text-xs font-medium text-ink-muted block mb-0.5">Expense Category *</label>
                 <select
                   required
                   value={categoryId}
@@ -126,7 +136,7 @@ function ExpensesPanel({ canManage }) {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-ink-muted block mb-1">Amount (₹) *</label>
+                <label className="text-xs font-medium text-ink-muted block mb-0.5">Amount (₹) *</label>
                 <input
                   required
                   type="number"
@@ -140,7 +150,7 @@ function ExpensesPanel({ canManage }) {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-ink-muted block mb-1">Payment Mode</label>
+                <label className="text-xs font-medium text-ink-muted block mb-0.5">Payment Mode</label>
                 <select
                   value={paymentMode}
                   onChange={(e) => setPaymentMode(e.target.value)}
@@ -154,18 +164,18 @@ function ExpensesPanel({ canManage }) {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-ink-muted block mb-1">Description / Notes</label>
+                <label className="text-xs font-medium text-ink-muted block mb-0.5">Description / Notes</label>
                 <textarea
                   rows="2"
                   placeholder="Vendor name, bill # or purpose..."
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="input w-full"
+                  className="input w-full text-xs"
                 />
               </div>
 
               {canManage && (
-                <div className="pt-2">
+                <div className="pt-1.5">
                   <Button type="submit" variant="primary" loading={createMutation.isPending} className="w-full">
                     Record Expense
                   </Button>
@@ -176,8 +186,8 @@ function ExpensesPanel({ canManage }) {
         </div>
 
         {/* Right Column Table */}
-        <div className="lg:col-span-8 space-y-4">
-          <div className="card p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="lg:col-span-8 space-y-2.5">
+          <div className="card p-2.5 flex flex-col sm:flex-row items-center justify-between gap-2">
             <div className="relative w-full sm:w-72">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
               <input
@@ -192,38 +202,38 @@ function ExpensesPanel({ canManage }) {
           </div>
 
           <div className="card overflow-hidden">
-            <div className="px-5 py-4 border-b border-border-soft flex items-center justify-between">
-              <h3 className="font-semibold text-ink text-sm">Expenses History</h3>
+            <div className="px-3.5 py-2 border-b border-border-soft flex items-center justify-between">
+              <h3 className="font-semibold text-ink text-xs sm:text-sm">Expenses History</h3>
             </div>
-            <div className="overflow-x-auto">
+            <div className="max-h-[calc(100vh-240px)] overflow-y-auto">
               <table className="w-full text-left text-xs">
-                <thead>
+                <thead className="sticky top-0 bg-page z-10 shadow-sm">
                   <tr className="border-b border-border-soft bg-surface-subtle/30 text-ink-muted font-medium">
-                    <th className="px-4 py-3">Expense #</th>
-                    <th className="px-4 py-3">Category</th>
-                    <th className="px-4 py-3">Amount</th>
-                    <th className="px-4 py-3">Payment Mode</th>
-                    <th className="px-4 py-3">Description</th>
-                    <th className="px-4 py-3">Date</th>
-                    <th className="px-4 py-3 text-right">Actions</th>
+                    <th className="px-3 py-1.5">Expense #</th>
+                    <th className="px-3 py-1.5">Category</th>
+                    <th className="px-3 py-1.5">Amount</th>
+                    <th className="px-3 py-1.5">Payment Mode</th>
+                    <th className="px-3 py-1.5">Description</th>
+                    <th className="px-3 py-1.5">Date</th>
+                    <th className="px-3 py-1.5 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border-soft/60">
-                  {filteredExpenses.map((item) => {
+                  {pagedExpenses.map((item) => {
                     const catName = categories.find((c) => c.id === item.category_id)?.name || '-';
                     return (
                       <tr key={item.id} className="hover:bg-surface-subtle/20 transition">
-                        <td className="px-4 py-3 font-mono font-medium text-ink">{item.expense_no || `#${item.id}`}</td>
-                        <td className="px-4 py-3 font-medium text-ink">{catName}</td>
-                        <td className="px-4 py-3 font-semibold text-red-400">₹{Number(item.amount).toFixed(2)}</td>
-                        <td className="px-4 py-3">
-                          <span className="px-2 py-0.5 rounded text-[10px] uppercase font-medium bg-slate-800 text-slate-300 border border-slate-700">
+                        <td className="px-3 py-1.5 font-mono font-medium text-ink">{item.expense_no || `#${item.id}`}</td>
+                        <td className="px-3 py-1.5 font-medium text-ink">{catName}</td>
+                        <td className="px-3 py-1.5 font-semibold text-red-400">₹{Number(item.amount).toFixed(2)}</td>
+                        <td className="px-3 py-1.5">
+                          <span className="px-1.5 py-0.5 rounded text-[10px] uppercase font-medium bg-slate-800 text-slate-300 border border-slate-700">
                             {item.payment_mode || 'cash'}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-ink-muted">{item.description || '-'}</td>
-                        <td className="px-4 py-3 text-ink-muted">{item.expense_date || item.created_at || '-'}</td>
-                        <td className="px-4 py-3 text-right">
+                        <td className="px-3 py-1.5 text-ink-muted">{item.description || '-'}</td>
+                        <td className="px-3 py-1.5 text-ink-muted">{item.expense_date || item.created_at || '-'}</td>
+                        <td className="px-3 py-1.5 text-right">
                           {canManage && (
                             <button
                               onClick={() => removeMutation.mutate(item.id)}
@@ -239,7 +249,7 @@ function ExpensesPanel({ canManage }) {
                   })}
                   {filteredExpenses.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center text-ink-muted text-xs">
+                      <td colSpan={7} className="px-3 py-6 text-center text-ink-muted text-xs">
                         No expenses found.
                       </td>
                     </tr>
@@ -247,6 +257,7 @@ function ExpensesPanel({ canManage }) {
                 </tbody>
               </table>
             </div>
+            <Pagination page={page} pageSize={10} total={total} onPageChange={setPage} />
           </div>
         </div>
       </div>
@@ -323,33 +334,41 @@ function OtherIncomePanel({ canManage }) {
     );
   });
 
+  const {
+    page,
+    setPage,
+    total,
+    paginatedItems: pagedIncomes,
+    resetPage,
+  } = useClientPagination(filteredIncomes, 10);
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-2.5">
       {successMsg && (
-        <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs px-4 py-2.5 rounded-lg flex items-center gap-2">
+        <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs px-3.5 py-2 rounded-lg flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4" />
           {successMsg}
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+      <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
         {/* Left Column Form */}
         <div className="lg:col-span-4">
-          <div className="card p-5 space-y-4 sticky top-6">
-            <div className="border-b border-border-soft pb-3">
-              <h2 className="font-semibold text-ink text-base flex items-center gap-2">
+          <div className="card p-3.5 space-y-2.5 sticky top-3">
+            <div className="border-b border-border-soft pb-2">
+              <h2 className="font-semibold text-ink text-sm flex items-center gap-1.5">
                 <TrendingUp className="w-4 h-4 text-emerald-400" />
                 Add Extra Income
               </h2>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-3">
+            <form onSubmit={handleSubmit} className="space-y-2">
               {formError && (
-                <div className="text-xs text-red-400 bg-red-950/40 p-2.5 rounded border border-red-800/40">{formError}</div>
+                <div className="text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{formError}</div>
               )}
 
               <div>
-                <label className="text-xs font-medium text-ink-muted block mb-1">Amount (₹) *</label>
+                <label className="text-xs font-medium text-ink-muted block mb-0.5">Amount (₹) *</label>
                 <input
                   required
                   type="number"
@@ -363,7 +382,7 @@ function OtherIncomePanel({ canManage }) {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-ink-muted block mb-1">Payment Mode</label>
+                <label className="text-xs font-medium text-ink-muted block mb-0.5">Payment Mode</label>
                 <select
                   value={paymentMode}
                   onChange={(e) => setPaymentMode(e.target.value)}
@@ -377,19 +396,19 @@ function OtherIncomePanel({ canManage }) {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-ink-muted block mb-1">Description / Source *</label>
+                <label className="text-xs font-medium text-ink-muted block mb-0.5">Description / Source *</label>
                 <textarea
                   required
-                  rows="3"
+                  rows="2"
                   placeholder="Scrap sale, commission, rent received..."
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="input w-full"
+                  className="input w-full text-xs"
                 />
               </div>
 
               {canManage && (
-                <div className="pt-2">
+                <div className="pt-1.5">
                   <Button type="submit" variant="primary" loading={createMutation.isPending} className="w-full">
                     Record Income
                   </Button>
@@ -400,8 +419,8 @@ function OtherIncomePanel({ canManage }) {
         </div>
 
         {/* Right Column Table */}
-        <div className="lg:col-span-8 space-y-4">
-          <div className="card p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="lg:col-span-8 space-y-2.5">
+          <div className="card p-2.5 flex flex-col sm:flex-row items-center justify-between gap-2">
             <div className="relative w-full sm:w-72">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
               <input
@@ -416,34 +435,34 @@ function OtherIncomePanel({ canManage }) {
           </div>
 
           <div className="card overflow-hidden">
-            <div className="px-5 py-4 border-b border-border-soft flex items-center justify-between">
-              <h3 className="font-semibold text-ink text-sm">Income Receipts History</h3>
+            <div className="px-3.5 py-2 border-b border-border-soft flex items-center justify-between">
+              <h3 className="font-semibold text-ink text-xs sm:text-sm">Income Receipts History</h3>
             </div>
-            <div className="overflow-x-auto">
+            <div className="max-h-[calc(100vh-240px)] overflow-y-auto">
               <table className="w-full text-left text-xs">
-                <thead>
+                <thead className="sticky top-0 bg-page z-10 shadow-sm">
                   <tr className="border-b border-border-soft bg-surface-subtle/30 text-ink-muted font-medium">
-                    <th className="px-4 py-3">Receipt #</th>
-                    <th className="px-4 py-3">Amount</th>
-                    <th className="px-4 py-3">Payment Mode</th>
-                    <th className="px-4 py-3">Description</th>
-                    <th className="px-4 py-3">Date</th>
-                    <th className="px-4 py-3 text-right">Actions</th>
+                    <th className="px-3 py-1.5">Receipt #</th>
+                    <th className="px-3 py-1.5">Amount</th>
+                    <th className="px-3 py-1.5">Payment Mode</th>
+                    <th className="px-3 py-1.5">Description</th>
+                    <th className="px-3 py-1.5">Date</th>
+                    <th className="px-3 py-1.5 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border-soft/60">
-                  {filteredIncomes.map((item) => (
+                  {pagedIncomes.map((item) => (
                     <tr key={item.id} className="hover:bg-surface-subtle/20 transition">
-                      <td className="px-4 py-3 font-mono font-medium text-ink">{item.receipt_no || `#${item.id}`}</td>
-                      <td className="px-4 py-3 font-semibold text-emerald-400">₹{Number(item.amount).toFixed(2)}</td>
-                      <td className="px-4 py-3">
-                        <span className="px-2 py-0.5 rounded text-[10px] uppercase font-medium bg-slate-800 text-slate-300 border border-slate-700">
+                      <td className="px-3 py-1.5 font-mono font-medium text-ink">{item.receipt_no || `#${item.id}`}</td>
+                      <td className="px-3 py-1.5 font-semibold text-emerald-400">₹{Number(item.amount).toFixed(2)}</td>
+                      <td className="px-3 py-1.5">
+                        <span className="px-1.5 py-0.5 rounded text-[10px] uppercase font-medium bg-slate-800 text-slate-300 border border-slate-700">
                           {item.payment_mode || 'cash'}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-ink-muted">{item.description || '-'}</td>
-                      <td className="px-4 py-3 text-ink-muted">{item.income_date || item.created_at || '-'}</td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-3 py-1.5 text-ink-muted">{item.description || '-'}</td>
+                      <td className="px-3 py-1.5 text-ink-muted">{item.income_date || item.created_at || '-'}</td>
+                      <td className="px-3 py-1.5 text-right">
                         {canManage && (
                           <button
                             onClick={() => removeMutation.mutate(item.id)}
@@ -458,7 +477,7 @@ function OtherIncomePanel({ canManage }) {
                   ))}
                   {filteredIncomes.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-ink-muted text-xs">
+                      <td colSpan={6} className="px-3 py-6 text-center text-ink-muted text-xs">
                         No extra income receipts found.
                       </td>
                     </tr>
@@ -466,6 +485,7 @@ function OtherIncomePanel({ canManage }) {
                 </tbody>
               </table>
             </div>
+            <Pagination page={page} pageSize={10} total={total} onPageChange={setPage} />
           </div>
         </div>
       </div>
@@ -477,14 +497,14 @@ export function Expenses() {
   const canManage = usePermission('expenses.manage');
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border-soft/40 pb-4">
+    <div className="space-y-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border-soft/40 pb-2">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-ink flex items-center gap-2.5">
-            <DollarSign className="w-7 h-7 text-emerald-400" />
+          <h1 className="text-xl font-bold tracking-tight text-ink flex items-center gap-2">
+            <DollarSign className="w-5 h-5 text-emerald-400" />
             Expenses &amp; Income
           </h1>
-          <p className="text-xs text-ink-muted mt-1">Manage store operational expenses, extra receipts, and cash flows</p>
+          <p className="text-xs text-ink-muted">Manage store operational expenses, extra receipts, and cash flows</p>
         </div>
       </div>
 

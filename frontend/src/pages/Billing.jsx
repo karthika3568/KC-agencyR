@@ -472,7 +472,7 @@ export default function Billing() {
                 }}
               />
               <span className="absolute left-3.5 text-emerald-600 font-black text-xl pointer-events-none select-none">+</span>
-              <span className="absolute right-3 text-[11px] font-bold text-gray-500 bg-white/90 border border-gray-300 px-2 py-1 rounded shadow-2xs pointer-events-none">
+              <span className="absolute right-3 text-[11px] font-bold text-gray-500 bg-white/90 border border-gray-300 px-2 py-1 rounded shadow-sm pointer-events-none">
                 Enter ↵
               </span>
             </div>

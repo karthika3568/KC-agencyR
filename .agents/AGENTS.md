@@ -1,4 +1,4 @@
-# Project Rules for AJ Agency ERP
+# Project Rules for KC Agency ERP
 
 ## Database Schema & Migration Rule
 - Whenever any database schema change (INSERT, ALTER, UPDATE, DELETE) is performed, ALWAYS create a migration SQL file in `backend/database/migrations/` with format: `YYYYMMDD_HHMMSS_relevant_name.sql`.

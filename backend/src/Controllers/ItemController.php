@@ -30,7 +30,6 @@ class ItemController
         'item_name' => 'STOCKITEM',
         'category' => 'category',
         'brand' => 'brand',
-        'product_line' => 'product_line',
         'supplier' => 'supplier',
         'hsn_code' => 'HSN',
         'barcode' => 'barcode',
@@ -459,7 +458,6 @@ class ItemController
         return match ($col) {
             'category' => $item['category_name'],
             'brand' => $item['brand_name'],
-            'product_line' => $item['product_line_name'],
             'supplier' => $item['supplier_name'],
             'base_unit' => $item['base_unit_code'],
             'secondary_unit' => $item['secondary_unit_code'],
@@ -514,10 +512,9 @@ class ItemController
         $pendingCategories = [];
         // Same auto-create-on-import behavior as Brand/Category, extended to
         // every other item-master field that can legitimately be missing on
-        // a fresh import: Product Line, Unit Type (base + secondary), and GST
-        // (tax code). Each has its own pending map because each materializes
-        // into a different table with different required columns.
-        $pendingProductLines = [];
+        // a fresh import: Unit Type (base + secondary) and GST (tax code).
+        // Each has its own pending map because each materializes into a
+        // different table with different required columns.
         $pendingUnits = [];
         $pendingTaxCodes = [];
 
@@ -535,7 +532,6 @@ class ItemController
                 $lookups,
                 $pendingBrands,
                 $pendingCategories,
-                $pendingProductLines,
                 $pendingUnits,
                 $pendingTaxCodes
             );
@@ -561,7 +557,6 @@ class ItemController
             // item row references its id.
             $createdBrandIds = $this->materializePendingMasters('brands', $pendingBrands);
             $createdCategoryIds = $this->materializePendingMasters('categories', $pendingCategories);
-            $createdProductLineIds = $this->materializePendingMasters('product_lines', $pendingProductLines);
             $createdUnitIds = $this->materializePendingUnits($pendingUnits);
             $createdTaxCodeIds = $this->materializePendingTaxCodes($pendingTaxCodes);
 
@@ -569,7 +564,6 @@ class ItemController
                 ['item' => $itemData, 'branch_ids' => $branchIds, 'existing_item_id' => $existingItemId] = $mapped;
                 $itemData['brand_id'] = $this->resolvePendingMasterId($itemData['brand_id'], $createdBrandIds);
                 $itemData['category_id'] = $this->resolvePendingMasterId($itemData['category_id'], $createdCategoryIds);
-                $itemData['product_line_id'] = $this->resolvePendingMasterId($itemData['product_line_id'], $createdProductLineIds);
                 $itemData['base_unit_id'] = $this->resolvePendingMasterId($itemData['base_unit_id'], $createdUnitIds);
                 $itemData['secondary_unit_id'] = $this->resolvePendingMasterId($itemData['secondary_unit_id'], $createdUnitIds);
                 $itemData['tax_code_id'] = $this->resolvePendingMasterId($itemData['tax_code_id'], $createdTaxCodeIds);
@@ -632,7 +626,6 @@ class ItemController
             // either way, only whether materializePendingMasters() runs differs.
             'new_brands' => array_values($pendingBrands),
             'new_categories' => array_values($pendingCategories),
-            'new_product_lines' => array_values($pendingProductLines),
             'new_units' => array_values(array_column($pendingUnits, 'short_code')),
             'new_tax_codes' => array_values(array_column($pendingTaxCodes, 'code')),
             'rows' => $results,
@@ -681,7 +674,6 @@ class ItemController
         return [
             'category' => $index('categories', 'name'),
             'brand' => $index('brands', 'name'),
-            'product_line' => $index('product_lines', 'name'),
             'supplier' => $index('suppliers', 'name'),
             'base_unit' => $index('stock_units', 'short_code'),
             'branch' => $index('branches', 'branch_name'),
@@ -733,7 +725,6 @@ class ItemController
         array &$lookups,
         array &$pendingBrands,
         array &$pendingCategories,
-        array &$pendingProductLines,
         array &$pendingUnits,
         array &$pendingTaxCodes
     ): array {
@@ -771,13 +762,12 @@ class ItemController
         }
         $secondaryUnitId = $this->resolveOrStageUnit($lookups['base_unit'], $pendingUnits, $record['secondary_unit'] ?? null);
 
-        // Brand/Category/Product Line are auto-created on import rather than
+        // Brand/Category are auto-created on import rather than
         // rejected — resolveOrStageMaster() matches case/space-insensitively
         // against what's already loaded, or stages a new one (deduped across
         // rows in this same file) to be created when the import actually commits.
         $categoryId = $this->resolveOrStageMaster($lookups['category'], $pendingCategories, $record['category'] ?? null);
         $brandId = $this->resolveOrStageMaster($lookups['brand'], $pendingBrands, $record['brand'] ?? null);
-        $productLineId = $this->resolveOrStageMaster($lookups['product_line'], $pendingProductLines, $record['product_line'] ?? null);
         // The category/brand mapping restriction only applies when both
         // already exist for real — a brand-new category has no mappings
         // configured yet, which is already "no restriction" (opt-in feature).
@@ -854,7 +844,6 @@ class ItemController
             'item_name' => $itemName,
             'category_id' => $categoryId,
             'brand_id' => $brandId,
-            'product_line_id' => $productLineId,
             'supplier_id' => $supplierId,
             'hsn_code' => $record['hsn_code'] ?? null,
             'barcode' => $barcode ?: null,
@@ -942,7 +931,7 @@ class ItemController
         return "NEW:{$normalized}";
     }
 
-    /** Creates the brand/category/product_line rows staged in $pending (once each), returning normalized-name => new id. */
+    /** Creates the brand/category rows staged in $pending (once each), returning normalized-name => new id. */
     private function materializePendingMasters(string $table, array $pending): array
     {
         $createdIds = [];

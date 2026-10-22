@@ -12,7 +12,6 @@ import {
   getConfiguredPrinter, ensureBluetoothPermissions,
   isBluetoothEnabled, scanPairedDevices, connectPrinter, disconnectPrinter, testPrint,
 } from '../../utils/printerService';
-import { BranchesScreen } from './BranchesScreen';
 import { StaffScreen } from './StaffScreen';
 
 function ProfileTab() {
@@ -309,7 +308,6 @@ export function SettingsScreen() {
           { key: 'profile', label: 'Company Profile' },
           { key: 'printer', label: 'Thermal Printer' },
           { key: 'sequences', label: 'Invoice Prefix' },
-          { key: 'branches', label: 'Branches' },
           { key: 'staff', label: 'Staff' },
         ]}
         active={tab}
@@ -319,7 +317,6 @@ export function SettingsScreen() {
         {tab === 'profile' && <ProfileTab />}
         {tab === 'printer' && <PrinterSetupTab />}
         {tab === 'sequences' && <InvoiceSequencesTab />}
-        {tab === 'branches' && <BranchesScreen />}
         {tab === 'staff' && <StaffScreen />}
       </View>
     </View>

@@ -433,7 +433,7 @@ export default function Purchases() {
             </div>
 
             {/* Live Balance Summary */}
-            <div className="bg-white p-3 rounded-lg border border-gray-200 text-right space-y-1 shadow-2xs">
+            <div className="bg-white p-3 rounded-lg border border-gray-200 text-right space-y-1 shadow-sm">
               <div className="text-xs text-gray-500 font-bold flex justify-between">
                 <span>கொள்முதல் மொத்தம்:</span>
                 <span className="font-mono">{formatINR(currentPurchaseNet)}</span>

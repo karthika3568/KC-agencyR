@@ -26,7 +26,7 @@ export function ThermalReceiptModal({ visible, invoice, onClose }) {
       const lineItemsStr = items
         .map((l) => `${l.item_name_snapshot || l.item_name || 'Item'} x${l.qty} @ Rs.${l.rate} = Rs.${l.line_total}`)
         .join('\n');
-      const shareMsg = `AJ AGENCY\nDistributor Billing & Inventory\n--------------------------------\nInvoice #: ${invoiceNo}\nDate: ${dateStr}\nCustomer: ${customerName}\nStatus: ${paymentStatus}\n--------------------------------\n${lineItemsStr}\n--------------------------------\nGrand Total: Rs. ${grandTotal}\n--------------------------------\nThank you for shopping with us!`;
+      const shareMsg = `KC AGENCY\nDistributor Billing & Inventory\n--------------------------------\nInvoice #: ${invoiceNo}\nDate: ${dateStr}\nCustomer: ${customerName}\nStatus: ${paymentStatus}\n--------------------------------\n${lineItemsStr}\n--------------------------------\nGrand Total: Rs. ${grandTotal}\n--------------------------------\nThank you for shopping with us!`;
       await Share.share({ message: shareMsg });
     } catch (err) {
       Alert.alert('Share Error', err.message);
@@ -84,7 +84,7 @@ export function ThermalReceiptModal({ visible, invoice, onClose }) {
             items: formattedItems,
           },
           branch: {
-            print_name: 'AJ AGENCY',
+            print_name: 'KC AGENCY',
             address_line1: 'Main Road',
             city: 'Commercial Hub',
             phone: '+91 9876543210',
@@ -123,7 +123,7 @@ export function ThermalReceiptModal({ visible, invoice, onClose }) {
             <View style={styles.paper}>
               {/* Paper Top Jagged Edge / Header */}
               <View style={styles.shopHeader}>
-                <Text style={styles.shopTitle}>AJ AGENCY</Text>
+                <Text style={styles.shopTitle}>KC AGENCY</Text>
                 <Text style={styles.shopSubtitle}>DISTRIBUTOR BILLING & INVENTORY</Text>
                 <Text style={styles.shopInfo}>Main Road, Commercial Hub</Text>
                 <Text style={styles.shopInfo}>GSTIN: 33AAAAA0000A1Z5 · Ph: +91 9876543210</Text>

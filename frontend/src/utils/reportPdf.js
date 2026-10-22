@@ -26,7 +26,7 @@ export function downloadReportPdf({ title, filtersText, columns, rows, totalsRow
 
   doc.setFontSize(14);
   doc.setFont(undefined, 'bold');
-  doc.text('AJ Agency', 40, 36);
+  doc.text('KC Agency', 40, 36);
   doc.setFontSize(11);
   doc.setFont(undefined, 'normal');
   doc.text(title, 40, 54);
@@ -91,7 +91,7 @@ export function downloadGrnPdf(detailRows, filename, { print = false } = {}) {
 
     doc.setFontSize(14);
     doc.setFont(undefined, 'bold');
-    doc.text('AJ Agency', left, 36);
+    doc.text('KC Agency', left, 36);
     doc.setFontSize(11);
     doc.text('GOODS RECEIVED NOTE', pageWidth - left, 36, { align: 'right' });
     doc.setFont(undefined, 'normal');
@@ -193,7 +193,7 @@ export function downloadGrnPdf(detailRows, filename, { print = false } = {}) {
  * however many issue transactions are passed) from flattened issue-line
  * rows — the same rows VanStockController::flattenedIssueLines() streams
  * for Excel. One section per issue transaction: Issue No, Salesman, Date,
- * Route, Issued By, then every item line that transaction contains — never
+ * Date, Issued By, then every item line that transaction contains — never
  * split across separate documents per item (section 20).
  */
 export function downloadVanIssuePdf(detailRows, filename, { print = false } = {}) {
@@ -222,8 +222,8 @@ export function downloadVanIssuePdf(detailRows, filename, { print = false } = {}
     const meta = [
       ['Issue No', issueNo],
       ['Salesman', h.employee_name],
+      ['Branch', h.branch_name],
       ['Date', h.issued_at],
-      ['Route', h.route_name],
       ['Issued By', h.issued_by_name],
       ['Notes', h.notes],
     ].filter(([, v]) => v);
@@ -235,10 +235,29 @@ export function downloadVanIssuePdf(detailRows, filename, { print = false } = {}
     });
 
     y += 6;
+    const totalQty = lines.reduce((sum, l) => sum + Number(l.qty || 0), 0);
+    const totalAmount = lines.reduce((sum, l) => sum + Number(l.line_amount || (Number(l.qty || 0) * Number(l.unit_price || 0))), 0);
+
     autoTable(doc, {
       startY: y,
-      head: [['S.No', 'Item', 'SKU', 'Unit', 'Qty']],
-      body: lines.map((l, i) => [i + 1, l.item_name, l.item_code || '', l.unit_code || '', l.qty]),
+      head: [['S.No', 'Item', 'SKU', 'Unit', 'Qty', 'Unit Price', 'Amount']],
+      body: [
+        ...lines.map((l, i) => [
+          i + 1,
+          l.item_name,
+          l.item_code || '',
+          l.unit_code || '',
+          l.qty,
+          Number(l.unit_price || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+          Number(l.line_amount || (Number(l.qty || 0) * Number(l.unit_price || 0))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        ]),
+        [
+          { content: 'Total', colSpan: 4, styles: { fontStyle: 'bold', halign: 'right' } },
+          { content: String(totalQty), styles: { fontStyle: 'bold' } },
+          '',
+          { content: `₹${totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, styles: { fontStyle: 'bold' } },
+        ],
+      ],
       styles: { fontSize: 9, cellPadding: 5 },
       headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold' },
       margin: { left, right: left },

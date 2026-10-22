@@ -6,8 +6,8 @@ export function Card({ children, className = '', title, actions }) {
   return (
     <div className={`card ${className}`}>
       {(title || actions) && (
-        <div className="flex items-center justify-between border-b border-border-soft px-4 py-3">
-          {title && <span className="font-semibold text-ink">{title}</span>}
+        <div className="flex items-center justify-between border-b border-border-soft px-4 py-2.5">
+          {title && <span className="text-sm font-bold text-ink">{title}</span>}
           {actions}
         </div>
       )}

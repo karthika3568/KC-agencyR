@@ -51,6 +51,57 @@ class InvoiceModel
         return $stmt->fetchAll();
     }
 
+    public function paginate(int $branchId, ?string $status = null, ?string $search = null, int $page = 1, int $limit = 10): array
+    {
+        $baseSql = "FROM invoices i
+                    LEFT JOIN customers c ON c.id = i.customer_id
+                    JOIN users u ON u.id = i.employee_id
+                    WHERE i.branch_id = :branch_id";
+        $params = ['branch_id' => $branchId];
+
+        if ($status !== null && $status !== '') {
+            $baseSql .= ' AND i.status = :status';
+            $params['status'] = $status;
+        } else {
+            $baseSql .= " AND i.status NOT IN ('held', 'deleted')";
+        }
+
+        if ($search !== null && trim($search) !== '') {
+            $q = '%' . trim($search) . '%';
+            $baseSql .= " AND (i.invoice_no LIKE :search_inv OR c.ledger_name LIKE :search_cust OR i.original_invoice_no LIKE :search_orig)";
+            $params['search_inv'] = $q;
+            $params['search_cust'] = $q;
+            $params['search_orig'] = $q;
+        }
+
+        $countStmt = $this->pdo->prepare("SELECT COUNT(*) " . $baseSql);
+        $countStmt->execute($params);
+        $total = (int) $countStmt->fetchColumn();
+
+        $limit = max(1, $limit);
+        $totalPages = max(1, (int) ceil($total / $limit));
+        $page = min(max(1, $page), $totalPages);
+        $offset = ($page - 1) * $limit;
+
+        $dataStmt = $this->pdo->prepare("SELECT i.*, c.ledger_name AS customer_name, u.name AS employee_name " . $baseSql . " ORDER BY i.id DESC LIMIT :limit OFFSET :offset");
+        foreach ($params as $k => $v) {
+            $dataStmt->bindValue(":$k", $v);
+        }
+        $dataStmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $dataStmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        $dataStmt->execute();
+        $rows = $dataStmt->fetchAll();
+
+        return [
+            'data' => $rows,
+            'total' => $total,
+            'page' => $page,
+            'limit' => $limit,
+            'total_pages' => $totalPages,
+        ];
+    }
+
+
     public function find(int $id): ?array
     {
         $stmt = $this->pdo->prepare(
@@ -78,7 +129,7 @@ class InvoiceModel
             'SELECT ii.*, su.short_code AS unit_code,
                     ROUND(ii.line_total + ii.tax_amount + ii.cess_amount, 2) AS net_amount
              FROM invoice_items ii
-             JOIN stock_units su ON su.id = ii.unit_id
+             LEFT JOIN stock_units su ON su.id = ii.unit_id
              WHERE ii.invoice_id = :id'
         );
         $stmt->execute(['id' => $id]);
@@ -86,6 +137,45 @@ class InvoiceModel
 
         $stmt = $this->pdo->prepare('SELECT * FROM invoice_payments WHERE invoice_id = :id');
         $stmt->execute(['id' => $id]);
+        $invoice['payments'] = $stmt->fetchAll();
+
+        return $invoice;
+    }
+
+    public function findByInvoiceNo(string $invoiceNo, ?int $branchId = null): ?array
+    {
+        $sql = 'SELECT i.*, c.ledger_name AS customer_name, c.phone AS customer_phone, u.name AS employee_name,
+                       cu.name AS cancelled_by_name, du.name AS deleted_by_name
+                FROM invoices i
+                LEFT JOIN customers c ON c.id = i.customer_id
+                JOIN users u ON u.id = i.employee_id
+                LEFT JOIN users cu ON cu.id = i.cancelled_by
+                LEFT JOIN users du ON du.id = i.deleted_by
+                WHERE i.invoice_no = :invoice_no';
+        $params = ['invoice_no' => $invoiceNo];
+        if ($branchId !== null) {
+            $sql .= ' AND i.branch_id = :branch_id';
+            $params['branch_id'] = $branchId;
+        }
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+        $invoice = $stmt->fetch();
+        if (!$invoice) {
+            return null;
+        }
+
+        $stmt = $this->pdo->prepare(
+            'SELECT ii.*, su.short_code AS unit_code,
+                    ROUND(ii.line_total + ii.tax_amount + ii.cess_amount, 2) AS net_amount
+             FROM invoice_items ii
+             LEFT JOIN stock_units su ON su.id = ii.unit_id
+             WHERE ii.invoice_id = :id'
+        );
+        $stmt->execute(['id' => (int) $invoice['id']]);
+        $invoice['items'] = $stmt->fetchAll();
+
+        $stmt = $this->pdo->prepare('SELECT * FROM invoice_payments WHERE invoice_id = :id');
+        $stmt->execute(['id' => (int) $invoice['id']]);
         $invoice['payments'] = $stmt->fetchAll();
 
         return $invoice;
@@ -105,9 +195,12 @@ class InvoiceModel
                     ii.qty AS original_qty, ii.rate, ii.mrp, ii.discount_percent, ii.discount_amount,
                     ii.tax_percent, ii.tax_amount, ii.line_total, su.short_code AS unit_code,
                     COALESCE(ret.returned_qty, 0) AS already_returned_qty,
-                    GREATEST(ii.qty - COALESCE(ret.returned_qty, 0), 0) AS remaining_qty
+                    GREATEST(ii.qty - COALESCE(ret.returned_qty, 0), 0) AS remaining_qty,
+                    i.id AS invoice_id, i.invoice_no, i.customer_id, c.ledger_name AS customer_name
              FROM invoice_items ii
-             JOIN stock_units su ON su.id = ii.unit_id
+             JOIN invoices i ON i.id = ii.invoice_id
+             LEFT JOIN customers c ON c.id = i.customer_id
+             LEFT JOIN stock_units su ON su.id = ii.unit_id
              LEFT JOIN (
                  SELECT sri.invoice_item_id, SUM(sri.qty) AS returned_qty
                  FROM sales_return_items sri
@@ -264,11 +357,55 @@ class InvoiceModel
                 $paymentStatus = $paidAmount > 0.009 ? 'partial' : 'credit';
             }
 
+            // ---------------------------------------------------------
+            // Mandatory Stock Validation before sale completion
+            // Concurrency-safe: locks stock_ledger row FOR UPDATE
+            // ---------------------------------------------------------
+            $branchId = (int) $invoice['branch_id'];
+            $stockService = new StockLedgerService($this->pdo);
+
+            $requiredQtyByItem = [];
+            $itemNames = [];
+            foreach ($items as $item) {
+                if (empty($item['item_id'])) {
+                    continue; // manual items do not consume inventory
+                }
+                $itemId = (int) $item['item_id'];
+                $qtyTotal = (float) $item['qty'] + (float) $item['free_qty'];
+                $requiredQtyByItem[$itemId] = ($requiredQtyByItem[$itemId] ?? 0.0) + $qtyTotal;
+                $itemNames[$itemId] = $item['item_name_snapshot'] ?? "Item #{$itemId}";
+            }
+
+            $stockStmt = $this->pdo->prepare(
+                'SELECT quantity_on_hand FROM stock_ledger
+                 WHERE item_id = :item_id AND owner_type = \'branch\' AND owner_id = :branch_id
+                 FOR UPDATE'
+            );
+
+            foreach ($requiredQtyByItem as $itemId => $requiredQty) {
+                if ($requiredQty <= 0) {
+                    continue;
+                }
+                $stockStmt->execute(['item_id' => $itemId, 'branch_id' => $branchId]);
+                $stockRow = $stockStmt->fetch();
+                $available = $stockRow !== false ? (float) $stockRow['quantity_on_hand'] : 0.0;
+
+                if ($available < $requiredQty) {
+                    $availableDisp = round($available, 3);
+                    $requiredDisp = round($requiredQty, 3);
+                    throw new \RuntimeException(
+                        "Insufficient stock for \"{$itemNames[$itemId]}\". Requested: {$requiredDisp}, Available in branch: {$availableDisp}."
+                    );
+                }
+            }
+
             $series = $invoice['bill_type'] === 'gst' ? 'gst' : 'non_gst';
             $invoiceNo = (new InvoiceNumberService($this->pdo))->next((int) $invoice['branch_id'], $series);
 
-            $stockService = new StockLedgerService($this->pdo);
             foreach ($items as $item) {
+                if (empty($item['item_id'])) {
+                    continue; // manual items do not deduct catalog inventory
+                }
                 $qtyTotal = (float) $item['qty'] + (float) $item['free_qty'];
                 $stockService->applyMovement(
                     (int) $item['item_id'],
@@ -380,6 +517,9 @@ class InvoiceModel
 
             // Reverse the original stock effect of every original line...
             foreach ($oldItems as $item) {
+                if (empty($item['item_id'])) {
+                    continue;
+                }
                 $qtyTotal = (float) $item['qty'] + (float) $item['free_qty'];
                 $stockService->applyMovement(
                     (int) $item['item_id'], 'branch', (int) $invoice['branch_id'], $qtyTotal,
@@ -392,10 +532,49 @@ class InvoiceModel
             $totals = $this->computeTotals($cartLines);
             $this->insertLineItems($id, $cartLines);
 
+            // Validate new lines against stock (with old lines already reversed back into stock_ledger)
+            $requiredQtyByItem = [];
+            $itemNames = [];
+            foreach ($cartLines as $line) {
+                if (empty($line['item_id'])) {
+                    continue;
+                }
+                $itemId = (int) $line['item_id'];
+                $qtyTotal = (float) $line['qty'] + (float) ($line['free_qty'] ?? 0);
+                $requiredQtyByItem[$itemId] = ($requiredQtyByItem[$itemId] ?? 0.0) + $qtyTotal;
+                $itemNames[$itemId] = $line['item_name_snapshot'] ?? "Item #{$itemId}";
+            }
+
+            $stockStmt = $this->pdo->prepare(
+                'SELECT quantity_on_hand FROM stock_ledger
+                 WHERE item_id = :item_id AND owner_type = \'branch\' AND owner_id = :branch_id
+                 FOR UPDATE'
+            );
+
+            foreach ($requiredQtyByItem as $itemId => $requiredQty) {
+                if ($requiredQty <= 0) {
+                    continue;
+                }
+                $stockStmt->execute(['item_id' => $itemId, 'branch_id' => (int) $invoice['branch_id']]);
+                $stockRow = $stockStmt->fetch();
+                $available = $stockRow !== false ? (float) $stockRow['quantity_on_hand'] : 0.0;
+
+                if ($available < $requiredQty) {
+                    $availableDisp = round($available, 3);
+                    $requiredDisp = round($requiredQty, 3);
+                    throw new \RuntimeException(
+                        "Insufficient stock for \"{$itemNames[$itemId]}\". Requested: {$requiredDisp}, Available in branch: {$availableDisp}."
+                    );
+                }
+            }
+
             // ...then apply the new one. Never netted against the reversal
             // above — two separate audited movements, same as cancel+rebill
             // would produce, just against the same invoice row.
             foreach ($cartLines as $line) {
+                if (empty($line['item_id'])) {
+                    continue;
+                }
                 $qtyTotal = (float) $line['qty'] + (float) $line['free_qty'];
                 $stockService->applyMovement(
                     (int) $line['item_id'], 'branch', (int) $invoice['branch_id'], -$qtyTotal,
@@ -522,6 +701,9 @@ class InvoiceModel
 
             $stockService = new StockLedgerService($this->pdo);
             foreach ($items as $item) {
+                if (empty($item['item_id'])) {
+                    continue;
+                }
                 $qtyTotal = (float) $item['qty'] + (float) $item['free_qty'];
                 $stockService->applyMovement(
                     (int) $item['item_id'],
@@ -605,6 +787,9 @@ class InvoiceModel
 
             $stockService = new StockLedgerService($this->pdo);
             foreach ($items as $item) {
+                if (empty($item['item_id'])) {
+                    continue;
+                }
                 $qtyTotal = (float) $item['qty'] + (float) $item['free_qty'];
                 $stockService->applyMovement(
                     (int) $item['item_id'],

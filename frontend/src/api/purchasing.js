@@ -1,25 +1,23 @@
-import { apiClient } from './client';
+import { apiClient, cleanQueryConfig } from './client';
 
 export const purchaseRequestsApi = {
-  list: async () => (await apiClient.get('/purchase-requests')).data,
+  list: async (params) => (await apiClient.get('/purchase-requests', cleanQueryConfig(params))).data,
   get: async (id) => (await apiClient.get(`/purchase-requests/${id}`)).data,
   create: async (data) => (await apiClient.post('/purchase-requests', data)).data,
   cancel: async (id) => (await apiClient.post(`/purchase-requests/${id}/cancel`)).data,
   approve: async (id) => (await apiClient.post(`/purchase-requests/${id}/approve`)).data,
 };
 
-export const routeSuppliersApi = {
-  get: async (routeId) => (await apiClient.get(`/routes/${routeId}/suppliers`)).data,
-  set: async (routeId, supplierIds) => (await apiClient.put(`/routes/${routeId}/suppliers`, { supplier_ids: supplierIds })).data,
-};
 
 export const customerPrebookingsApi = {
-  list: async () => (await apiClient.get('/customer-prebookings')).data,
+  list: async (params) => (await apiClient.get('/customer-prebookings', cleanQueryConfig(params))).data,
   get: async (id) => (await apiClient.get(`/customer-prebookings/${id}`)).data,
   create: async (data) => (await apiClient.post('/customer-prebookings', data)).data,
   update: async (id, data) => (await apiClient.put(`/customer-prebookings/${id}`, data)).data,
   setStatus: async (id, status) => (await apiClient.put(`/customer-prebookings/${id}/status`, { status })).data,
   cancel: async (id) => (await apiClient.post(`/customer-prebookings/${id}/cancel`)).data,
+  dispatchVan: async (id, data) => (await apiClient.post(`/customer-prebookings/${id}/dispatch-van`, data)).data,
+  linkInvoice: async (id, data) => (await apiClient.post(`/customer-prebookings/${id}/link-invoice`, data)).data,
   async downloadExport() {
     const res = await apiClient.get('/customer-prebookings/export', { responseType: 'blob' });
     const url = URL.createObjectURL(res.data);
@@ -48,7 +46,7 @@ async function downloadWithServerFilename(res, fallbackName) {
 }
 
 export const purchasesApi = {
-  list: async () => (await apiClient.get('/purchases')).data,
+  list: async (params) => (await apiClient.get('/purchases', cleanQueryConfig(params))).data,
   get: async (id) => (await apiClient.get(`/purchases/${id}`)).data,
   create: async (data) => (await apiClient.post('/purchases', data)).data,
   update: async (id, data) => (await apiClient.put(`/purchases/${id}`, data)).data,
@@ -76,7 +74,7 @@ export const purchasesApi = {
 };
 
 export const supplierPaymentsApi = {
-  list: async () => (await apiClient.get('/supplier-payments')).data,
+  list: async (params) => (await apiClient.get('/supplier-payments', cleanQueryConfig(params))).data,
   unpaidGrns: async (supplierId) => (await apiClient.get(`/suppliers/${supplierId}/unpaid-grns`)).data,
   create: async (data) => (await apiClient.post('/supplier-payments', data)).data,
 
@@ -89,7 +87,7 @@ export const supplierPaymentsApi = {
 };
 
 export const stockAdjustmentsApi = {
-  list: async () => (await apiClient.get('/stock-adjustments')).data,
+  list: async (params) => (await apiClient.get('/stock-adjustments', cleanQueryConfig(params))).data,
   create: async (data) => (await apiClient.post('/stock-adjustments', data)).data,
 };
 
@@ -118,8 +116,15 @@ export const vanStockApi = {
 };
 
 export const vanStockIssuesApi = {
-  /** List issue TRANSACTIONS (one row per Issue Stock action) — optionally narrowed to one salesman. */
-  list: async (employeeId) => (await apiClient.get('/van-stock/issues', { params: employeeId ? { employee_id: employeeId } : {} })).data,
+  /** List issue TRANSACTIONS (one row per Issue Stock action) — optionally narrowed to one salesman or paginated. */
+  list: async (employeeIdOrParams) => {
+    let params = employeeIdOrParams;
+    if (typeof employeeIdOrParams !== 'object' || employeeIdOrParams === null) {
+      params = employeeIdOrParams ? { employee_id: employeeIdOrParams } : {};
+    }
+    return (await apiClient.get('/van-stock/issues', cleanQueryConfig(params))).data;
+  },
+
   get: async (id) => (await apiClient.get(`/van-stock/issues/${id}`)).data,
 
   /** Flattened item-line rows for the given issue transaction ids, for building a client-side PDF. */
@@ -139,7 +144,7 @@ export const vanStockIssuesApi = {
 };
 
 export const stockHubApi = {
-  list: async (params = {}) => (await apiClient.get('/stock-hub', { params })).data,
+  list: async (params = {}) => (await apiClient.get('/stock-hub', cleanQueryConfig(params))).data,
   lowStock: async () => (await apiClient.get('/stock-hub/low-stock')).data,
 
   /** Server-side export honors the same owner_type/owner_id/item_id filters as list(). */

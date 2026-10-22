@@ -13,7 +13,7 @@ use PDO;
 
 /**
  * Generic REST CRUD for simple lookup-style entities (categories, tax_codes,
- * stock_units, routes, cities, suppliers, brands, product_lines). List/show
+ * stock_units, suppliers, brands). List/show
  * only require login; write actions require the entity's manage permission —
  * catalog data is meant to be readable broadly, editable only by the gated role.
  */

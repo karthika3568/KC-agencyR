@@ -1,52 +1,84 @@
 .thermal-invoice {
-  width: 78mm;
-  font-family: 'Courier New', monospace;
-  font-size: 11px;
-  color: #000;
+  width: 76mm;
+  max-width: 76mm;
+  margin: 0 auto;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 8px;
+  color: #000000;
+  background-color: #ffffff;
+  border: 1px solid #000000;
+  box-sizing: border-box;
 }
+
+.thermal-invoice * {
+  box-sizing: border-box;
+}
+
 .thermal-invoice table {
   width: 100%;
   border-collapse: collapse;
 }
-.thermal-invoice hr {
-  border: none;
-  border-top: 1px dashed #000;
-  margin: 4px 0;
+
+.thermal-invoice th,
+.thermal-invoice td {
+  border-color: #000000 !important;
 }
 
-.a4-invoice {
-  width: 190mm;
+.kc-invoice-wrapper {
+  width: 100%;
+  max-width: 205mm;
   margin: 0 auto;
-  font-family: Arial, sans-serif;
-  font-size: 12px;
-  color: #111;
+  border: 1.5px solid #000000;
+  background-color: #ffffff;
+  color: #000000;
+  font-family: Arial, Helvetica, sans-serif;
+  box-sizing: border-box;
 }
-.a4-invoice table {
+
+.kc-invoice-wrapper * {
+  box-sizing: border-box;
+}
+
+.kc-invoice-wrapper table {
   width: 100%;
   border-collapse: collapse;
 }
-.a4-invoice th, .a4-invoice td {
-  border: 1px solid #999;
-  padding: 4px 6px;
-  font-size: 11px;
-}
-.a4-invoice .totals-box {
-  border: 1px solid #999;
-  padding: 8px;
+
+.kc-invoice-wrapper th,
+.kc-invoice-wrapper td {
+  border-color: #000000 !important;
 }
 
 @media print {
+  @page {
+    size: auto;
+    margin: 5mm;
+  }
   .no-print {
     display: none !important;
   }
   body {
     background: #fff;
+    margin: 0;
+    padding: 0;
   }
   /* When the in-app Print Preview modal is open (rendered via portal
      straight into <body>, alongside #root), printing must show only the
      modal's invoice content, not the app shell underneath it. */
   body.has-print-modal #root {
     display: none !important;
+  }
+  .kc-invoice-wrapper {
+    max-width: 100% !important;
+    width: 100% !important;
+    border: 1.5px solid #000 !important;
+    box-shadow: none !important;
+  }
+  .thermal-invoice {
+    width: 100% !important;
+    max-width: 100% !important;
+    border: 1px solid #000 !important;
+    box-shadow: none !important;
   }
 }
 

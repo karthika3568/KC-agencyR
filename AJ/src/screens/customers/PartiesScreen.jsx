@@ -37,17 +37,11 @@ export function PartiesScreen() {
                 options: [{ value: 'normal', label: 'Normal' }, { value: 'retail', label: 'Retail' }, { value: 'wholesale', label: 'Wholesale' }],
               },
               { name: 'gstin', label: 'GST No / GSTIN' },
-              { name: 'customer_group', label: 'Group' },
               { name: 'address', label: 'Address' },
-              { name: 'doj', label: 'Date of joining (YYYY-MM-DD)' },
-              { name: 'dob', label: 'Date of birth (YYYY-MM-DD)' },
             ]}
             renderTitle={(r) => r.ledger_name}
             renderSubtitle={(r) => `${r.phone || 'No phone'} · Credit limit Rs. ${r.credit_limit}${r.pricing_type && r.pricing_type !== 'normal' ? ` · ${r.pricing_type}` : ''}`}
-            // A blank date field must reach the API as null, not '' — the
-            // doj/dob columns are DATE, and MySQL's strict mode rejects ''
-            // as an invalid date (a 500, not a validation message).
-            transformSubmit={(form) => ({ ...form, doj: form.doj || null, dob: form.dob || null, gstin: form.gstin || null })}
+            transformSubmit={(form) => ({ ...form, gstin: form.gstin || null })}
             excelImport={{
               importApi: customersApi,
               exportPath: customersApi.exportPath,

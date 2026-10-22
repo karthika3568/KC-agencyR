@@ -46,24 +46,19 @@ class CollectionModel
         return $stmt->fetchAll();
     }
 
-    /** Every branch customer with a positive outstanding balance — "Route Pending Credit Balances". */
-    public function pendingBalancesForBranch(int $branchId, ?int $routeId = null): array
+    /** Every branch customer with a positive outstanding balance — Pending Credit Balances. */
+    public function pendingBalancesForBranch(int $branchId): array
     {
-        $sql = "SELECT c.id AS customer_id, c.ledger_name, c.phone, c.route_id, c.city_id, c.credit_limit,
+        $sql = "SELECT c.id AS customer_id, c.ledger_name, c.phone, c.credit_limit,
                        COALESCE(SUM(i.balance_due), 0) AS total_due,
                        COUNT(i.id) AS unpaid_invoice_count
                 FROM customers c
                 JOIN invoices i ON i.customer_id = c.id AND i.status = 'completed' AND i.balance_due > 0.009
-                WHERE c.branch_id = :branch_id";
-        $params = ['branch_id' => $branchId];
-        if ($routeId !== null) {
-            $sql .= ' AND c.route_id = :route_id';
-            $params['route_id'] = $routeId;
-        }
-        $sql .= ' GROUP BY c.id, c.ledger_name, c.phone, c.route_id, c.city_id, c.credit_limit ORDER BY total_due DESC';
+                WHERE c.branch_id = :branch_id
+                GROUP BY c.id, c.ledger_name, c.phone, c.credit_limit ORDER BY total_due DESC";
 
         $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($params);
+        $stmt->execute(['branch_id' => $branchId]);
         return $stmt->fetchAll();
     }
 
@@ -75,7 +70,6 @@ class CollectionModel
         int $branchId,
         float $amount,
         string $paymentMethod,
-        ?int $routeId,
         int $collectedBy,
         ?array $manualAllocations = null
     ): array {
@@ -121,12 +115,12 @@ class CollectionModel
             }
 
             $stmt = $this->pdo->prepare(
-                'INSERT INTO customer_collections (customer_id, branch_id, amount, payment_method, collected_by, route_id)
-                 VALUES (:customer_id, :branch_id, :amount, :payment_method, :collected_by, :route_id)'
+                'INSERT INTO customer_collections (customer_id, branch_id, amount, payment_method, collected_by)
+                 VALUES (:customer_id, :branch_id, :amount, :payment_method, :collected_by)'
             );
             $stmt->execute([
                 'customer_id' => $customerId, 'branch_id' => $branchId, 'amount' => $amount,
-                'payment_method' => $paymentMethod, 'collected_by' => $collectedBy, 'route_id' => $routeId,
+                'payment_method' => $paymentMethod, 'collected_by' => $collectedBy,
             ]);
             $collectionId = (int) $this->pdo->lastInsertId();
 

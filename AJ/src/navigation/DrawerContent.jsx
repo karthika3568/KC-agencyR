@@ -27,7 +27,7 @@ export function DrawerContent(props) {
     <View style={styles.container}>
       <DrawerContentScrollView {...props} contentContainerStyle={{ paddingTop: 0, flexGrow: 1 }}>
         <View style={styles.header}>
-          <Text style={styles.brand}>AJ Agency</Text>
+          <Text style={styles.brand}>KC Agency</Text>
           <Text style={styles.subtitle}>DISTRIBUTOR BILLING &amp; INVENTORY</Text>
           <View style={styles.userRow}>
             <View style={styles.avatar}>

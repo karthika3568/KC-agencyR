@@ -41,7 +41,6 @@ class VanStockController
         $id = $this->model->issue(
             $this->resolveBranchId($claims),
             (int) $body['employee_id'],
-            !empty($body['route_id']) ? (int) $body['route_id'] : null,
             (int) $claims['sub'],
             $body['notes'] ?? null,
             $body['items']
@@ -149,6 +148,7 @@ class VanStockController
         if (!$issue) {
             Response::error('Not found', 404);
         }
+        $issue['amount_in_words'] = \App\Helpers\NumberToWords::convert((float) ($issue['total_amount'] ?? 0));
         Response::json($issue);
     }
 
@@ -157,18 +157,21 @@ class VanStockController
     {
         $rows = [];
         foreach ($issues as $issue) {
-            foreach ($this->model->issueLines((int) $issue['id']) as $line) {
+            $lines = !empty($issue['items']) ? $issue['items'] : $this->model->issueLines((int) $issue['id']);
+            foreach ($lines as $line) {
                 $rows[] = [
                     'issue_no' => $issue['issue_no'],
                     'issued_at' => $issue['issued_at'],
                     'employee_name' => $issue['employee_name'],
-                    'route_name' => $issue['route_name'],
                     'issued_by_name' => $issue['issued_by_name'],
+                    'branch_name' => $issue['branch_print_name'] ?? $issue['branch_name'] ?? null,
                     'notes' => $issue['notes'],
                     'item_name' => $line['item_name'],
                     'item_code' => $line['item_code'],
-                    'qty' => $line['qty'],
+                    'qty' => (float) $line['qty'],
                     'unit_code' => $line['unit_code'],
+                    'unit_price' => (float) ($line['unit_price'] ?? 0),
+                    'line_amount' => (float) ($line['line_amount'] ?? 0),
                 ];
             }
         }
@@ -187,8 +190,11 @@ class VanStockController
         $rows = $this->flattenedIssueLines($issues);
         $columns = [
             'issue_no' => 'Issue Number', 'issued_at' => 'Issue Date', 'employee_name' => 'Salesman',
-            'route_name' => 'Route', 'item_code' => 'SKU', 'item_name' => 'Item Name',
-            'qty' => 'Qty', 'unit_code' => 'Unit', 'issued_by_name' => 'Issued By', 'notes' => 'Notes',
+            'branch_name' => 'Branch',
+            'item_code' => 'SKU', 'item_name' => 'Item Name',
+            'qty' => 'Qty', 'unit_code' => 'Unit',
+            'unit_price' => 'Unit Price', 'line_amount' => 'Amount',
+            'issued_by_name' => 'Issued By', 'notes' => 'Notes',
         ];
 
         $filename = $singleIssueNo !== null

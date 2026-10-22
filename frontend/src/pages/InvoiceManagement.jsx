@@ -8,6 +8,7 @@ import { priceLine, computeCartTotals } from '../utils/pricing';
 import { Card } from '../components/Card.jsx';
 import { Badge } from '../components/Badge.jsx';
 import { Button } from '../components/Button.jsx';
+import { Pagination } from '../components/Pagination.jsx';
 import { PrintPreviewModal } from '../components/PrintPreviewModal.jsx';
 import { usePermission } from '../hooks/usePermission';
 
@@ -489,6 +490,7 @@ export function InvoiceManagement() {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState('');
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [viewingId, setViewingId] = useState(null);
   const [printingId, setPrintingId] = useState(null);
   const [editingId, setEditingId] = useState(null);
@@ -497,7 +499,10 @@ export function InvoiceManagement() {
   const [deleting, setDeleting] = useState(null);
   const [deleteError, setDeleteError] = useState('');
 
-  const invoicesQuery = useQuery({ queryKey: ['invoices', statusFilter], queryFn: () => invoicesApi.list(statusFilter || undefined) });
+  const invoicesQuery = useQuery({
+    queryKey: ['invoices', statusFilter, search, page],
+    queryFn: () => invoicesApi.list({ page, limit: 10, search, status: statusFilter || undefined }),
+  });
   const cancelMutation = useMutation({
     mutationFn: ({ id, reason }) => invoicesApi.cancel(id, reason),
     onSuccess: () => {
@@ -517,36 +522,48 @@ export function InvoiceManagement() {
     onError: (err) => setDeleteError(err?.response?.data?.error || 'Failed to delete'),
   });
 
-  const invoices = invoicesQuery.data || [];
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return invoices;
-    return invoices.filter(
-      (inv) =>
-        (inv.invoice_no || '').toLowerCase().includes(q) ||
-        (inv.customer_name || '').toLowerCase().includes(q)
-    );
-  }, [invoices, search]);
+  const responseData = invoicesQuery.data;
+  const invoices = Array.isArray(responseData) ? responseData : (responseData?.data || []);
+  const total = typeof responseData?.total === 'number' ? responseData.total : invoices.length;
+  const totalPages = typeof responseData?.total_pages === 'number' ? responseData.total_pages : Math.max(1, Math.ceil(total / 10));
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [totalPages, page]);
 
   return (
-    <div>
-      <h1 className="mb-1 text-2xl font-bold text-ink">Invoice Management</h1>
-      <p className="mb-4 text-sm text-ink-muted">Search, view, print, edit and cancel invoices.</p>
+    <div className="space-y-2.5">
+      <div className="border-b border-border-soft pb-2">
+        <h1 className="text-xl font-bold text-ink">Invoice Management</h1>
+        <p className="text-xs text-ink-muted">Search, view, print, edit and cancel invoices.</p>
+      </div>
 
       <Card
         title="Invoices"
         actions={
           <div className="flex items-center gap-2">
             <div className="relative">
-              <Search size={14} className="absolute left-2.5 top-2.5 text-ink-muted" />
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
               <input
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
                 placeholder="Search invoice # or customer"
-                className="input w-56 pl-8 text-sm"
+                className="input w-48 sm:w-56 pl-8 text-xs py-1"
               />
             </div>
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="input w-40 text-sm">
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setPage(1);
+              }}
+              className="input w-36 text-xs py-1"
+            >
               <option value="">All statuses</option>
               <option value="completed">Completed</option>
               <option value="cancelled">Cancelled</option>
@@ -556,53 +573,62 @@ export function InvoiceManagement() {
           </div>
         }
       >
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border-soft text-left text-xs uppercase text-ink-muted">
-              <th className="px-4 py-2">Invoice #</th><th className="px-4 py-2">Customer</th><th className="px-4 py-2">Date</th>
-              <th className="px-4 py-2">Total</th><th className="px-4 py-2">Payment</th><th className="px-4 py-2">Status</th><th className="px-4 py-2 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((inv) => (
-              <tr key={inv.id} className="border-b border-border-soft">
-                <td className="px-4 py-2 font-medium text-ink">{inv.invoice_no || inv.original_invoice_no || `Held #${inv.id}`}</td>
-                <td className="px-4 py-2">{inv.customer_name || 'Walk-in'}</td>
-                <td className="px-4 py-2 text-ink-muted">{inv.invoice_date}</td>
-                <td className="px-4 py-2">{inv.grand_total}</td>
-                <td className="px-4 py-2"><Badge variant={STATUS_VARIANT[inv.payment_status] || 'neutral'}>{inv.payment_status || '-'}</Badge></td>
-                <td className="px-4 py-2 capitalize">{inv.status}{inv.edited_at ? ' (edited)' : ''}</td>
-                <td className="px-4 py-2">
-                  <div className="flex justify-end gap-2">
-                    <button title="View" onClick={() => setViewingId(inv.id)} className="text-ink-muted hover:text-ink">
-                      <Eye size={16} />
-                    </button>
-                    <button title="Print" onClick={() => setPrintingId(inv.id)} className="text-ink-muted hover:text-ink">
-                      <Printer size={16} />
-                    </button>
-                    {canEdit && inv.status === 'completed' && (
-                      <button title="Edit" onClick={() => setEditingId(inv.id)} className="text-ink-muted hover:text-gold">
-                        <Pencil size={16} />
-                      </button>
-                    )}
-                    {canCancel && inv.status === 'completed' && (
-                      <button title="Cancel" onClick={() => { setCancelling(inv); setCancelError(''); }} className="text-danger hover:text-red-700">
-                        <Ban size={16} />
-                      </button>
-                    )}
-                    {canDelete && inv.status === 'completed' && (
-                      <button title="Delete" onClick={() => { setDeleting(inv); setDeleteError(''); }} className="text-danger hover:text-red-700">
-                        <Trash2 size={16} />
-                      </button>
-                    )}
-                  </div>
-                </td>
+        <div className="max-h-[calc(100vh-210px)] overflow-y-auto">
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 bg-page z-10 shadow-sm">
+              <tr className="border-b border-border-soft text-left uppercase text-ink-muted font-medium bg-surface-subtle/30">
+                <th className="px-3 py-2">Invoice #</th>
+                <th className="px-3 py-2">Customer</th>
+                <th className="px-3 py-2">Date</th>
+                <th className="px-3 py-2">Total</th>
+                <th className="px-3 py-2">Payment</th>
+                <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2 text-right">Actions</th>
               </tr>
-            ))}
-            {filtered.length === 0 && <tr><td colSpan={7} className="px-4 py-6 text-center text-ink-muted">No invoices found.</td></tr>}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-border-soft/60">
+              {invoices.map((inv) => (
+                <tr key={inv.id} className="hover:bg-surface-subtle/20 transition">
+                  <td className="px-3 py-1.5 font-medium text-ink">{inv.invoice_no || inv.original_invoice_no || `Held #${inv.id}`}</td>
+                  <td className="px-3 py-1.5">{inv.customer_name || 'Walk-in'}</td>
+                  <td className="px-3 py-1.5 text-ink-muted">{inv.invoice_date}</td>
+                  <td className="px-3 py-1.5 font-semibold">₹{inv.grand_total}</td>
+                  <td className="px-3 py-1.5"><Badge variant={STATUS_VARIANT[inv.payment_status] || 'neutral'}>{inv.payment_status || '-'}</Badge></td>
+                  <td className="px-3 py-1.5 capitalize">{inv.status}{inv.edited_at ? ' (edited)' : ''}</td>
+                  <td className="px-3 py-1.5">
+                    <div className="flex justify-end gap-1.5">
+                      <button title="View" onClick={() => setViewingId(inv.id)} className="p-1 text-ink-muted hover:text-ink">
+                        <Eye size={15} />
+                      </button>
+                      <button title="Print" onClick={() => setPrintingId(inv.id)} className="p-1 text-ink-muted hover:text-ink">
+                        <Printer size={15} />
+                      </button>
+                      {canEdit && inv.status === 'completed' && (
+                        <button title="Edit" onClick={() => setEditingId(inv.id)} className="p-1 text-ink-muted hover:text-gold">
+                          <Pencil size={15} />
+                        </button>
+                      )}
+                      {canCancel && inv.status === 'completed' && (
+                        <button title="Cancel" onClick={() => { setCancelling(inv); setCancelError(''); }} className="p-1 text-danger hover:text-red-700">
+                          <Ban size={15} />
+                        </button>
+                      )}
+                      {canDelete && inv.status === 'completed' && (
+                        <button title="Delete" onClick={() => { setDeleting(inv); setDeleteError(''); }} className="p-1 text-danger hover:text-red-700">
+                          <Trash2 size={15} />
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {invoices.length === 0 && <tr><td colSpan={7} className="px-3 py-6 text-center text-ink-muted">No invoices found.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        <Pagination page={page} pageSize={10} total={total} onPageChange={setPage} />
       </Card>
+
 
       {viewingId && <ViewModal id={viewingId} onClose={() => setViewingId(null)} />}
       {printingId && <PrintPreviewModal invoiceId={printingId} onClose={() => setPrintingId(null)} />}

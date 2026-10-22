@@ -1,7 +1,14 @@
-import { apiClient } from './client';
+import { apiClient, cleanQueryConfig } from './client';
 
 export const invoicesApi = {
-  list: async (status) => (await apiClient.get('/invoices', { params: status ? { status } : {} })).data,
+  list: async (statusOrParams) => {
+    let params = statusOrParams;
+    if (typeof statusOrParams === 'string') {
+      params = { status: statusOrParams };
+    }
+    return (await apiClient.get('/invoices', cleanQueryConfig(params))).data;
+  },
+
   get: async (id) => (await apiClient.get(`/invoices/${id}`)).data,
   create: async (data) => (await apiClient.post('/invoices', data)).data,
   update: async (id, data) => (await apiClient.put(`/invoices/${id}`, data)).data,

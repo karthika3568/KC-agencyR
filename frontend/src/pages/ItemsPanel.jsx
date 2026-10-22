@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Image as ImageIcon, Pencil, Trash2, Upload, X, Plus, RotateCcw } from 'lucide-react';
-import { categoriesApi, brandsApi, productLinesApi, taxCodesApi, stockUnitsApi, itemsApi, categoryBrandsApi } from '../api/catalog';
+import { categoriesApi, brandsApi, taxCodesApi, stockUnitsApi, itemsApi, categoryBrandsApi } from '../api/catalog';
 import { suppliersApi } from '../api/parties';
 import { branchesApi } from '../api/branches';
 import { Button } from '../components/Button.jsx';
 import { Toast } from '../components/Toast.jsx';
 import { resolveImageUrl } from '../utils/media';
+import { Pagination } from '../components/Pagination';
 
 const emptyForm = {
-  item_name: '', category_id: '', brand_id: '', product_line_id: '', supplier_id: '',
+  item_name: '', category_id: '', brand_id: '', supplier_id: '',
   hsn_code: '', barcode: '', base_unit_id: '', secondary_unit_id: '', tax_code_id: '',
   purchase_price: '', cost_price: '', wholesale_price: '', retail_price: '', mrp: '', min_stock_threshold: '',
   net_srate: '', net_purrate: '', secondary_mrp: '', secondary_net_srate: '', secondary_net_purrate: '',
@@ -34,7 +35,7 @@ function ItemFormModal({ item, onClose }) {
     item
       ? {
           item_name: item.item_name, category_id: item.category_id ?? '', brand_id: item.brand_id ?? '',
-          product_line_id: item.product_line_id ?? '', supplier_id: item.supplier_id ?? '',
+          supplier_id: item.supplier_id ?? '',
           hsn_code: item.hsn_code ?? '', barcode: item.barcode ?? '', base_unit_id: item.base_unit_id ?? '',
           secondary_unit_id: item.secondary_unit_id ?? '', tax_code_id: item.tax_code_id ?? '',
           purchase_price: item.purchase_price, cost_price: item.cost_price, wholesale_price: item.wholesale_price,
@@ -66,7 +67,6 @@ function ItemFormModal({ item, onClose }) {
 
   const categoriesQuery = useQuery({ queryKey: ['categories'], queryFn: categoriesApi.list });
   const brandsQuery = useQuery({ queryKey: ['brands'], queryFn: brandsApi.list });
-  const productLinesQuery = useQuery({ queryKey: ['product-lines'], queryFn: productLinesApi.list });
   const suppliersQuery = useQuery({ queryKey: ['suppliers'], queryFn: suppliersApi.list });
   const taxCodesQuery = useQuery({ queryKey: ['tax-codes'], queryFn: taxCodesApi.list });
   const stockUnitsQuery = useQuery({ queryKey: ['stock-units'], queryFn: stockUnitsApi.list });
@@ -86,7 +86,6 @@ function ItemFormModal({ item, onClose }) {
   const categories = categoriesQuery.data || [];
   const allBrands = brandsQuery.data || [];
   const brands = allowedBrandIds ? allBrands.filter((b) => allowedBrandIds.includes(b.id)) : allBrands;
-  const productLines = productLinesQuery.data || [];
   const suppliers = suppliersQuery.data || [];
   const taxCodes = taxCodesQuery.data || [];
   const stockUnits = stockUnitsQuery.data || [];
@@ -154,7 +153,6 @@ function ItemFormModal({ item, onClose }) {
       ...form,
       category_id: toNullableInt(form.category_id),
       brand_id: toNullableInt(form.brand_id),
-      product_line_id: toNullableInt(form.product_line_id),
       supplier_id: toNullableInt(form.supplier_id),
       base_unit_id: toNullableInt(form.base_unit_id),
       secondary_unit_id: toNullableInt(form.secondary_unit_id),
@@ -233,12 +231,6 @@ function ItemFormModal({ item, onClose }) {
             <select value={form.brand_id} onChange={(e) => update('brand_id', e.target.value)} className="input">
               <option value="">--</option>
               {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
-          </Field>
-          <Field label="Product line">
-            <select value={form.product_line_id} onChange={(e) => update('product_line_id', e.target.value)} className="input">
-              <option value="">--</option>
-              {productLines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </Field>
           <Field label="Supplier">
@@ -448,11 +440,11 @@ export function ItemsPanel({ canManage }) {
   const pagedItems = items.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-2.5">
       <Toast message={importSuccessMsg} onClose={() => setImportSuccessMsg('')} />
-      <div className="card">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-soft px-4 py-3">
-          <span className="font-semibold text-ink">Items</span>
+      <div className="card overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-soft px-3.5 py-2">
+          <span className="font-semibold text-ink text-sm sm:text-base">Items</span>
           <div className="flex items-center gap-2">
             <div className="flex overflow-hidden rounded-lg border border-border-soft text-xs">
               {[
@@ -464,7 +456,7 @@ export function ItemsPanel({ canManage }) {
                   key={value}
                   type="button"
                   onClick={() => handleStatusFilterChange(value)}
-                  className={`px-3 py-1.5 font-medium ${
+                  className={`px-2.5 py-1 font-medium ${
                     statusFilter === value ? 'bg-navbar text-gold' : 'bg-white text-ink-muted hover:bg-page'
                   }`}
                 >
@@ -477,122 +469,99 @@ export function ItemsPanel({ canManage }) {
               placeholder="Search name / code / barcode"
               value={search}
               onChange={(e) => handleSearchChange(e.target.value)}
-              className="input w-56"
+              className="input w-48 sm:w-56"
             />
             <Button variant="secondary" size="sm" onClick={() => itemsApi.downloadExport()}>Export Excel</Button>
             {canManage && (
-              <Button size="sm" icon={<Plus size={14} />} onClick={() => setModalItem(null)}>Add Item</Button>
+              <Button size="sm" icon={<Plus size={13} />} onClick={() => setModalItem(null)}>Add Item</Button>
             )}
           </div>
         </div>
 
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border-soft text-left text-xs uppercase text-ink-muted">
-              <th className="px-4 py-2"></th>
-              <th className="px-4 py-2">Code</th>
-              <th className="px-4 py-2">Name</th>
-              <th className="px-4 py-2">Category</th>
-              <th className="px-4 py-2">Unit</th>
-              <th className="px-4 py-2">MRP</th>
-              <th className="px-4 py-2">NET_SRATE</th>
-              <th className="px-4 py-2">NET_PURRATE</th>
-              <th className="px-4 py-2">Opening Stock</th>
-              <th className="px-4 py-2">GST%</th>
-              <th className="px-4 py-2">HSN</th>
-              {statusFilter === 'all' && <th className="px-4 py-2">Status</th>}
-              {canManage && <th className="px-4 py-2 text-right">Actions</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {pagedItems.map((item) => (
-              <tr key={item.id} className="border-b border-border-soft">
-                <td className="px-4 py-2">
-                  <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded bg-page">
-                    {item.image ? (
-                      <img
-                        src={resolveImageUrl(item.image)}
-                        alt=""
-                        className="h-full w-full object-cover"
-                        onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextSibling.style.display = 'flex'; }}
-                      />
-                    ) : null}
-                    <ImageIcon size={16} className="text-ink-muted" style={{ display: item.image ? 'none' : 'flex' }} />
-                  </div>
-                </td>
-                <td className="px-4 py-2 text-ink-muted">{item.item_code}</td>
-                <td className="px-4 py-2 font-medium text-ink">{item.item_name}</td>
-                <td className="px-4 py-2 text-ink-muted">{item.category_name || '—'}</td>
-                <td className="px-4 py-2 text-ink-muted">{item.base_unit_code}</td>
-                <td className="px-4 py-2 text-ink-muted">{item.mrp}</td>
-                <td className="px-4 py-2 text-ink-muted">{item.net_srate ?? item.retail_price}</td>
-                <td className="px-4 py-2 text-ink-muted">{item.net_purrate ?? item.purchase_price}</td>
-                <td className="px-4 py-2 font-medium text-ink">{item.opening_stock ?? 0}</td>
-                <td className="px-4 py-2 text-ink-muted">{item.gst_percent ?? '—'}</td>
-                <td className="px-4 py-2 text-ink-muted">{item.hsn_code || '—'}</td>
-                {statusFilter === 'all' && (
-                  <td className="px-4 py-2">
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                      Number(item.is_active) ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-danger'
-                    }`}>
-                      {Number(item.is_active) ? 'Active' : 'Deactivated'}
-                    </span>
-                  </td>
-                )}
-                {canManage && (
-                  <td className="px-4 py-2 text-right">
-                    <div className="flex justify-end gap-1">
-                      <button onClick={() => openEdit(item)} title="Edit" className="rounded p-1.5 text-ink-muted hover:bg-page hover:text-gold">
-                        <Pencil size={15} />
-                      </button>
-                      {Number(item.is_active) ? (
-                        <button onClick={() => handleDelete(item)} title="Deactivate" className="rounded p-1.5 text-ink-muted hover:bg-red-50 hover:text-danger">
-                          <Trash2 size={15} />
-                        </button>
-                      ) : (
-                        <button onClick={() => handleReactivate(item)} title="Reactivate" className="rounded p-1.5 text-ink-muted hover:bg-emerald-50 hover:text-emerald-700">
-                          <RotateCcw size={15} />
-                        </button>
-                      )}
+        <div className="max-h-[calc(100vh-240px)] overflow-y-auto">
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 bg-page z-10">
+              <tr className="border-b border-border-soft text-left uppercase text-ink-muted">
+                <th className="px-3 py-1.5"></th>
+                <th className="px-3 py-1.5">Code</th>
+                <th className="px-3 py-1.5">Name</th>
+                <th className="px-3 py-1.5">Category</th>
+                <th className="px-3 py-1.5">Unit</th>
+                <th className="px-3 py-1.5">MRP</th>
+                <th className="px-3 py-1.5">NET_SRATE</th>
+                <th className="px-3 py-1.5">NET_PURRATE</th>
+                <th className="px-3 py-1.5">Opening Stock</th>
+                <th className="px-3 py-1.5">GST%</th>
+                <th className="px-3 py-1.5">HSN</th>
+                {statusFilter === 'all' && <th className="px-3 py-1.5">Status</th>}
+                {canManage && <th className="px-3 py-1.5 text-right">Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {pagedItems.map((item) => (
+                <tr key={item.id} className="border-b border-border-soft hover:bg-page/50">
+                  <td className="px-3 py-1">
+                    <div className="flex h-7 w-7 items-center justify-center overflow-hidden rounded bg-page">
+                      {item.image ? (
+                        <img
+                          src={resolveImageUrl(item.image)}
+                          alt=""
+                          className="h-full w-full object-cover"
+                          onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextSibling.style.display = 'flex'; }}
+                        />
+                      ) : null}
+                      <ImageIcon size={14} className="text-ink-muted" style={{ display: item.image ? 'none' : 'flex' }} />
                     </div>
                   </td>
-                )}
-              </tr>
-            ))}
-            {items.length === 0 && (
-              <tr>
-                <td colSpan={11 + (canManage ? 1 : 0) + (statusFilter === 'all' ? 1 : 0)} className="px-4 py-6 text-center text-ink-muted">No items found.</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+                  <td className="px-3 py-1 text-ink-muted">{item.item_code}</td>
+                  <td className="px-3 py-1 font-medium text-ink">{item.item_name}</td>
+                  <td className="px-3 py-1 text-ink-muted">{item.category_name || '—'}</td>
+                  <td className="px-3 py-1 text-ink-muted">{item.base_unit_code}</td>
+                  <td className="px-3 py-1 text-ink-muted">{item.mrp}</td>
+                  <td className="px-3 py-1 text-ink-muted">{item.net_srate ?? item.retail_price}</td>
+                  <td className="px-3 py-1 text-ink-muted">{item.net_purrate ?? item.purchase_price}</td>
+                  <td className="px-3 py-1 font-medium text-ink">{item.opening_stock ?? 0}</td>
+                  <td className="px-3 py-1 text-ink-muted">{item.gst_percent ?? '—'}</td>
+                  <td className="px-3 py-1 text-ink-muted">{item.hsn_code || '—'}</td>
+                  {statusFilter === 'all' && (
+                    <td className="px-3 py-1">
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                        Number(item.is_active) ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-danger'
+                      }`}>
+                        {Number(item.is_active) ? 'Active' : 'Deactivated'}
+                      </span>
+                    </td>
+                  )}
+                  {canManage && (
+                    <td className="px-3 py-1 text-right">
+                      <div className="flex justify-end gap-1">
+                        <button onClick={() => openEdit(item)} title="Edit" className="rounded p-1 text-ink-muted hover:bg-page hover:text-gold">
+                          <Pencil size={13} />
+                        </button>
+                        {Number(item.is_active) ? (
+                          <button onClick={() => handleDelete(item)} title="Deactivate" className="rounded p-1 text-ink-muted hover:bg-red-50 hover:text-danger">
+                            <Trash2 size={13} />
+                          </button>
+                        ) : (
+                          <button onClick={() => handleReactivate(item)} title="Reactivate" className="rounded p-1 text-ink-muted hover:bg-emerald-50 hover:text-emerald-700">
+                            <RotateCcw size={13} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))}
+              {items.length === 0 && (
+                <tr>
+                  <td colSpan={11 + (canManage ? 1 : 0) + (statusFilter === 'all' ? 1 : 0)} className="px-4 py-6 text-center text-ink-muted">No items found.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
 
-        {items.length > 0 && (
-          <div className="flex items-center justify-between border-t border-border-soft px-4 py-3 text-sm">
-            <span className="text-ink-muted">
-              Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, items.length)} of {items.length}
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="rounded border border-border-soft px-3 py-1 text-ink disabled:opacity-40"
-              >
-                Previous
-              </button>
-              <span className="text-ink-muted">Page {currentPage} of {totalPages}</span>
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-                className="rounded border border-border-soft px-3 py-1 text-ink disabled:opacity-40"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        )}
+        <Pagination page={currentPage} pageSize={PAGE_SIZE} total={items.length} onPageChange={setPage} />
       </div>
 
       {canManage && (

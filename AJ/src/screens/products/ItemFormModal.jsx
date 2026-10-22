@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Image, StyleSheet, Switch } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
-import { itemsApi, categoriesApi, brandsApi, productLinesApi, stockUnitsApi, taxCodesApi } from '../../api/catalog';
+import { itemsApi, categoriesApi, brandsApi, stockUnitsApi, taxCodesApi } from '../../api/catalog';
 import { suppliersApi } from '../../api/parties';
 import { branchesApi } from '../../api/branches';
 import { friendlyErrorMessage } from '../../api/client';
@@ -17,7 +17,6 @@ export function ItemFormModal({ item, onClose }) {
   const queryClient = useQueryClient();
   const categoriesQuery = useQuery({ queryKey: ['categories'], queryFn: categoriesApi.list });
   const brandsQuery = useQuery({ queryKey: ['brands'], queryFn: brandsApi.list });
-  const productLinesQuery = useQuery({ queryKey: ['product-lines'], queryFn: productLinesApi.list });
   const suppliersQuery = useQuery({ queryKey: ['suppliers'], queryFn: suppliersApi.list });
   const unitsQuery = useQuery({ queryKey: ['stock-units'], queryFn: stockUnitsApi.list });
   const taxQuery = useQuery({ queryKey: ['tax-codes'], queryFn: taxCodesApi.list });
@@ -27,7 +26,6 @@ export function ItemFormModal({ item, onClose }) {
     item_name: item?.item_name || '',
     category_id: item?.category_id || null,
     brand_id: item?.brand_id || null,
-    product_line_id: item?.product_line_id || null,
     supplier_id: item?.supplier_id || null,
     base_unit_id: item?.base_unit_id || null,
     secondary_unit_id: item?.secondary_unit_id || null,
@@ -82,7 +80,6 @@ export function ItemFormModal({ item, onClose }) {
       item_name: form.item_name,
       category_id: form.category_id,
       brand_id: form.brand_id,
-      product_line_id: form.product_line_id,
       supplier_id: form.supplier_id,
       base_unit_id: form.base_unit_id,
       secondary_unit_id: form.secondary_unit_id,
@@ -156,7 +153,6 @@ export function ItemFormModal({ item, onClose }) {
 
       <SelectField label="Category" value={form.category_id} options={categoriesQuery.data || []} onChange={(v) => set('category_id', v)} />
       <SelectField label="Brand" value={form.brand_id} options={brandsQuery.data || []} onChange={(v) => set('brand_id', v)} />
-      <SelectField label="Product Line" value={form.product_line_id} options={productLinesQuery.data || []} onChange={(v) => set('product_line_id', v)} />
       <SelectField label="Supplier" value={form.supplier_id} options={suppliersQuery.data || []} onChange={(v) => set('supplier_id', v)} />
       <SelectField label="Tax Code / GST %" value={form.tax_code_id} options={taxQuery.data || []} labelKey="code" onChange={(v) => set('tax_code_id', v)} />
 

@@ -1,8 +1,8 @@
-import { apiClient } from './client';
+import { apiClient, cleanQueryConfig } from './client';
 
 function makeCrud(path) {
   return {
-    list: async () => (await apiClient.get(path)).data,
+    list: async (params) => (await apiClient.get(path, cleanQueryConfig(params))).data,
     create: async (data) => (await apiClient.post(path, data)).data,
     update: async (id, data) => (await apiClient.put(`${path}/${id}`, data)).data,
     remove: async (id) => (await apiClient.delete(`${path}/${id}`)).data,
@@ -20,8 +20,6 @@ function downloadBlob(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
-export const routesApi = makeCrud('/routes');
-export const citiesApi = makeCrud('/cities');
 export const customersApi = {
   ...makeCrud('/customers'),
 

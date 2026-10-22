@@ -20,7 +20,6 @@ import { CashHandoverScreen } from '../screens/collections/CashHandoverScreen';
 import { ReportsScreen } from '../screens/reports/ReportsScreen';
 import { StaffScreen } from '../screens/dashboard/StaffScreen';
 import { SettingsScreen } from '../screens/dashboard/SettingsScreen';
-import { BranchesScreen } from '../screens/dashboard/BranchesScreen';
 import { DrawerContent } from './DrawerContent';
 import { PersistentBottomBar } from '../components/PersistentBottomBar';
 import { NAV_ITEMS } from './navItems';
@@ -46,7 +45,6 @@ const SCREEN_COMPONENTS = {
   Reports: ReportsScreen,
   Staff: StaffScreen,
   Settings: SettingsScreen,
-  Branches: BranchesScreen,
 };
 
 const DRAWER_SCREEN_OPTIONS = {

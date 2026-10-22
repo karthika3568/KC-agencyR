@@ -37,7 +37,7 @@ export function LoginScreen() {
         keyboardDismissMode="on-drag"
       >
         <View style={styles.card}>
-          <Text style={styles.brand}>AJ Agency</Text>
+          <Text style={styles.brand}>KC Agency</Text>
           <Text style={styles.subtitle}>DISTRIBUTOR BILLING &amp; INVENTORY</Text>
 
           <Text style={styles.label}>Email</Text>

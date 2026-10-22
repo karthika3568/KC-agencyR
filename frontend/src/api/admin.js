@@ -42,7 +42,6 @@ export const reportsApi = {
   purchaseRegister: async (params) => (await apiClient.get(reportUrl('purchase-register', params))).data,
   itemWiseSales: async (params) => (await apiClient.get(reportUrl('item-wise-sales', params))).data,
   branchWiseSales: async (params) => (await apiClient.get(reportUrl('branch-wise-sales', params))).data,
-  routeWiseSales: async (params) => (await apiClient.get(reportUrl('route-wise-sales', params))).data,
   customerWiseSales: async (params) => (await apiClient.get(reportUrl('customer-wise-sales', params))).data,
   supplierWiseSales: async (params) => (await apiClient.get(reportUrl('supplier-wise-sales', params))).data,
   brandWiseSales: async (params) => (await apiClient.get(reportUrl('brand-wise-sales', params))).data,

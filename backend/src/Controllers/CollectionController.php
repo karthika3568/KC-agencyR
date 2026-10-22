@@ -34,13 +34,12 @@ class CollectionController
         Response::json($this->model->all($this->resolveBranchId($claims)));
     }
 
-    /** GET /api/collections/pending — Route Pending Credit Balances panel. */
+    /** GET /api/collections/pending — Pending Credit Balances panel. */
     public function pending(): void
     {
         $claims = JwtAuthMiddleware::authenticate();
         PermissionMiddleware::require($claims, 'credit.view_shopwide_outstanding');
-        $routeId = !empty($_GET['route_id']) ? (int) $_GET['route_id'] : null;
-        Response::json($this->model->pendingBalancesForBranch($this->resolveBranchId($claims), $routeId));
+        Response::json($this->model->pendingBalancesForBranch($this->resolveBranchId($claims)));
     }
 
     /** GET /api/customers/{id}/unpaid-invoices — feeds the FIFO preview in the Collect modal. */
@@ -66,7 +65,6 @@ class CollectionController
                 $this->resolveBranchId($claims),
                 (float) $body['amount'],
                 $body['payment_method'],
-                !empty($body['route_id']) ? (int) $body['route_id'] : null,
                 (int) $claims['sub'],
                 $body['allocations'] ?? null
             );

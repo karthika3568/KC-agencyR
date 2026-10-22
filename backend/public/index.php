@@ -101,12 +101,6 @@ $router->post('/api/brands', fn () => $brands->store());
 $router->put('/api/brands/{id}', fn ($id) => $brands->update($id));
 $router->delete('/api/brands/{id}', fn ($id) => $brands->destroy($id));
 
-$productLines = new CrudController($pdo, 'product_lines', ['branch_id', 'name', 'code'], 'catalog.manage_items', 'PRD');
-$router->get('/api/product-lines', fn () => $productLines->index());
-$router->post('/api/product-lines', fn () => $productLines->store());
-$router->put('/api/product-lines/{id}', fn ($id) => $productLines->update($id));
-$router->delete('/api/product-lines/{id}', fn ($id) => $productLines->destroy($id));
-
 $taxCodes = new CrudController(
     $pdo, 'tax_codes',
     ['code', 'name', 'gst_percent', 'cgst_percent', 'sgst_percent', 'igst_percent', 'cess_percent'],
@@ -145,46 +139,10 @@ $router->post('/api/items/image-search', fn () => $itemController->imageSearch()
 // ---------------------------------------------------------------
 // Parties — branch-scoped (section 4.2)
 // ---------------------------------------------------------------
-$routes = new BranchScopedCrudController($pdo, 'routes', ['branch_id', 'name'], 'parties.manage_customers');
-$router->get('/api/routes', fn () => $routes->index());
-$router->post('/api/routes', fn () => $routes->store());
-$router->put('/api/routes/{id}', fn ($id) => $routes->update($id));
-$router->delete('/api/routes/{id}', fn ($id) => $routes->destroy($id));
-
-// Which suppliers serve a given route — used to filter the supplier
-// dropdown on a Purchase Request by Branch + Route (section: supplier
-// mapping). Same ad-hoc-pair-endpoint pattern as /categories/{id}/brands.
-$router->get('/api/routes/{id}/suppliers', function ($id) use ($pdo) {
-    JwtAuthMiddleware::authenticate();
-    $stmt = $pdo->prepare('SELECT supplier_id FROM supplier_routes WHERE route_id = :id');
-    $stmt->execute(['id' => $id]);
-    Response::json(['route_id' => (int) $id, 'supplier_ids' => array_map('intval', array_column($stmt->fetchAll(), 'supplier_id'))]);
-});
-$router->put('/api/routes/{id}/suppliers', function ($id) use ($pdo) {
-    $claims = JwtAuthMiddleware::authenticate();
-    PermissionMiddleware::require($claims, 'parties.manage_suppliers');
-    $body = json_decode(file_get_contents('php://input'), true) ?? [];
-    $pdo->beginTransaction();
-    $pdo->prepare('DELETE FROM supplier_routes WHERE route_id = :id')->execute(['id' => $id]);
-    $stmt = $pdo->prepare('INSERT INTO supplier_routes (route_id, supplier_id) VALUES (:r, :s)');
-    foreach (array_unique(array_map('intval', $body['supplier_ids'] ?? [])) as $supplierId) {
-        $stmt->execute(['r' => $id, 's' => $supplierId]);
-    }
-    $pdo->commit();
-    Response::json(['route_id' => (int) $id, 'supplier_ids' => $body['supplier_ids'] ?? []]);
-});
-
-// Cities hang off a route, not a branch directly — plain CrudController.
-$cities = new CrudController($pdo, 'cities', ['route_id', 'name'], 'parties.manage_customers');
-$router->get('/api/cities', fn () => $cities->index());
-$router->post('/api/cities', fn () => $cities->store());
-$router->put('/api/cities/{id}', fn ($id) => $cities->update($id));
-$router->delete('/api/cities/{id}', fn ($id) => $cities->destroy($id));
-
 $customers = new BranchScopedCrudController(
     $pdo, 'customers',
-    ['branch_id', 'city_id', 'route_id', 'ledger_name', 'print_name', 'customer_group', 'phone', 'gstin', 'address',
-     'doj', 'dob', 'pricing_type', 'credit_limit', 'opening_balance', 'is_local_customer', 'status'],
+    ['branch_id', 'ledger_name', 'print_name', 'phone', 'gstin', 'address',
+     'pricing_type', 'credit_limit', 'opening_balance', 'is_local_customer', 'status'],
     'parties.manage_customers',
     onCreated: function ($id, $saved, $claims) use ($pdo) {
         // opening_balance is just a number on the row until it's actually
@@ -280,6 +238,8 @@ $router->get('/api/customer-prebookings/{id}', fn ($id) => $customerPrebookings-
 $router->put('/api/customer-prebookings/{id}', fn ($id) => $customerPrebookings->update($id));
 $router->put('/api/customer-prebookings/{id}/status', fn ($id) => $customerPrebookings->updateStatus($id));
 $router->post('/api/customer-prebookings/{id}/cancel', fn ($id) => $customerPrebookings->cancel($id));
+$router->post('/api/customer-prebookings/{id}/dispatch-van', fn ($id) => $customerPrebookings->dispatchVan($id));
+$router->post('/api/customer-prebookings/{id}/link-invoice', fn ($id) => $customerPrebookings->linkInvoice($id));
 
 $purchases = new PurchaseController($pdo);
 $router->get('/api/purchases', fn () => $purchases->index());
@@ -399,7 +359,6 @@ $router->get('/api/reports/expense-income', fn () => $reports->expenseIncome());
 $router->get('/api/reports/profit', fn () => $reports->profitReport());
 $router->get('/api/reports/profit/invoice-wise', fn () => $reports->invoiceWiseProfitReport());
 $router->get('/api/reports/branch-wise-sales', fn () => $reports->branchWiseSales());
-$router->get('/api/reports/route-wise-sales', fn () => $reports->routeWiseSales());
 $router->get('/api/reports/customer-wise-sales', fn () => $reports->customerWiseSales());
 $router->get('/api/reports/supplier-wise-sales', fn () => $reports->supplierWiseSales());
 $router->get('/api/reports/brand-wise-sales', fn () => $reports->brandWiseSales());
@@ -408,9 +367,6 @@ $router->get('/api/reports/brand-category-wise-sales', fn () => $reports->brandC
 
 $branches = new BranchController($pdo);
 $router->get('/api/branches', fn () => $branches->index());
-$router->post('/api/branches', fn () => $branches->store());
-$router->get('/api/branches/{id}', fn ($id) => $branches->show($id));
-$router->put('/api/branches/{id}', fn ($id) => $branches->update($id));
 
 $settings = new SettingsController($pdo);
 $router->get('/api/settings/branch', fn () => $settings->branchProfile());

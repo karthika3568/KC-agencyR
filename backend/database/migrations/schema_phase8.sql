@@ -1,5 +1,5 @@
 -- =====================================================================
--- AJ Agency POS — Phase 8 Schema (branch mapping, category-brand mapping,
+-- KC Agency POS — Phase 8 Schema (branch mapping, category-brand mapping,
 -- item-supplier mapping). Run AFTER schema.sql..schema_phase7.sql.
 -- MySQL 8 / MariaDB-safe.
 -- =====================================================================

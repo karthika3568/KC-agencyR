@@ -62,7 +62,6 @@ CREATE TABLE IF NOT EXISTS items (
   item_name VARCHAR(150) NOT NULL,
   category_id INT UNSIGNED NULL,
   brand_id INT UNSIGNED NULL,
-  product_line_id INT UNSIGNED NULL,
   hsn_code VARCHAR(20) NULL,
   barcode VARCHAR(50) NULL,
   base_unit_id INT UNSIGNED NOT NULL,

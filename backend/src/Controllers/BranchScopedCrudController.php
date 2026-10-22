@@ -12,8 +12,8 @@ use App\Models\SimpleCrudModel;
 use PDO;
 
 /**
- * CRUD for entities that always belong to exactly one branch (routes,
- * suppliers, customers — section 3.2/4.2 of the spec). A user without
+ * CRUD for entities that always belong to exactly one branch (suppliers,
+ * customers — section 3.2/4.2 of the spec). A user without
  * branches.switch_context is hard-locked to their own home branch on every
  * read and write; ?branch_id= from the query string is ignored for them so
  * they can never see or write another branch's rows just by editing the URL.
@@ -65,8 +65,37 @@ class BranchScopedCrudController
     {
         $claims = JwtAuthMiddleware::authenticate();
         $branchId = $this->resolveBranchId($claims);
+
+        if (isset($_GET['page'])) {
+            $page = max(1, (int) $_GET['page']);
+            $limit = 10;
+            $search = $_GET['search'] ?? null;
+            $status = $_GET['status'] ?? null;
+
+            $searchCols = [];
+            if ($this->table === 'customers') {
+                $searchCols = ['ledger_name', 'phone', 'gstin'];
+            } elseif ($this->table === 'suppliers') {
+                $searchCols = ['name', 'phone', 'gstin'];
+            } elseif ($this->table === 'expenses') {
+                $searchCols = ['expense_no', 'description', 'payment_mode'];
+            } elseif ($this->table === 'other_income') {
+                $searchCols = ['receipt_no', 'description', 'payment_mode'];
+            }
+
+            Response::json($this->model()->paginate(
+                ['branch_id' => $branchId],
+                $page,
+                $limit,
+                $search,
+                $searchCols,
+                $status
+            ));
+        }
+
         Response::json($this->model()->all(['branch_id' => $branchId]));
     }
+
 
     public function show(string $id): void
     {

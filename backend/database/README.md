@@ -1,7 +1,7 @@
-# Database Setup — AJ Agency POS
+# Database Setup — KC Agency POS
 
 This folder holds the complete MySQL/MariaDB structure and safe demo data
-for a fresh installation of the AJ Agency POS / Distributor Billing System.
+for a fresh installation of the KC Agency POS / Distributor Billing System.
 
 ## Files
 

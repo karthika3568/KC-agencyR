@@ -57,7 +57,6 @@ class PurchaseRequestController
         $header = [
             'supplier_id' => (int) $body['supplier_id'],
             'branch_id' => $this->resolveBranchId($claims),
-            'route_id' => !empty($body['route_id']) ? (int) $body['route_id'] : null,
             'notes' => $body['notes'] ?? null,
             'created_by' => (int) $claims['sub'],
         ];

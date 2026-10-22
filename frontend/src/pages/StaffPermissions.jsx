@@ -5,6 +5,8 @@ import { staffApi, rolesApi } from '../api/admin';
 import { branchesApi } from '../api/branches';
 import { usePermission } from '../hooks/usePermission';
 import { Button } from '../components/Button.jsx';
+import { Pagination } from '../components/Pagination';
+import { useClientPagination } from '../hooks/useClientPagination';
 
 export function StaffPermissions() {
   const canManageAccounts = usePermission('staff.manage_accounts');
@@ -122,31 +124,39 @@ export function StaffPermissions() {
     return queryMatch && statusMatch;
   });
 
+  const {
+    page,
+    setPage,
+    total,
+    paginatedItems: pagedStaff,
+    resetPage,
+  } = useClientPagination(filteredStaff, 10);
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border-soft/40 pb-4">
+    <div className="space-y-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border-soft/40 pb-2">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-ink flex items-center gap-2.5">
-            <ShieldCheck className="w-7 h-7 text-indigo-400" />
+          <h1 className="text-xl font-bold tracking-tight text-ink flex items-center gap-2">
+            <ShieldCheck className="w-5 h-5 text-indigo-400" />
             Staff &amp; Permissions
           </h1>
-          <p className="text-xs text-ink-muted mt-1">Manage user credentials, branch assignments, roles, and granular security overrides</p>
+          <p className="text-xs text-ink-muted">Manage user credentials, branch assignments, roles, and granular security overrides</p>
         </div>
       </div>
 
       {successMsg && (
-        <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs px-4 py-2.5 rounded-lg flex items-center gap-2">
+        <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs px-3.5 py-2 rounded-lg flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4" />
           {successMsg}
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+      <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
         {/* Left Column Form */}
         <div className="lg:col-span-4">
-          <div className="card p-5 space-y-4 sticky top-6">
-            <div className="flex items-center justify-between border-b border-border-soft pb-3">
-              <h2 className="font-semibold text-ink text-base flex items-center gap-2">
+          <div className="card p-3.5 space-y-2.5 sticky top-3">
+            <div className="flex items-center justify-between border-b border-border-soft pb-2">
+              <h2 className="font-semibold text-ink text-sm flex items-center gap-1.5">
                 {editingId ? <Edit2 className="w-4 h-4 text-cyan-400" /> : <Plus className="w-4 h-4 text-emerald-400" />}
                 {editingId ? 'Edit Staff Account' : 'Create Staff Account'}
               </h2>
@@ -157,11 +167,11 @@ export function StaffPermissions() {
               )}
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-3">
-              {error && <div className="text-xs text-red-400 bg-red-950/40 p-2.5 rounded border border-red-800/40">{error}</div>}
+            <form onSubmit={handleSubmit} className="space-y-2">
+              {error && <div className="text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{error}</div>}
 
               <div>
-                <label className="text-xs font-medium text-ink-muted block mb-1">Full Name *</label>
+                <label className="text-xs font-medium text-ink-muted block mb-0.5">Full Name *</label>
                 <input
                   required
                   type="text"
@@ -173,7 +183,7 @@ export function StaffPermissions() {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-ink-muted block mb-1">Email Address *</label>
+                <label className="text-xs font-medium text-ink-muted block mb-0.5">Email Address *</label>
                 <input
                   required
                   disabled={Boolean(editingId)}
@@ -186,7 +196,7 @@ export function StaffPermissions() {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-ink-muted block mb-1">
+                <label className="text-xs font-medium text-ink-muted block mb-0.5">
                   {editingId ? 'New Password (leave empty to keep current)' : 'Password *'}
                 </label>
                 <input
@@ -200,7 +210,7 @@ export function StaffPermissions() {
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-xs font-medium text-ink-muted block mb-1">Role *</label>
+                  <label className="text-xs font-medium text-ink-muted block mb-0.5">Role *</label>
                   <select
                     required
                     value={form.role_id}
@@ -216,13 +226,13 @@ export function StaffPermissions() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-ink-muted block mb-1">Branch</label>
+                  <label className="text-xs font-medium text-ink-muted block mb-0.5">Branch</label>
                   <select
                     value={form.branch_id}
                     onChange={(e) => setForm({ ...form, branch_id: e.target.value })}
                     className="input w-full"
                   >
-                    <option value="">All / No Home Branch</option>
+                    <option value="">All / No Branch</option>
                     {branches.map((b) => (
                       <option key={b.id} value={b.id}>
                         {b.branch_name}
@@ -233,7 +243,7 @@ export function StaffPermissions() {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-ink-muted block mb-1">Phone Number</label>
+                <label className="text-xs font-medium text-ink-muted block mb-0.5">Phone Number</label>
                 <input
                   type="text"
                   placeholder="+91 9876543210"
@@ -244,9 +254,9 @@ export function StaffPermissions() {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-ink-muted block mb-1.5">Status</label>
+                <label className="text-xs font-medium text-ink-muted block mb-1">Status</label>
                 <div className="flex items-center gap-4">
-                  <label className="inline-flex items-center gap-2 cursor-pointer text-xs text-ink">
+                  <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs text-ink">
                     <input
                       type="radio"
                       name="staffStatus"
@@ -254,12 +264,12 @@ export function StaffPermissions() {
                       onChange={() => setForm((prev) => ({ ...prev, status: 'active' }))}
                       className="form-radio text-emerald-500 focus:ring-emerald-500/20"
                     />
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>
                       Active
                     </span>
                   </label>
-                  <label className="inline-flex items-center gap-2 cursor-pointer text-xs text-ink">
+                  <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs text-ink">
                     <input
                       type="radio"
                       name="staffStatus"
@@ -267,8 +277,8 @@ export function StaffPermissions() {
                       onChange={() => setForm((prev) => ({ ...prev, status: 'inactive' }))}
                       className="form-radio text-gray-500 focus:ring-gray-500/20"
                     />
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-gray-500 inline-block"></span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-gray-500 inline-block"></span>
                       Inactive
                     </span>
                   </label>
@@ -276,7 +286,7 @@ export function StaffPermissions() {
               </div>
 
               {canManageAccounts && (
-                <div className="pt-2 flex items-center gap-2">
+                <div className="pt-1.5 flex items-center gap-2">
                   <Button type="submit" variant="primary" loading={createMutation.isPending || updateMutation.isPending} className="w-full">
                     {editingId ? 'Update Staff Account' : 'Save Staff Account'}
                   </Button>
@@ -292,8 +302,8 @@ export function StaffPermissions() {
         </div>
 
         {/* Right Column Table */}
-        <div className="lg:col-span-8 space-y-4">
-          <div className="card p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="lg:col-span-8 space-y-2.5">
+          <div className="card p-2.5 flex flex-col sm:flex-row items-center justify-between gap-2">
             <div className="relative w-full sm:w-72">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
               <input
@@ -304,23 +314,23 @@ export function StaffPermissions() {
                 className="input pl-9 w-full text-xs"
               />
             </div>
-            <div className="flex items-center gap-2 text-xs">
+            <div className="flex items-center gap-1.5 text-xs">
               <span className="text-ink-muted">Filter:</span>
               <button
                 onClick={() => setStatusFilter('all')}
-                className={`px-2.5 py-1 rounded-md transition ${statusFilter === 'all' ? 'bg-indigo-500/20 text-indigo-300 font-medium' : 'text-ink-muted hover:text-ink'}`}
+                className={`px-2 py-0.5 rounded transition ${statusFilter === 'all' ? 'bg-indigo-500/20 text-indigo-300 font-medium' : 'text-ink-muted hover:text-ink'}`}
               >
                 All ({staff.length})
               </button>
               <button
                 onClick={() => setStatusFilter('active')}
-                className={`px-2.5 py-1 rounded-md transition ${statusFilter === 'active' ? 'bg-emerald-500/20 text-emerald-300 font-medium' : 'text-ink-muted hover:text-ink'}`}
+                className={`px-2 py-0.5 rounded transition ${statusFilter === 'active' ? 'bg-emerald-500/20 text-emerald-300 font-medium' : 'text-ink-muted hover:text-ink'}`}
               >
                 Active ({staff.filter((s) => s.status === 'active' || s.status !== 'inactive').length})
               </button>
               <button
                 onClick={() => setStatusFilter('inactive')}
-                className={`px-2.5 py-1 rounded-md transition ${statusFilter === 'inactive' ? 'bg-gray-500/20 text-gray-300 font-medium' : 'text-ink-muted hover:text-ink'}`}
+                className={`px-2 py-0.5 rounded transition ${statusFilter === 'inactive' ? 'bg-gray-500/20 text-gray-300 font-medium' : 'text-ink-muted hover:text-ink'}`}
               >
                 Inactive ({staff.filter((s) => s.status === 'inactive').length})
               </button>
@@ -328,26 +338,26 @@ export function StaffPermissions() {
           </div>
 
           <div className="card overflow-hidden">
-            <div className="px-5 py-4 border-b border-border-soft flex items-center justify-between">
-              <h3 className="font-semibold text-ink text-sm">Staff Directory</h3>
+            <div className="px-3.5 py-2 border-b border-border-soft flex items-center justify-between">
+              <h3 className="font-semibold text-ink text-xs sm:text-sm">Staff Directory</h3>
               <span className="text-xs text-ink-muted">{filteredStaff.length} member(s)</span>
             </div>
-            <div className="overflow-x-auto">
+            <div className="max-h-[calc(100vh-230px)] overflow-y-auto">
               <table className="w-full text-left text-xs">
-                <thead>
+                <thead className="sticky top-0 bg-page z-10 shadow-sm">
                   <tr className="border-b border-border-soft bg-surface-subtle/30 text-ink-muted font-medium">
-                    <th className="px-4 py-3">Staff Member</th>
-                    <th className="px-4 py-3">Email / Phone</th>
-                    <th className="px-4 py-3">Role</th>
-                    <th className="px-4 py-3">Branch</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3 text-right">Actions</th>
+                    <th className="px-3 py-1.5">Staff Member</th>
+                    <th className="px-3 py-1.5">Email / Phone</th>
+                    <th className="px-3 py-1.5">Role</th>
+                    <th className="px-3 py-1.5">Branch</th>
+                    <th className="px-3 py-1.5">Status</th>
+                    <th className="px-3 py-1.5 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border-soft/60">
                   {staffQuery.isLoading && (
                     <tr>
-                      <td colSpan={6} className="px-4 py-10 text-center text-ink-muted text-xs">
+                      <td colSpan={6} className="px-3 py-8 text-center text-ink-muted text-xs">
                         <div className="flex items-center justify-center gap-2">
                           <Loader2 className="w-4 h-4 animate-spin" />
                           Loading staff…
@@ -357,7 +367,7 @@ export function StaffPermissions() {
                   )}
                   {!staffQuery.isLoading && staffQuery.isError && (
                     <tr>
-                      <td colSpan={6} className="px-4 py-10 text-center text-xs">
+                      <td colSpan={6} className="px-3 py-8 text-center text-xs">
                         <div className="flex flex-col items-center gap-2 text-red-400">
                           <AlertTriangle className="w-5 h-5" />
                           Unable to load staff users. Please try again.
@@ -374,7 +384,7 @@ export function StaffPermissions() {
                   )}
                   {!staffQuery.isLoading && !staffQuery.isError && staff.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-4 py-10 text-center text-ink-muted text-xs">
+                      <td colSpan={6} className="px-3 py-8 text-center text-ink-muted text-xs">
                         <div className="flex flex-col items-center gap-2">
                           <Users className="w-5 h-5" />
                           No staff accounts yet — create the first one on the left.
@@ -382,35 +392,35 @@ export function StaffPermissions() {
                       </td>
                     </tr>
                   )}
-                  {!staffQuery.isLoading && !staffQuery.isError && staff.length > 0 && filteredStaff.map((u) => {
+                  {!staffQuery.isLoading && !staffQuery.isError && staff.length > 0 && pagedStaff.map((u) => {
                     const isActive = u.status !== 'inactive';
                     return (
                       <tr key={u.id} className="hover:bg-surface-subtle/20 transition">
-                        <td className="px-4 py-3 font-medium text-ink">{u.name}</td>
-                        <td className="px-4 py-3 text-ink-muted">
+                        <td className="px-3 py-1.5 font-medium text-ink">{u.name}</td>
+                        <td className="px-3 py-1.5 text-ink-muted">
                           <div>{u.email}</div>
                           {u.phone && <div className="text-[10px] text-ink-muted/70">{u.phone}</div>}
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-3 py-1.5">
                           <span className="px-2 py-0.5 rounded text-[10px] bg-indigo-500/15 text-indigo-300 font-medium border border-indigo-500/20">
                             {u.role_name}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-ink-muted">{u.branch_name || 'All Branches'}</td>
-                        <td className="px-4 py-3">
+                        <td className="px-3 py-1.5 text-ink-muted">{u.branch_name || 'All Branches'}</td>
+                        <td className="px-3 py-1.5">
                           {isActive ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
                               Active
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-500/10 text-gray-400 border border-gray-500/20">
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-gray-500/10 text-gray-400 border border-gray-500/20">
                               <span className="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
                               Inactive
                             </span>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-right space-x-2">
+                        <td className="px-3 py-1.5 text-right space-x-1.5">
                           {canManageAccounts && (
                             <button
                               onClick={() => handleEdit(u)}
@@ -423,7 +433,7 @@ export function StaffPermissions() {
                           {canManagePermissions && (
                             <button
                               onClick={() => setSelectedUserForPerms(u)}
-                              className="px-2 py-1 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-medium hover:bg-amber-500/20 transition"
+                              className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-medium hover:bg-amber-500/20 transition"
                             >
                               Permissions
                             </button>
@@ -434,7 +444,7 @@ export function StaffPermissions() {
                   })}
                   {!staffQuery.isLoading && !staffQuery.isError && staff.length > 0 && filteredStaff.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-ink-muted text-xs">
+                      <td colSpan={6} className="px-3 py-6 text-center text-ink-muted text-xs">
                         No staff members found matching search.
                       </td>
                     </tr>
@@ -442,6 +452,7 @@ export function StaffPermissions() {
                 </tbody>
               </table>
             </div>
+            <Pagination page={page} pageSize={10} total={total} onPageChange={setPage} />
           </div>
         </div>
       </div>

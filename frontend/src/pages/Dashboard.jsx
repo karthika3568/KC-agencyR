@@ -4,8 +4,9 @@ import { useQuery } from '@tanstack/react-query';
 import {
   ShoppingCart, Package, Users, Truck, Warehouse, RotateCcw,
   Wallet, Banknote, Receipt, BarChart3, ShieldCheck, Settings as SettingsIcon,
-  Building2, ClipboardList, FileText, AlertTriangle, X, Search,
-  PieChart, TrendingUp, AlertCircle, ArrowUpRight, Zap, Sparkles, Tag
+  ClipboardList, FileText, AlertTriangle, X, Search,
+  TrendingUp, AlertCircle, Sparkles, Tag, ChevronRight,
+  ArrowRight, LayoutGrid, IndianRupee, PieChart
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth.jsx';
 import { usePermission } from '../hooks/usePermission';
@@ -16,12 +17,12 @@ const MODULES = [
   {
     to: '/pos',
     label: 'POS & Billing',
-    subtitle: 'Quick Sales & Counter Billing',
+    subtitle: 'Fast barcode scanning, GST/Non-GST billing & customer checkout',
+    headerTitle: 'Counter Terminal',
     perm: 'pos.access',
     icon: ShoppingCart,
     category: 'sales',
     isHero: true,
-    iconColor: 'text-indigo-600 bg-indigo-50 border-indigo-200',
   },
   {
     to: '/catalog',
@@ -30,7 +31,8 @@ const MODULES = [
     perm: 'catalog.manage_items',
     icon: Package,
     category: 'stock',
-    iconColor: 'text-blue-600 bg-blue-50 border-blue-200',
+    iconColor: 'text-blue-600 bg-blue-50 border-blue-100',
+    cornerTint: 'from-blue-50/40 via-transparent to-transparent',
   },
   {
     to: '/price-adjustment',
@@ -39,7 +41,8 @@ const MODULES = [
     perm: 'catalog.manage_items',
     icon: Tag,
     category: 'stock',
-    iconColor: 'text-indigo-600 bg-indigo-50 border-indigo-200',
+    iconColor: 'text-purple-600 bg-purple-50 border-purple-100',
+    cornerTint: 'from-purple-50/40 via-transparent to-transparent',
   },
   {
     to: '/inventory',
@@ -48,7 +51,8 @@ const MODULES = [
     perm: 'inventory.view_stock',
     icon: Warehouse,
     category: 'stock',
-    iconColor: 'text-teal-600 bg-teal-50 border-teal-200',
+    iconColor: 'text-emerald-600 bg-emerald-50 border-emerald-100',
+    cornerTint: 'from-emerald-50/40 via-transparent to-transparent',
   },
   {
     to: '/parties',
@@ -57,7 +61,8 @@ const MODULES = [
     perm: 'parties.manage_customers',
     icon: Users,
     category: 'sales',
-    iconColor: 'text-purple-600 bg-purple-50 border-purple-200',
+    iconColor: 'text-pink-600 bg-pink-50 border-pink-100',
+    cornerTint: 'from-pink-50/40 via-transparent to-transparent',
   },
   {
     to: '/purchasing',
@@ -66,7 +71,8 @@ const MODULES = [
     perm: 'purchases.create_grn',
     icon: Truck,
     category: 'stock',
-    iconColor: 'text-sky-600 bg-sky-50 border-sky-200',
+    iconColor: 'text-cyan-600 bg-cyan-50 border-cyan-100',
+    cornerTint: 'from-cyan-50/40 via-transparent to-transparent',
   },
   {
     to: '/orders',
@@ -75,7 +81,8 @@ const MODULES = [
     perm: 'orders.create_prebooking',
     icon: ClipboardList,
     category: 'sales',
-    iconColor: 'text-amber-600 bg-amber-50 border-amber-200',
+    iconColor: 'text-amber-600 bg-amber-50 border-amber-100',
+    cornerTint: 'from-amber-50/40 via-transparent to-transparent',
   },
   {
     to: '/invoices',
@@ -84,7 +91,8 @@ const MODULES = [
     perm: 'pos.access',
     icon: FileText,
     category: 'finance',
-    iconColor: 'text-emerald-600 bg-emerald-50 border-emerald-200',
+    iconColor: 'text-emerald-600 bg-emerald-50 border-emerald-100',
+    cornerTint: 'from-emerald-50/40 via-transparent to-transparent',
   },
   {
     to: '/collections',
@@ -93,7 +101,8 @@ const MODULES = [
     perm: 'collections.field_collection_entry',
     icon: Wallet,
     category: 'finance',
-    iconColor: 'text-cyan-600 bg-cyan-50 border-cyan-200',
+    iconColor: 'text-sky-600 bg-sky-50 border-sky-100',
+    cornerTint: 'from-sky-50/40 via-transparent to-transparent',
   },
   {
     to: '/cash-handover',
@@ -102,7 +111,8 @@ const MODULES = [
     perm: 'handover.submit_cash_handover',
     icon: Banknote,
     category: 'finance',
-    iconColor: 'text-green-700 bg-green-50 border-green-200',
+    iconColor: 'text-teal-600 bg-teal-50 border-teal-100',
+    cornerTint: 'from-teal-50/40 via-transparent to-transparent',
   },
   {
     to: '/expenses',
@@ -111,7 +121,8 @@ const MODULES = [
     perm: 'expenses.manage',
     icon: Receipt,
     category: 'finance',
-    iconColor: 'text-rose-600 bg-rose-50 border-rose-200',
+    iconColor: 'text-rose-600 bg-rose-50 border-rose-100',
+    cornerTint: 'from-rose-50/40 via-transparent to-transparent',
   },
   {
     to: '/returns',
@@ -120,7 +131,8 @@ const MODULES = [
     perm: 'returns.sales_return',
     icon: RotateCcw,
     category: 'sales',
-    iconColor: 'text-orange-600 bg-orange-50 border-orange-200',
+    iconColor: 'text-orange-600 bg-orange-50 border-orange-100',
+    cornerTint: 'from-orange-50/40 via-transparent to-transparent',
   },
   {
     to: '/reports',
@@ -129,7 +141,8 @@ const MODULES = [
     perm: 'reports.view_all',
     icon: BarChart3,
     category: 'finance',
-    iconColor: 'text-blue-700 bg-blue-50 border-blue-200',
+    iconColor: 'text-indigo-600 bg-indigo-50 border-indigo-100',
+    cornerTint: 'from-indigo-50/40 via-transparent to-transparent',
   },
   {
     to: '/staff',
@@ -138,7 +151,8 @@ const MODULES = [
     perm: 'staff.manage_permissions',
     icon: ShieldCheck,
     category: 'admin',
-    iconColor: 'text-violet-600 bg-violet-50 border-violet-200',
+    iconColor: 'text-violet-600 bg-violet-50 border-violet-100',
+    cornerTint: 'from-violet-50/40 via-transparent to-transparent',
   },
   {
     to: '/settings',
@@ -147,16 +161,17 @@ const MODULES = [
     perm: 'settings.manage',
     icon: SettingsIcon,
     category: 'admin',
-    iconColor: 'text-slate-700 bg-slate-100 border-slate-300',
+    iconColor: 'text-slate-600 bg-slate-100 border-slate-200',
+    cornerTint: 'from-slate-100/50 via-transparent to-transparent',
   },
 ];
 
 const CATEGORIES = [
-  { id: 'all', label: 'All Modules' },
-  { id: 'sales', label: 'Sales & Orders' },
-  { id: 'stock', label: 'Inventory & Stock' },
-  { id: 'finance', label: 'Finance & Accounts' },
-  { id: 'admin', label: 'Admin & System' },
+  { id: 'all', label: 'All Modules', icon: LayoutGrid },
+  { id: 'sales', label: 'Sales & Orders', icon: ShoppingCart },
+  { id: 'stock', label: 'Inventory & Stock', icon: Package },
+  { id: 'finance', label: 'Finance & Accounts', icon: IndianRupee },
+  { id: 'admin', label: 'Admin & System', icon: SettingsIcon },
 ];
 
 const SUMMARY_METRICS = [
@@ -200,175 +215,249 @@ export function Dashboard() {
   }, [searchQuery, selectedCategory]);
 
   return (
-    <div className="flex flex-col h-[calc(100vh-6.5rem)] justify-between overflow-hidden gap-3 font-sans">
-      {/* Header Bar */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-border-soft pb-2.5 shrink-0">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight sm:text-2xl">
-            Dashboard
-          </h1>
-          <p className="text-xs text-slate-500 font-medium">
-            Welcome, <span className="font-semibold text-slate-800">{user?.name}</span> ({user?.role})
-          </p>
-        </div>
-
-        {/* Search & Totals Button */}
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1 sm:w-64">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
-            <input
-              type="text"
-              placeholder="Search modules..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-xl border border-border-soft bg-white pl-8 pr-3 py-1.5 text-xs text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
-              >
-                <X size={14} />
-              </button>
-            )}
+    <div className="space-y-3 sm:space-y-3.5">
+      {/* 1. Welcome Banner with soft purple gradient and decorative graphic */}
+      <div className="relative overflow-hidden rounded-2xl border border-[#E5E7F5]/60 bg-gradient-to-r from-[#EDE8FF] via-[#F4F0FF] to-[#EAE0FF] px-4 py-3 sm:px-5 sm:py-3.5 shadow-sm">
+        <div className="relative z-10 flex flex-col justify-between gap-3 md:flex-row md:items-center">
+          <div className="max-w-xl">
+            <span className="text-[10px] sm:text-xs font-bold tracking-wider text-[#6F2DA8] uppercase">
+              Welcome Back,
+            </span>
+            <h1 className="mt-0.5 text-lg sm:text-xl lg:text-2xl font-extrabold tracking-tight text-[#17233D] flex items-center gap-1.5">
+              {user?.name || 'Super Admin'} <span className="animate-wiggle">👋</span>
+            </h1>
+            <p className="mt-0.5 text-[11px] sm:text-xs text-[#697797] font-medium">
+              Here&apos;s what&apos;s happening with your business today.
+            </p>
           </div>
 
+          {/* Quick Stats or Financials Button */}
           {canViewFinancials && (
-            <button
-              onClick={() => setShowTotalsReport(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-1.5 text-xs font-bold text-blue-700 shadow-xs hover:bg-blue-100 transition-all active:scale-95 shrink-0"
-            >
-              <PieChart size={15} />
-              <span className="hidden sm:inline">Totals Report</span>
-            </button>
+            <div className="flex items-center gap-2 self-start md:self-auto">
+              <button
+                onClick={() => setShowTotalsReport(true)}
+                className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-bold text-[#6F2DA8] shadow-soft border border-[#DDD0FF] hover:bg-[#F7F5FF] transition-all active:scale-95"
+              >
+                <PieChart size={14} />
+                <span>Totals Report</span>
+              </button>
+            </div>
           )}
+        </div>
+
+        {/* Decorative Graphic Element on the right matching the reference screenshot */}
+        <div className="pointer-events-none absolute right-4 bottom-1 hidden lg:flex items-end gap-3 opacity-90 select-none">
+          {/* Laptop & Documents Vector Graphic */}
+          <div className="relative w-44 h-22">
+            <svg viewBox="0 0 260 140" fill="none" className="w-full h-full">
+              {/* Plant in pot */}
+              <circle cx="28" cy="100" r="14" fill="#8244AD" fillOpacity="0.15" />
+              <path d="M28 85 C22 75, 20 65, 26 58 C32 65, 30 75, 28 85 Z" fill="#6F2DA8" />
+              <path d="M28 85 C34 75, 38 68, 42 66 C42 74, 36 80, 28 85 Z" fill="#8244AD" />
+              <path d="M22 100 L34 100 L32 120 L24 120 Z" fill="#6F2DA8" />
+
+              {/* Laptop base & screen */}
+              <rect x="55" y="25" width="130" height="85" rx="8" fill="#351442" stroke="#6F2DA8" strokeWidth="2" />
+              <rect x="62" y="32" width="116" height="71" rx="4" fill="#F8F5FF" />
+              {/* Screen chart elements */}
+              <rect x="75" y="75" width="10" height="20" rx="2" fill="#8244AD" />
+              <rect x="90" y="60" width="10" height="35" rx="2" fill="#6F2DA8" />
+              <rect x="105" y="70" width="10" height="25" rx="2" fill="#DDD0FF" />
+              <rect x="120" y="50" width="10" height="45" rx="2" fill="#6F2DA8" />
+              <path d="M72 65 Q 95 40, 140 45" stroke="#8244AD" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+              <polygon points="50,112 190,112 175,118 65,118" fill="#351442" />
+
+              {/* Document sheet */}
+              <rect x="155" y="45" width="55" height="70" rx="6" fill="#FFFFFF" stroke="#DDD0FF" strokeWidth="1.5" />
+              <line x1="165" y1="58" x2="195" y2="58" stroke="#8244AD" strokeWidth="3" strokeLinecap="round" />
+              <line x1="165" y1="68" x2="200" y2="68" stroke="#E5E7F5" strokeWidth="2" strokeLinecap="round" />
+              <line x1="165" y1="76" x2="190" y2="76" stroke="#E5E7F5" strokeWidth="2" strokeLinecap="round" />
+              <rect x="165" y="85" width="22" height="20" rx="3" fill="#EDE5FF" />
+            </svg>
+          </div>
+
+          {/* "Grow Together" Cursive Text Badge */}
+          <div className="mb-3 mr-2 flex flex-col items-center">
+            <span className="font-serif italic text-sm font-bold text-[#6F2DA8] tracking-wide rotate-[-4deg]">
+              Grow Together
+            </span>
+            <svg width="50" height="10" viewBox="0 0 70 12" fill="none">
+              <path d="M2 9 C 25 2, 45 12, 68 4" stroke="#8244AD" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </div>
         </div>
       </div>
 
-      {/* Category Pills Bar */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs shrink-0">
-        {CATEGORIES.map((cat) => (
-          <button
-            key={cat.id}
-            onClick={() => setSelectedCategory(cat.id)}
-            className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-colors whitespace-nowrap ${
-              selectedCategory === cat.id
-                ? 'bg-slate-900 text-white'
-                : 'bg-white text-slate-600 border border-border-soft hover:bg-slate-100'
-            }`}
-          >
-            {cat.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Discrepancy Alert Banner */}
+      {/* Discrepancy Alert Banner if needed */}
       {canViewFinancials && summary && summary.unresolved_handover_discrepancies?.length > 0 && (
-        <Card className="border-red-200 bg-red-50 p-2.5 rounded-xl text-red-800 shrink-0">
+        <Card className="border-rose-200 bg-rose-50/80 p-2.5 rounded-xl text-rose-800">
           <div className="flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2 font-bold text-red-600">
+            <div className="flex items-center gap-2 font-bold text-rose-700">
               <AlertTriangle size={16} />
-              {summary.unresolved_handover_discrepancies.length} unresolved cash handover discrepancy
+              <span>{summary.unresolved_handover_discrepancies.length} unresolved cash handover discrepancy</span>
             </div>
-            <Link to="/cash-handover" className="font-bold text-red-700 underline hover:text-red-900">
-              Resolve →
+            <Link to="/cash-handover" className="font-bold text-rose-800 underline hover:text-rose-950">
+              Resolve now →
             </Link>
           </div>
         </Card>
       )}
 
-      {/* Transparent Cards Grid (No background fill on cards, color on icons only) */}
-      <div className="flex-1 flex flex-col justify-center my-auto">
-        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-6 gap-2.5 sm:gap-3">
-          {/* Standard Module Cards Grid */}
-          {filteredModules.map((item) => {
-            const allowed = usePermission(item.perm);
-            if (!allowed) return null;
-            const Icon = item.icon;
+      {/* 2. Category Filter Pills Bar */}
+      <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-0.5 text-xs">
+        {CATEGORIES.map((cat) => {
+          const Icon = cat.icon;
+          const isActive = selectedCategory === cat.id;
+          return (
+            <button
+              key={cat.id}
+              onClick={() => setSelectedCategory(cat.id)}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all whitespace-nowrap shadow-sm ${
+                isActive
+                  ? 'bg-[#351442] text-white shadow-soft font-bold'
+                  : 'bg-white text-ink-muted border border-border-soft hover:bg-lavender-50 hover:text-ink'
+              }`}
+            >
+              <Icon size={13} className={isActive ? 'text-white' : 'text-ink-muted'} />
+              <span>{cat.label}</span>
+            </button>
+          );
+        })}
+      </div>
 
-            // Hero POS Card (Transparent border card, colorful icon badge)
-            if (item.isHero) {
-              return (
-                <div
-                  key={item.to}
-                  onClick={() => navigate(item.to)}
-                  className="group col-span-2 row-span-2 cursor-pointer relative rounded-2xl border border-black bg-white p-4 text-slate-900 shadow-sm transition-all hover:border-black hover:shadow-md active:scale-[0.99] flex flex-col justify-between"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-100 transition-transform group-hover:scale-110">
-                      <ShoppingCart size={24} />
-                    </div>
-                    <span className="flex items-center gap-1 rounded-full bg-indigo-50 px-2.5 py-0.5 text-[10px] font-bold text-indigo-600 border border-indigo-100">
-                      <Sparkles size={11} />
-                      Primary Module
-                    </span>
-                  </div>
+      {/* 3. Responsive Module Cards Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
+        {filteredModules.map((item) => {
+          const allowed = usePermission(item.perm);
+          if (!allowed) return null;
+          const Icon = item.icon;
 
-                  <div className="mt-2">
-                    <div className="text-[11px] font-bold uppercase tracking-wider text-indigo-600">
-                      Counter Terminal
-                    </div>
-                    <h3 className="text-xl font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">
-                      POS &amp; Billing
-                    </h3>
-                    <p className="mt-0.5 text-xs text-slate-500 font-medium line-clamp-2">
-                      Fast barcode scanning, GST/Non-GST billing &amp; customer checkout
-                    </p>
-                  </div>
-
-                  <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-2 text-xs font-bold text-indigo-600">
-                    <span>Launch Counter Terminal</span>
-                    <ArrowUpRight size={16} className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-                  </div>
-                </div>
-              );
-            }
-
-            // Standard Module Card (Clean transparent white card, colorful icon badge)
+          // Hero POS & Billing Card (Wide prominent card matching reference)
+          if (item.isHero) {
             return (
               <div
                 key={item.to}
                 onClick={() => navigate(item.to)}
-                className="group cursor-pointer rounded-2xl border border-black bg-white p-3 text-slate-900 shadow-2xs transition-all hover:border-black hover:shadow-md active:scale-95 flex flex-col justify-between"
+                className="group relative cursor-pointer col-span-1 sm:col-span-2 md:col-span-2 lg:col-span-2 row-span-2 rounded-2xl border border-[#DDD0FF] bg-gradient-to-br from-[#EDE8FF] via-[#F8F5FF] to-white p-3.5 sm:p-4 shadow-sm transition-all hover:border-primary/40 hover:shadow-soft-md active:scale-[0.99] flex flex-col justify-between overflow-hidden"
               >
-                <div className="flex items-center justify-between">
-                  <div className={`flex h-9 w-9 items-center justify-center rounded-xl ${item.iconColor} transition-transform group-hover:scale-105`}>
-                    <Icon size={18} />
+                {/* Background subtle glow */}
+                <div className="pointer-events-none absolute -right-10 -bottom-10 h-36 w-36 rounded-full bg-primary/5 blur-xl transition-transform group-hover:scale-125" />
+
+                {/* Top: Icon + Badge */}
+                <div className="flex items-start justify-between">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#DDD0FF]/80 text-[#6F2DA8] shadow-sm transition-transform group-hover:scale-105">
+                    <ShoppingCart size={18} />
                   </div>
-                  <ArrowUpRight size={14} className="text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <span className="inline-flex items-center gap-1 rounded-full border border-[#DDD0FF] bg-white/90 px-2.5 py-0.5 text-[10px] font-bold text-[#6F2DA8] shadow-sm">
+                    <Sparkles size={11} className="text-[#6F2DA8]" />
+                    Primary Module
+                  </span>
                 </div>
 
-                <div className="mt-2">
-                  <h4 className="text-xs font-bold text-slate-800 group-hover:text-black transition-colors truncate">
+                {/* Middle Content */}
+                <div className="my-2 sm:my-2.5 relative z-10">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#6F2DA8]">
+                    {item.headerTitle}
+                  </span>
+                  <h2 className="mt-0.5 text-lg sm:text-xl font-extrabold text-[#17233D] group-hover:text-[#6F2DA8] transition-colors leading-tight">
                     {item.label}
-                  </h4>
-                  <p className="text-[10px] text-slate-500 truncate mt-0.5">
+                  </h2>
+                  <p className="mt-1 text-[11px] sm:text-xs text-[#697797] font-medium leading-relaxed max-w-xs line-clamp-2">
                     {item.subtitle}
                   </p>
                 </div>
+
+                {/* Bottom: Action Button + POS Screen Graphic */}
+                <div className="flex items-end justify-between relative z-10 gap-2">
+                  <button className="inline-flex items-center gap-1.5 rounded-full bg-[#6F2DA8] px-3.5 py-1.5 text-xs font-bold text-white shadow-soft transition-all hover:bg-[#5C238C] active:scale-95 shrink-0">
+                    <span>Launch Counter Terminal</span>
+                    <ArrowRight size={13} className="transition-transform group-hover:translate-x-0.5" />
+                  </button>
+
+                  {/* Terminal monitor illustration on right */}
+                  <div className="hidden sm:block pointer-events-none opacity-80 group-hover:opacity-100 transition-opacity shrink-0">
+                    <svg width="65" height="48" viewBox="0 0 100 80" fill="none">
+                      <rect x="10" y="5" width="80" height="55" rx="6" fill="#351442" />
+                      <rect x="15" y="10" width="70" height="45" rx="3" fill="#EDE8FF" />
+                      {/* Scanner frame */}
+                      <rect x="25" y="18" width="18" height="18" rx="3" stroke="#8244AD" strokeWidth="1.5" strokeDasharray="3 3" />
+                      {/* Barcode bars */}
+                      <line x1="28" y1="23" x2="28" y2="31" stroke="#351442" strokeWidth="1.5" />
+                      <line x1="32" y1="23" x2="32" y2="31" stroke="#351442" strokeWidth="1" />
+                      <line x1="35" y1="23" x2="35" y2="31" stroke="#351442" strokeWidth="2" />
+                      <line x1="39" y1="23" x2="39" y2="31" stroke="#351442" strokeWidth="1" />
+                      {/* Chart lines */}
+                      <path d="M50 42 L60 30 L70 36 L78 22" stroke="#6F2DA8" strokeWidth="2" strokeLinecap="round" />
+                      {/* Stand */}
+                      <polygon points="44,60 56,60 54,72 46,72" fill="#351442" />
+                      <rect x="36" y="72" width="28" height="4" rx="2" fill="#351442" />
+                    </svg>
+                  </div>
+                </div>
               </div>
             );
-          })}
-        </div>
+          }
+
+          // Standard Module Card
+          return (
+            <div
+              key={item.to}
+              onClick={() => navigate(item.to)}
+              className="group relative cursor-pointer rounded-xl sm:rounded-2xl border border-border-soft bg-white p-2.5 sm:p-3 shadow-sm transition-all hover:border-primary/40 hover:shadow-soft-md active:scale-95 flex flex-col justify-between min-h-[76px] sm:min-h-[82px] overflow-hidden"
+            >
+              {/* Subtle corner tint gradient matching reference */}
+              <div
+                className={`pointer-events-none absolute right-0 bottom-0 h-16 w-16 rounded-tl-full bg-gradient-to-tl ${item.cornerTint}`}
+              />
+
+              {/* Card Header: Icon + Arrow */}
+              <div className="relative z-10 flex items-center justify-between">
+                <div
+                  className={`flex h-8 w-8 items-center justify-center rounded-lg border ${item.iconColor} shadow-xs transition-transform group-hover:scale-105`}
+                >
+                  <Icon size={16} />
+                </div>
+                <ChevronRight
+                  size={14}
+                  className="text-ink-light transition-all group-hover:translate-x-0.5 group-hover:text-primary"
+                />
+              </div>
+
+              {/* Card Footer: Title + Subtitle */}
+              <div className="relative z-10 mt-1.5">
+                <h3 className="text-xs sm:text-[13px] font-bold text-ink group-hover:text-primary transition-colors truncate leading-tight">
+                  {item.label}
+                </h3>
+                <p className="text-[10px] sm:text-[11px] text-ink-muted truncate mt-0.5">
+                  {item.subtitle}
+                </p>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Totals Report Modal */}
       {canViewFinancials && showTotalsReport && summary && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-3xl rounded-3xl bg-white p-6 text-slate-900 shadow-2xl space-y-5 border border-border-soft">
-            <div className="flex items-center justify-between border-b border-border-soft pb-3.5">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 border border-blue-100">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-3xl rounded-3xl bg-white p-6 sm:p-7 text-ink shadow-soft-lg space-y-5 border border-border-soft">
+            <div className="flex items-center justify-between border-b border-border-soft pb-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary-soft text-primary border border-lavender-300">
                   <TrendingUp size={20} />
                 </div>
                 <div>
-                  <h2 className="text-base font-bold tracking-wide text-slate-900">Financial Summary Report</h2>
-                  <p className="text-xs text-slate-500">Real-time revenue, purchase &amp; outstanding overview</p>
+                  <h2 className="text-base sm:text-lg font-bold tracking-tight text-ink">
+                    Financial Summary Report
+                  </h2>
+                  <p className="text-xs text-ink-muted">
+                    Real-time revenue, purchase &amp; outstanding overview
+                  </p>
                 </div>
               </div>
               <button
                 onClick={() => setShowTotalsReport(false)}
-                className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-800"
+                className="rounded-xl p-2 text-ink-light hover:bg-lavender-100 hover:text-ink transition-colors"
               >
                 <X size={20} />
               </button>
@@ -378,28 +467,32 @@ export function Dashboard() {
               {SUMMARY_METRICS.map((c) => (
                 <div
                   key={c.key}
-                  className={`rounded-2xl border border-black p-3.5 ${
+                  className={`rounded-2xl border p-4 ${
                     c.highlight
-                      ? 'bg-indigo-50/50 text-indigo-900'
-                      : 'bg-slate-50/60 text-slate-800'
+                      ? 'border-lavender-300 bg-primary-soft/40 text-primary'
+                      : 'border-border-soft bg-lavender-50/50 text-ink'
                   }`}
                 >
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{c.label}</div>
-                  <div className="mt-1 text-base font-extrabold text-slate-900">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-ink-muted">
+                    {c.label}
+                  </div>
+                  <div className="mt-1 text-base font-extrabold text-ink">
                     Rs. {summary[c.key] ?? '0.00'}
                   </div>
                 </div>
               ))}
 
               <div
-                className={`rounded-2xl border border-black p-3.5 ${
+                className={`rounded-2xl border p-4 ${
                   summary.low_stock_count > 0
-                    ? 'bg-amber-50 text-amber-900'
-                    : 'bg-slate-50/60'
+                    ? 'border-amber-200 bg-amber-50 text-amber-900'
+                    : 'border-border-soft bg-lavender-50/50'
                 }`}
               >
-                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Low Stock Alerts</div>
-                <div className="mt-1 text-base font-extrabold text-slate-900 flex items-center gap-1.5">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-ink-muted">
+                  Low Stock Alerts
+                </div>
+                <div className="mt-1 text-base font-extrabold text-ink flex items-center gap-1.5">
                   {summary.low_stock_count} item(s)
                   {summary.low_stock_count > 0 && <AlertCircle className="h-4 w-4 text-amber-600" />}
                 </div>
@@ -410,13 +503,13 @@ export function Dashboard() {
               <Link
                 to="/reports"
                 onClick={() => setShowTotalsReport(false)}
-                className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1"
+                className="text-xs font-bold text-primary hover:underline flex items-center gap-1"
               >
-                Open Detailed Reports Page <ArrowUpRight size={14} />
+                Open Detailed Reports Page →
               </Link>
               <button
                 onClick={() => setShowTotalsReport(false)}
-                className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white hover:bg-black"
+                className="rounded-xl bg-sidebar px-4 py-2 text-xs font-bold text-white hover:bg-black transition-colors"
               >
                 Close Report
               </button>
@@ -427,7 +520,3 @@ export function Dashboard() {
     </div>
   );
 }
-
-
-
-

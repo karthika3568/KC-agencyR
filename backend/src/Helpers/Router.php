@@ -9,13 +9,14 @@ namespace App\Helpers;
  * captured as numeric route params and passed positionally to the handler.
  */
 class Router
+
 {
     /** @var array<int, array{method: string, regex: string, handler: callable}> */
     private array $routes = [];
 
     public function add(string $method, string $pattern, callable $handler): void
     {
-        $regex = preg_replace('#\{[a-zA-Z_]+\}#', '(\d+)', $pattern);
+        $regex = preg_replace('#\{[a-zA-Z_]+\}#', '([^/]+)', $pattern);
         $this->routes[] = [
             'method' => $method,
             'regex' => '#^' . $regex . '$#',

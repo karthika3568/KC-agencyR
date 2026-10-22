@@ -1,14 +1,16 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import {
-  Tag, CheckCircle2, Power, Edit2, Trash2, Search, Plus
+  Tag, CheckCircle2, Power, Edit2, Trash2, Search, Plus, Loader2
 } from 'lucide-react';
-import { categoriesApi, brandsApi, productLinesApi, taxCodesApi, stockUnitsApi, categoryBrandsApi } from '../api/catalog';
+import { categoriesApi, brandsApi, taxCodesApi, stockUnitsApi, categoryBrandsApi } from '../api/catalog';
 import { EntityTable } from '../components/EntityTable';
 import { Tabs } from '../components/Tabs';
 import { Button } from '../components/Button.jsx';
 import { usePermission } from '../hooks/usePermission';
 import { ItemsPanel } from './ItemsPanel.jsx';
+import { Pagination } from '../components/Pagination';
+import { useClientPagination } from '../hooks/useClientPagination';
 
 function useEntity(key, api) {
   const queryClient = useQueryClient();
@@ -25,10 +27,16 @@ function useEntity(key, api) {
 function CategoriesPanel({ canManage }) {
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: ['categories'], queryFn: categoriesApi.list });
+  const brandsQuery = useQuery({ queryKey: ['brands'], queryFn: brandsApi.list });
 
   const [editingId, setEditingId] = useState(null);
   const [name, setName] = useState('');
   const [isActive, setIsActive] = useState(true);
+  const [selectedBrandIds, setSelectedBrandIds] = useState([]);
+  const [brandSearch, setBrandSearch] = useState('');
+  const [isLoadingBrands, setIsLoadingBrands] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [formError, setFormError] = useState('');
@@ -36,29 +44,14 @@ function CategoriesPanel({ canManage }) {
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['categories'] });
 
-  const createMutation = useMutation({
-    mutationFn: categoriesApi.create,
-    onSuccess: () => {
-      invalidate();
-      resetForm();
-      showSuccess('Category created successfully!');
-    },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }) => categoriesApi.update(id, data),
-    onSuccess: () => {
-      invalidate();
-      resetForm();
-      showSuccess('Category updated successfully!');
-    },
-  });
-
   const removeMutation = useMutation({
     mutationFn: categoriesApi.remove,
     onSuccess: () => {
       invalidate();
       showSuccess('Category deleted successfully.');
+    },
+    onError: (err) => {
+      setFormError(err?.response?.data?.error || err.message || 'Failed to delete category.');
     },
   });
 
@@ -66,40 +59,129 @@ function CategoriesPanel({ canManage }) {
     setEditingId(null);
     setName('');
     setIsActive(true);
+    setSelectedBrandIds([]);
+    setBrandSearch('');
+    setIsLoadingBrands(false);
     setFormError('');
   };
 
   const showSuccess = (msg) => {
     setSuccessMsg(msg);
-    setTimeout(() => setSuccessMsg(''), 3000);
+    setTimeout(() => setSuccessMsg(''), 4000);
   };
 
-  const handleEdit = (category) => {
+  const handleEdit = async (category) => {
     setEditingId(category.id);
     setName(category.name || '');
     setIsActive(category.is_active === undefined ? true : Boolean(Number(category.is_active)));
     setFormError('');
+    setBrandSearch('');
+    setIsLoadingBrands(true);
+
+    try {
+      const res = await categoryBrandsApi.get(category.id);
+      setSelectedBrandIds(Array.isArray(res?.brand_ids) ? res.brand_ids : []);
+    } catch (err) {
+      console.error('Failed to load brand mappings:', err);
+      setFormError('Failed to load existing brand mappings for this category.');
+      setSelectedBrandIds([]);
+    } finally {
+      setIsLoadingBrands(false);
+    }
   };
 
-  const handleSubmit = (e) => {
+  const toggleBrand = (brandId) => {
+    setSelectedBrandIds((prev) =>
+      prev.includes(brandId) ? prev.filter((id) => id !== brandId) : [...prev, brandId]
+    );
+  };
+
+  const selectAllFilteredBrands = (brandsToSelect) => {
+    const idsToAdd = brandsToSelect.map((b) => b.id);
+    setSelectedBrandIds((prev) => Array.from(new Set([...prev, ...idsToAdd])));
+  };
+
+  const clearAllBrands = () => {
+    setSelectedBrandIds([]);
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!name.trim()) {
       setFormError('Category name is required.');
       return;
     }
+    setFormError('');
+    setIsSaving(true);
+
     const payload = {
       name: name.trim(),
       is_active: isActive ? 1 : 0,
     };
 
-    if (editingId) {
-      updateMutation.mutate({ id: editingId, data: payload });
-    } else {
-      createMutation.mutate(payload);
+    try {
+      if (editingId) {
+        // Step 1: Update category details
+        await categoriesApi.update(editingId, payload);
+
+        // Step 2: Update brand mappings
+        try {
+          await categoryBrandsApi.set(editingId, selectedBrandIds);
+        } catch (brandErr) {
+          invalidate();
+          setFormError(
+            `Category details were updated, but saving brand mappings failed (${
+              brandErr?.response?.data?.error || brandErr.message || 'Network error'
+            }). Please click "Update Category" to retry.`
+          );
+          setIsSaving(false);
+          return;
+        }
+
+        invalidate();
+        resetForm();
+        showSuccess('Category and brand mappings updated successfully!');
+      } else {
+        // Step 1: Create category
+        const created = await categoriesApi.create(payload);
+        const newId = created?.id;
+
+        // Step 2: Save brand mappings if any selected
+        if (newId && selectedBrandIds.length > 0) {
+          try {
+            await categoryBrandsApi.set(newId, selectedBrandIds);
+          } catch (brandErr) {
+            invalidate();
+            // Safeguard: switch to editingId mode so retry will not create a duplicate category
+            setEditingId(newId);
+            setFormError(
+              `Category "${payload.name}" was created successfully, but saving brand mappings failed (${
+                brandErr?.response?.data?.error || brandErr.message || 'Network error'
+              }). You are now in edit mode for this category—please click "Update Category" to retry saving the brand mappings without creating duplicates.`
+            );
+            setIsSaving(false);
+            return;
+          }
+        }
+
+        invalidate();
+        resetForm();
+        showSuccess('Category created and brand mappings saved successfully!');
+      }
+    } catch (err) {
+      setFormError(err?.response?.data?.error || err.message || 'Failed to save category.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const categories = query.data || [];
+  const allBrands = brandsQuery.data || [];
+  const filteredBrands = allBrands.filter(
+    (b) =>
+      b.name?.toLowerCase().includes(brandSearch.toLowerCase()) ||
+      b.code?.toLowerCase().includes(brandSearch.toLowerCase())
+  );
 
   const filteredCategories = categories.filter((c) => {
     const matchesSearch = c.name?.toLowerCase().includes(searchQuery.toLowerCase());
@@ -111,14 +193,22 @@ function CategoriesPanel({ canManage }) {
     return matchesSearch && matchesStatus;
   });
 
+  const {
+    page,
+    setPage,
+    total,
+    paginatedItems: pagedCategories,
+    startIndex,
+  } = useClientPagination(filteredCategories, 10);
+
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+    <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
       {/* LEFT SIDE: Create / Edit Category Form */}
       <div className="lg:col-span-4">
-        <div className="card p-5 border border-border-soft bg-white shadow-xs rounded-2xl sticky top-4">
-          <div className="flex items-center justify-between border-b border-border-soft pb-3 mb-4">
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <Tag className="h-5 w-5 text-indigo-600" />
+        <div className="card p-3.5 border border-border-soft bg-white shadow-xs rounded-xl sticky top-2">
+          <div className="flex items-center justify-between border-b border-border-soft pb-2 mb-2.5">
+            <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <Tag className="h-4 w-4 text-indigo-600" />
               {editingId ? 'Edit Category' : 'Create New Category'}
             </h2>
             {editingId && (
@@ -129,21 +219,21 @@ function CategoriesPanel({ canManage }) {
           </div>
 
           {successMsg && (
-            <div className="mb-4 rounded-xl bg-emerald-50 p-3 text-xs font-semibold text-emerald-800 border border-emerald-200 flex items-center gap-1.5">
-              <CheckCircle2 size={16} />
+            <div className="mb-2.5 rounded-lg bg-emerald-50 p-2 text-xs font-semibold text-emerald-800 border border-emerald-200 flex items-center gap-1.5">
+              <CheckCircle2 size={15} />
               {successMsg}
             </div>
           )}
 
           {formError && (
-            <div className="mb-4 rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-800 border border-red-200">
+            <div className="mb-2.5 rounded-lg bg-red-50 p-2 text-xs font-semibold text-red-800 border border-red-200">
               {formError}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-2.5">
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-0.5">
                 Category Name <span className="text-red-500">*</span>
               </label>
               <input
@@ -151,7 +241,7 @@ function CategoriesPanel({ canManage }) {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g., Beverages, Electronics..."
-                disabled={!canManage}
+                disabled={!canManage || isSaving}
                 className="input w-full"
               />
             </div>
@@ -164,10 +254,10 @@ function CategoriesPanel({ canManage }) {
                 <label className="flex items-center gap-2 text-xs font-bold cursor-pointer text-slate-800">
                   <input
                     type="radio"
-                    name="status"
+                    name="category_status"
                     checked={isActive}
                     onChange={() => setIsActive(true)}
-                    disabled={!canManage}
+                    disabled={!canManage || isSaving}
                     className="accent-emerald-600 h-4 w-4"
                   />
                   <span className="flex items-center gap-1 text-emerald-700">
@@ -178,10 +268,10 @@ function CategoriesPanel({ canManage }) {
                 <label className="flex items-center gap-2 text-xs font-bold cursor-pointer text-slate-800">
                   <input
                     type="radio"
-                    name="status"
+                    name="category_status"
                     checked={!isActive}
                     onChange={() => setIsActive(false)}
-                    disabled={!canManage}
+                    disabled={!canManage || isSaving}
                     className="accent-rose-600 h-4 w-4"
                   />
                   <span className="flex items-center gap-1 text-slate-500">
@@ -191,13 +281,119 @@ function CategoriesPanel({ canManage }) {
               </div>
             </div>
 
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Allowed Brands
+                </label>
+                {allBrands.length > 0 && (
+                  <span className="text-[11px] font-semibold text-slate-500">
+                    {selectedBrandIds.length} of {allBrands.length} selected
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-500 mb-2 leading-relaxed">
+                Restrict brands allowed under this category. If no brands are selected, all brands are permitted.
+              </p>
+
+              {isLoadingBrands ? (
+                <div className="p-4 bg-slate-50 rounded-xl border border-border-soft flex items-center justify-center gap-2 text-xs text-slate-500 font-medium">
+                  <Loader2 size={16} className="animate-spin text-indigo-600" />
+                  Loading category brand mappings...
+                </div>
+              ) : (
+                <div className="space-y-2 p-3 bg-slate-50 rounded-xl border border-border-soft">
+                  {allBrands.length > 5 && (
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={13} />
+                      <input
+                        type="text"
+                        placeholder="Filter brands..."
+                        value={brandSearch}
+                        onChange={(e) => setBrandSearch(e.target.value)}
+                        disabled={!canManage || isSaving}
+                        className="input pl-8 py-1 text-xs w-full bg-white"
+                      />
+                    </div>
+                  )}
+
+                  {allBrands.length > 0 && (
+                    <div className="flex items-center justify-between pt-1 pb-1 text-[11px]">
+                      <button
+                        type="button"
+                        onClick={() => selectAllFilteredBrands(filteredBrands)}
+                        disabled={!canManage || isSaving || filteredBrands.length === 0}
+                        className="font-bold text-indigo-600 hover:text-indigo-800 disabled:opacity-50"
+                      >
+                        Select All {filteredBrands.length < allBrands.length ? `(${filteredBrands.length})` : ''}
+                      </button>
+                      {selectedBrandIds.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={clearAllBrands}
+                          disabled={!canManage || isSaving}
+                          className="font-bold text-rose-600 hover:text-rose-800 disabled:opacity-50"
+                        >
+                          Clear All
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="max-h-52 overflow-y-auto space-y-1 pr-1">
+                    {filteredBrands.map((b) => {
+                      const isChecked = selectedBrandIds.includes(b.id);
+                      return (
+                        <label
+                          key={b.id}
+                          className={`flex items-center justify-between p-2 rounded-lg cursor-pointer text-xs transition-colors ${
+                            isChecked
+                              ? 'bg-indigo-50/80 text-indigo-950 font-bold border border-indigo-200'
+                              : 'hover:bg-white text-slate-700 font-medium bg-white/60 border border-transparent'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => toggleBrand(b.id)}
+                              disabled={!canManage || isSaving}
+                              className="accent-indigo-600 h-4 w-4 rounded"
+                            />
+                            <span className="truncate">{b.name}</span>
+                          </div>
+                          {b.code && (
+                            <span className="text-[10px] text-slate-400 font-mono shrink-0 ml-1">
+                              ({b.code})
+                            </span>
+                          )}
+                        </label>
+                      );
+                    })}
+
+                    {allBrands.length === 0 && (
+                      <p className="text-xs text-slate-400 py-2 text-center font-medium">
+                        No brands found. Create brands in the Brands tab.
+                      </p>
+                    )}
+                    {allBrands.length > 0 && filteredBrands.length === 0 && (
+                      <p className="text-xs text-slate-400 py-2 text-center font-medium">
+                        No brands match "{brandSearch}".
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
             {canManage && (
-              <div className="flex items-center gap-2 pt-2">
+              <div className="flex items-center gap-2 pt-1">
                 <Button
                   type="submit"
-                  disabled={createMutation.isPending || updateMutation.isPending}
-                  className="flex-1 justify-center py-2 text-xs font-bold"
+                  disabled={isSaving}
+                  className="flex-1 justify-center py-1.5 text-xs font-bold"
                 >
+                  {isSaving && <Loader2 size={13} className="animate-spin mr-1" />}
                   {editingId ? 'Update Category' : 'Save Category'}
                 </Button>
 
@@ -206,7 +402,8 @@ function CategoriesPanel({ canManage }) {
                     type="button"
                     variant="secondary"
                     onClick={resetForm}
-                    className="py-2 text-xs font-bold"
+                    disabled={isSaving}
+                    className="py-1.5 text-xs font-bold"
                   >
                     Cancel
                   </Button>
@@ -219,12 +416,12 @@ function CategoriesPanel({ canManage }) {
 
       {/* RIGHT SIDE: Category List (Get Categories Call & Table) */}
       <div className="lg:col-span-8">
-        <div className="card border border-border-soft bg-white shadow-xs rounded-2xl overflow-hidden">
-          <div className="p-4 border-b border-border-soft flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="card border border-border-soft bg-white shadow-xs rounded-xl overflow-hidden">
+          <div className="px-3.5 py-2.5 border-b border-border-soft flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <span>Category Directory</span>
-                <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-700">
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-700">
                   {filteredCategories.length} Total
                 </span>
               </h2>
@@ -232,20 +429,20 @@ function CategoriesPanel({ canManage }) {
 
             <div className="flex items-center gap-2">
               <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={13} />
                 <input
                   type="text"
                   placeholder="Search categories..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="input pl-8 py-1 text-xs w-44 sm:w-56"
+                  className="input pl-7 py-1 text-xs w-36 sm:w-48"
                 />
               </div>
 
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="input py-1 text-xs w-28"
+                className="input py-1 text-xs w-24"
               >
                 <option value="all">All Status</option>
                 <option value="active">Active Only</option>
@@ -254,48 +451,48 @@ function CategoriesPanel({ canManage }) {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto max-h-[calc(100vh-210px)] overflow-y-auto">
             <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-border-soft bg-slate-50/80 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                  <th className="px-4 py-3">#</th>
-                  <th className="px-4 py-3">Category Name</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Created Date</th>
-                  {canManage && <th className="px-4 py-3 text-right">Actions</th>}
+              <thead className="sticky top-0 bg-slate-50 z-10">
+                <tr className="border-b border-border-soft bg-slate-50/95 text-[10.5px] font-bold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2">#</th>
+                  <th className="px-3 py-2">Category Name</th>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">Created Date</th>
+                  {canManage && <th className="px-3 py-2 text-right">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-soft">
-                {filteredCategories.map((c, index) => {
+                {pagedCategories.map((c, index) => {
                   const cActive = c.is_active === undefined ? true : Boolean(Number(c.is_active));
                   return (
                     <tr key={c.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-4 py-3 font-semibold text-slate-400">{index + 1}</td>
-                      <td className="px-4 py-3 font-bold text-slate-900">{c.name}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-1.5 font-semibold text-slate-400">{startIndex + index + 1}</td>
+                      <td className="px-3 py-1.5 font-bold text-slate-900">{c.name}</td>
+                      <td className="px-3 py-1.5">
                         {cActive ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10.5px] font-bold text-emerald-700 border border-emerald-200">
                             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
                             Active
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-500 border border-slate-200">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10.5px] font-bold text-slate-500 border border-slate-200">
                             <span className="h-1.5 w-1.5 rounded-full bg-slate-400"></span>
                             Inactive
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-slate-500 font-medium">
+                      <td className="px-3 py-1.5 text-slate-500 font-medium">
                         {c.created_at ? new Date(c.created_at).toLocaleDateString() : 'N/A'}
                       </td>
                       {canManage && (
-                        <td className="px-4 py-3 text-right space-x-1">
+                        <td className="px-3 py-1.5 text-right space-x-1">
                           <button
                             onClick={() => handleEdit(c)}
-                            className="rounded-lg bg-slate-100 p-1.5 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                            className="rounded-md bg-slate-100 p-1 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
                             title="Edit Category"
                           >
-                            <Edit2 size={14} />
+                            <Edit2 size={13} />
                           </button>
                           <button
                             onClick={() => {
@@ -303,10 +500,10 @@ function CategoriesPanel({ canManage }) {
                                 removeMutation.mutate(c.id);
                               }
                             }}
-                            className="rounded-lg bg-slate-100 p-1.5 text-slate-700 hover:bg-rose-50 hover:text-rose-600 transition-colors"
+                            className="rounded-md bg-slate-100 p-1 text-slate-700 hover:bg-rose-50 hover:text-rose-600 transition-colors"
                             title="Delete Category"
                           >
-                            <Trash2 size={14} />
+                            <Trash2 size={13} />
                           </button>
                         </td>
                       )}
@@ -315,7 +512,7 @@ function CategoriesPanel({ canManage }) {
                 })}
                 {filteredCategories.length === 0 && (
                   <tr>
-                    <td colSpan={canManage ? 5 : 4} className="px-4 py-8 text-center text-slate-400 font-medium">
+                    <td colSpan={canManage ? 5 : 4} className="px-3 py-6 text-center text-slate-400 font-medium">
                       No categories found matching your criteria.
                     </td>
                   </tr>
@@ -323,6 +520,7 @@ function CategoriesPanel({ canManage }) {
               </tbody>
             </table>
           </div>
+          <Pagination page={page} pageSize={10} total={total} onPageChange={setPage} />
         </div>
       </div>
     </div>
@@ -425,14 +623,22 @@ function BrandsPanel({ canManage }) {
     return matchesSearch && matchesStatus;
   });
 
+  const {
+    page,
+    setPage,
+    total,
+    paginatedItems: pagedBrands,
+    startIndex,
+  } = useClientPagination(filtered, 10);
+
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+    <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
       {/* LEFT FORM */}
       <div className="lg:col-span-4">
-        <div className="card p-5 border border-border-soft bg-white shadow-xs rounded-2xl sticky top-4">
-          <div className="flex items-center justify-between border-b border-border-soft pb-3 mb-4">
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <Tag className="h-5 w-5 text-indigo-600" />
+        <div className="card p-3.5 border border-border-soft bg-white shadow-xs rounded-xl sticky top-2">
+          <div className="flex items-center justify-between border-b border-border-soft pb-2 mb-2.5">
+            <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <Tag className="h-4 w-4 text-indigo-600" />
               {editingId ? 'Edit Brand' : 'Create Brand'}
             </h2>
             {editingId && (
@@ -443,21 +649,21 @@ function BrandsPanel({ canManage }) {
           </div>
 
           {successMsg && (
-            <div className="mb-4 rounded-xl bg-emerald-50 p-3 text-xs font-semibold text-emerald-800 border border-emerald-200 flex items-center gap-1.5">
-              <CheckCircle2 size={16} />
+            <div className="mb-2.5 rounded-lg bg-emerald-50 p-2 text-xs font-semibold text-emerald-800 border border-emerald-200 flex items-center gap-1.5">
+              <CheckCircle2 size={15} />
               {successMsg}
             </div>
           )}
 
           {formError && (
-            <div className="mb-4 rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-800 border border-red-200">
+            <div className="mb-2.5 rounded-lg bg-red-50 p-2 text-xs font-semibold text-red-800 border border-red-200">
               {formError}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-2.5">
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-0.5">
                 Brand Name <span className="text-red-500">*</span>
               </label>
               <input
@@ -471,7 +677,7 @@ function BrandsPanel({ canManage }) {
             </div>
 
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-0.5">
                 Brand Code
               </label>
               <input
@@ -485,46 +691,46 @@ function BrandsPanel({ canManage }) {
             </div>
 
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-0.5">
                 Status
               </label>
-              <div className="flex items-center gap-4 bg-slate-50 p-3 rounded-xl border border-border-soft">
-                <label className="flex items-center gap-2 text-xs font-bold cursor-pointer text-slate-800">
+              <div className="flex items-center gap-4 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-border-soft">
+                <label className="flex items-center gap-1.5 text-xs font-bold cursor-pointer text-slate-800">
                   <input
                     type="radio"
                     name="brand_status"
                     checked={isActive}
                     onChange={() => setIsActive(true)}
                     disabled={!canManage}
-                    className="accent-emerald-600 h-4 w-4"
+                    className="accent-emerald-600 h-3.5 w-3.5"
                   />
-                  <span className="flex items-center gap-1 text-emerald-700">
-                    <Power size={14} /> Active
+                  <span className="flex items-center gap-1 text-emerald-700 text-xs">
+                    <Power size={13} /> Active
                   </span>
                 </label>
 
-                <label className="flex items-center gap-2 text-xs font-bold cursor-pointer text-slate-800">
+                <label className="flex items-center gap-1.5 text-xs font-bold cursor-pointer text-slate-800">
                   <input
                     type="radio"
                     name="brand_status"
                     checked={!isActive}
                     onChange={() => setIsActive(false)}
                     disabled={!canManage}
-                    className="accent-rose-600 h-4 w-4"
+                    className="accent-rose-600 h-3.5 w-3.5"
                   />
-                  <span className="flex items-center gap-1 text-slate-500">
-                    <Power size={14} /> Inactive
+                  <span className="flex items-center gap-1 text-slate-500 text-xs">
+                    <Power size={13} /> Inactive
                   </span>
                 </label>
               </div>
             </div>
 
             {canManage && (
-              <div className="flex items-center gap-2 pt-2">
+              <div className="flex items-center gap-2 pt-1">
                 <Button
                   type="submit"
                   disabled={createMutation.isPending || updateMutation.isPending}
-                  className="flex-1 justify-center py-2 text-xs font-bold"
+                  className="flex-1 justify-center py-1.5 text-xs font-bold"
                 >
                   {editingId ? 'Update Brand' : 'Save Brand'}
                 </Button>
@@ -534,7 +740,7 @@ function BrandsPanel({ canManage }) {
                     type="button"
                     variant="secondary"
                     onClick={resetForm}
-                    className="py-2 text-xs font-bold"
+                    className="py-1.5 text-xs font-bold"
                   >
                     Cancel
                   </Button>
@@ -547,31 +753,31 @@ function BrandsPanel({ canManage }) {
 
       {/* RIGHT GET DATA TABLE */}
       <div className="lg:col-span-8">
-        <div className="card border border-border-soft bg-white shadow-xs rounded-2xl overflow-hidden">
-          <div className="p-4 border-b border-border-soft flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+        <div className="card border border-border-soft bg-white shadow-xs rounded-xl overflow-hidden">
+          <div className="px-3.5 py-2.5 border-b border-border-soft flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
               <span>Brands Directory</span>
-              <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-700">
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-700">
                 {filtered.length} Total
               </span>
             </h2>
 
             <div className="flex items-center gap-2">
               <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={13} />
                 <input
                   type="text"
                   placeholder="Search brands..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="input pl-8 py-1 text-xs w-44 sm:w-56"
+                  className="input pl-7 py-1 text-xs w-36 sm:w-48"
                 />
               </div>
 
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="input py-1 text-xs w-28"
+                className="input py-1 text-xs w-24"
               >
                 <option value="all">All Status</option>
                 <option value="active">Active</option>
@@ -580,51 +786,51 @@ function BrandsPanel({ canManage }) {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto max-h-[calc(100vh-210px)] overflow-y-auto">
             <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-border-soft bg-slate-50/80 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                  <th className="px-4 py-3">#</th>
-                  <th className="px-4 py-3">Code</th>
-                  <th className="px-4 py-3">Brand Name</th>
-                  <th className="px-4 py-3">Status</th>
-                  {canManage && <th className="px-4 py-3 text-right">Actions</th>}
+              <thead className="sticky top-0 bg-slate-50 z-10">
+                <tr className="border-b border-border-soft bg-slate-50/95 text-[10.5px] font-bold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2">#</th>
+                  <th className="px-3 py-2">Code</th>
+                  <th className="px-3 py-2">Brand Name</th>
+                  <th className="px-3 py-2">Status</th>
+                  {canManage && <th className="px-3 py-2 text-right">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-soft">
-                {filtered.map((b, index) => {
+                {pagedBrands.map((b, index) => {
                   const bActive = b.is_active === undefined ? true : Boolean(Number(b.is_active));
                   return (
                     <tr key={b.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-4 py-3 font-semibold text-slate-400">{index + 1}</td>
-                      <td className="px-4 py-3 font-semibold text-slate-600">{b.code || '-'}</td>
-                      <td className="px-4 py-3 font-bold text-slate-900">{b.name}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-1.5 font-semibold text-slate-400">{startIndex + index + 1}</td>
+                      <td className="px-3 py-1.5 font-semibold text-slate-600">{b.code || '-'}</td>
+                      <td className="px-3 py-1.5 font-bold text-slate-900">{b.name}</td>
+                      <td className="px-3 py-1.5">
                         {bActive ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10.5px] font-bold text-emerald-700 border border-emerald-200">
                             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span> Active
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-500 border border-slate-200">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10.5px] font-bold text-slate-500 border border-slate-200">
                             <span className="h-1.5 w-1.5 rounded-full bg-slate-400"></span> Inactive
                           </span>
                         )}
                       </td>
                       {canManage && (
-                        <td className="px-4 py-3 text-right space-x-1">
+                        <td className="px-3 py-1.5 text-right space-x-1">
                           <button
                             onClick={() => handleEdit(b)}
-                            className="rounded-lg bg-slate-100 p-1.5 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                            className="rounded-md bg-slate-100 p-1 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
                           >
-                            <Edit2 size={14} />
+                            <Edit2 size={13} />
                           </button>
                           <button
                             onClick={() => {
                               if (confirm(`Delete brand "${b.name}"?`)) removeMutation.mutate(b.id);
                             }}
-                            className="rounded-lg bg-slate-100 p-1.5 text-slate-700 hover:bg-rose-50 hover:text-rose-600 transition-colors"
+                            className="rounded-md bg-slate-100 p-1 text-slate-700 hover:bg-rose-50 hover:text-rose-600 transition-colors"
                           >
-                            <Trash2 size={14} />
+                            <Trash2 size={13} />
                           </button>
                         </td>
                       )}
@@ -633,7 +839,7 @@ function BrandsPanel({ canManage }) {
                 })}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={canManage ? 5 : 4} className="px-4 py-8 text-center text-slate-400 font-medium">
+                    <td colSpan={canManage ? 5 : 4} className="px-3 py-6 text-center text-slate-400 font-medium">
                       No brands found.
                     </td>
                   </tr>
@@ -641,277 +847,13 @@ function BrandsPanel({ canManage }) {
               </tbody>
             </table>
           </div>
+          <Pagination page={page} pageSize={10} total={total} onPageChange={setPage} />
         </div>
       </div>
     </div>
   );
 }
 
-function ProductLinesPanel({ canManage }) {
-  const queryClient = useQueryClient();
-  const query = useQuery({ queryKey: ['product-lines'], queryFn: productLinesApi.list });
-
-  const [editingId, setEditingId] = useState(null);
-  const [name, setName] = useState('');
-  const [code, setCode] = useState('');
-  const [isActive, setIsActive] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [formError, setFormError] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
-
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['product-lines'] });
-
-  const createMutation = useMutation({
-    mutationFn: productLinesApi.create,
-    onSuccess: () => {
-      invalidate();
-      resetForm();
-      showSuccess('Product line created successfully!');
-    },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }) => productLinesApi.update(id, data),
-    onSuccess: () => {
-      invalidate();
-      resetForm();
-      showSuccess('Product line updated successfully!');
-    },
-  });
-
-  const removeMutation = useMutation({
-    mutationFn: productLinesApi.remove,
-    onSuccess: () => {
-      invalidate();
-      showSuccess('Product line deleted.');
-    },
-  });
-
-  const resetForm = () => {
-    setEditingId(null);
-    setName('');
-    setCode('');
-    setIsActive(true);
-    setFormError('');
-  };
-
-  const showSuccess = (msg) => {
-    setSuccessMsg(msg);
-    setTimeout(() => setSuccessMsg(''), 3000);
-  };
-
-  const handleEdit = (item) => {
-    setEditingId(item.id);
-    setName(item.name || '');
-    setCode(item.code || '');
-    setIsActive(item.is_active === undefined ? true : Boolean(Number(item.is_active)));
-    setFormError('');
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!name.trim()) {
-      setFormError('Product line name is required.');
-      return;
-    }
-    const payload = {
-      name: name.trim(),
-      code: code.trim(),
-      is_active: isActive ? 1 : 0,
-    };
-
-    if (editingId) {
-      updateMutation.mutate({ id: editingId, data: payload });
-    } else {
-      createMutation.mutate(payload);
-    }
-  };
-
-  const rows = query.data || [];
-  const filtered = rows.filter((r) =>
-    r.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    r.code?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-      {/* LEFT FORM */}
-      <div className="lg:col-span-4">
-        <div className="card p-5 border border-border-soft bg-white shadow-xs rounded-2xl sticky top-4">
-          <div className="flex items-center justify-between border-b border-border-soft pb-3 mb-4">
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <Tag className="h-5 w-5 text-indigo-600" />
-              {editingId ? 'Edit Product Line' : 'Create Product Line'}
-            </h2>
-          </div>
-
-          {successMsg && (
-            <div className="mb-4 rounded-xl bg-emerald-50 p-3 text-xs font-semibold text-emerald-800 border border-emerald-200 flex items-center gap-1.5">
-              <CheckCircle2 size={16} /> {successMsg}
-            </div>
-          )}
-
-          {formError && (
-            <div className="mb-4 rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-800 border border-red-200">
-              {formError}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
-                Line Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g., Frozen Foods, FMCG..."
-                disabled={!canManage}
-                className="input w-full"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
-                Line Code
-              </label>
-              <input
-                type="text"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                placeholder="e.g., PL-01"
-                disabled={!canManage}
-                className="input w-full"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                Status
-              </label>
-              <div className="flex items-center gap-4 bg-slate-50 p-3 rounded-xl border border-border-soft">
-                <label className="flex items-center gap-2 text-xs font-bold cursor-pointer text-slate-800">
-                  <input
-                    type="radio"
-                    name="pl_status"
-                    checked={isActive}
-                    onChange={() => setIsActive(true)}
-                    disabled={!canManage}
-                    className="accent-emerald-600 h-4 w-4"
-                  />
-                  <span className="flex items-center gap-1 text-emerald-700"><Power size={14} /> Active</span>
-                </label>
-
-                <label className="flex items-center gap-2 text-xs font-bold cursor-pointer text-slate-800">
-                  <input
-                    type="radio"
-                    name="pl_status"
-                    checked={!isActive}
-                    onChange={() => setIsActive(false)}
-                    disabled={!canManage}
-                    className="accent-rose-600 h-4 w-4"
-                  />
-                  <span className="flex items-center gap-1 text-slate-500"><Power size={14} /> Inactive</span>
-                </label>
-              </div>
-            </div>
-
-            {canManage && (
-              <div className="flex items-center gap-2 pt-2">
-                <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="flex-1 justify-center py-2 text-xs font-bold">
-                  {editingId ? 'Update Line' : 'Save Product Line'}
-                </Button>
-                {editingId && (
-                  <Button type="button" variant="secondary" onClick={resetForm} className="py-2 text-xs font-bold">
-                    Cancel
-                  </Button>
-                )}
-              </div>
-            )}
-          </form>
-        </div>
-      </div>
-
-      {/* RIGHT GET DATA TABLE */}
-      <div className="lg:col-span-8">
-        <div className="card border border-border-soft bg-white shadow-xs rounded-2xl overflow-hidden">
-          <div className="p-4 border-b border-border-soft flex items-center justify-between">
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <span>Product Lines Directory</span>
-              <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-700">
-                {filtered.length} Total
-              </span>
-            </h2>
-
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-              <input
-                type="text"
-                placeholder="Search lines..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="input pl-8 py-1 text-xs w-48"
-              />
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-border-soft bg-slate-50/80 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                  <th className="px-4 py-3">#</th>
-                  <th className="px-4 py-3">Code</th>
-                  <th className="px-4 py-3">Line Name</th>
-                  <th className="px-4 py-3">Status</th>
-                  {canManage && <th className="px-4 py-3 text-right">Actions</th>}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border-soft">
-                {filtered.map((r, index) => {
-                  const rActive = r.is_active === undefined ? true : Boolean(Number(r.is_active));
-                  return (
-                    <tr key={r.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-4 py-3 font-semibold text-slate-400">{index + 1}</td>
-                      <td className="px-4 py-3 font-semibold text-slate-600">{r.code || '-'}</td>
-                      <td className="px-4 py-3 font-bold text-slate-900">{r.name}</td>
-                      <td className="px-4 py-3">
-                        {rActive ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200">
-                            Active
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-500 border border-slate-200">
-                            Inactive
-                          </span>
-                        )}
-                      </td>
-                      {canManage && (
-                        <td className="px-4 py-3 text-right space-x-1">
-                          <button onClick={() => handleEdit(r)} className="rounded-lg bg-slate-100 p-1.5 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600">
-                            <Edit2 size={14} />
-                          </button>
-                          <button onClick={() => { if (confirm(`Delete "${r.name}"?`)) removeMutation.mutate(r.id); }} className="rounded-lg bg-slate-100 p-1.5 text-slate-700 hover:bg-rose-50 hover:text-rose-600">
-                            <Trash2 size={14} />
-                          </button>
-                        </td>
-                      )}
-                    </tr>
-                  );
-                })}
-                {filtered.length === 0 && (
-                  <tr>
-                    <td colSpan={canManage ? 5 : 4} className="px-4 py-8 text-center text-slate-400 font-medium">No product lines found.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function StockUnitsPanel({ canManage }) {
   const queryClient = useQueryClient();
@@ -992,38 +934,46 @@ function StockUnitsPanel({ canManage }) {
     r.short_code?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const {
+    page,
+    setPage,
+    total,
+    paginatedItems: pagedStockUnits,
+    startIndex,
+  } = useClientPagination(filtered, 10);
+
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+    <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
       {/* LEFT FORM */}
       <div className="lg:col-span-4">
-        <div className="card p-5 border border-border-soft bg-white shadow-xs rounded-2xl sticky top-4">
-          <div className="flex items-center justify-between border-b border-border-soft pb-3 mb-4">
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <Tag className="h-5 w-5 text-indigo-600" />
+        <div className="card p-3.5 border border-border-soft bg-white shadow-xs rounded-xl sticky top-2">
+          <div className="flex items-center justify-between border-b border-border-soft pb-2 mb-2.5">
+            <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <Tag className="h-4 w-4 text-indigo-600" />
               {editingId ? 'Edit Stock Unit' : 'Create Stock Unit'}
             </h2>
           </div>
 
-          {successMsg && <div className="mb-4 rounded-xl bg-emerald-50 p-3 text-xs font-semibold text-emerald-800 border border-emerald-200 flex items-center gap-1.5"><CheckCircle2 size={16} /> {successMsg}</div>}
-          {formError && <div className="mb-4 rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-800 border border-red-200">{formError}</div>}
+          {successMsg && <div className="mb-2.5 rounded-lg bg-emerald-50 p-2 text-xs font-semibold text-emerald-800 border border-emerald-200 flex items-center gap-1.5"><CheckCircle2 size={15} /> {successMsg}</div>}
+          {formError && <div className="mb-2.5 rounded-lg bg-red-50 p-2 text-xs font-semibold text-red-800 border border-red-200">{formError}</div>}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-2.5">
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-0.5">
                 Unit Name <span className="text-red-500">*</span>
               </label>
               <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., Kilogram, Piece, Litre" disabled={!canManage} className="input w-full" />
             </div>
 
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-0.5">
                 Short Code <span className="text-red-500">*</span>
               </label>
               <input type="text" value={shortCode} onChange={(e) => setShortCode(e.target.value)} placeholder="e.g., KG, PCS, LTR" disabled={!canManage} className="input w-full" />
             </div>
 
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Decimal Quantity?</label>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-0.5">Decimal Quantity?</label>
               <select value={isDecimal} onChange={(e) => setIsDecimal(e.target.value)} disabled={!canManage} className="input w-full">
                 <option value="0">No (Whole integers only e.g., PCS)</option>
                 <option value="1">Yes (Decimal values e.g., 1.5 KG)</option>
@@ -1031,25 +981,25 @@ function StockUnitsPanel({ canManage }) {
             </div>
 
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">Status</label>
-              <div className="flex items-center gap-4 bg-slate-50 p-3 rounded-xl border border-border-soft">
-                <label className="flex items-center gap-2 text-xs font-bold cursor-pointer text-slate-800">
-                  <input type="radio" name="su_status" checked={isActive} onChange={() => setIsActive(true)} disabled={!canManage} className="accent-emerald-600 h-4 w-4" />
-                  <span className="flex items-center gap-1 text-emerald-700"><Power size={14} /> Active</span>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-0.5">Status</label>
+              <div className="flex items-center gap-4 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-border-soft">
+                <label className="flex items-center gap-1.5 text-xs font-bold cursor-pointer text-slate-800">
+                  <input type="radio" name="su_status" checked={isActive} onChange={() => setIsActive(true)} disabled={!canManage} className="accent-emerald-600 h-3.5 w-3.5" />
+                  <span className="flex items-center gap-1 text-emerald-700 text-xs"><Power size={13} /> Active</span>
                 </label>
-                <label className="flex items-center gap-2 text-xs font-bold cursor-pointer text-slate-800">
-                  <input type="radio" name="su_status" checked={!isActive} onChange={() => setIsActive(false)} disabled={!canManage} className="accent-rose-600 h-4 w-4" />
-                  <span className="flex items-center gap-1 text-slate-500"><Power size={14} /> Inactive</span>
+                <label className="flex items-center gap-1.5 text-xs font-bold cursor-pointer text-slate-800">
+                  <input type="radio" name="su_status" checked={!isActive} onChange={() => setIsActive(false)} disabled={!canManage} className="accent-rose-600 h-3.5 w-3.5" />
+                  <span className="flex items-center gap-1 text-slate-500 text-xs"><Power size={13} /> Inactive</span>
                 </label>
               </div>
             </div>
 
             {canManage && (
-              <div className="flex items-center gap-2 pt-2">
-                <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="flex-1 justify-center py-2 text-xs font-bold">
+              <div className="flex items-center gap-2 pt-1">
+                <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="flex-1 justify-center py-1.5 text-xs font-bold">
                   {editingId ? 'Update Unit' : 'Save Stock Unit'}
                 </Button>
-                {editingId && <Button type="button" variant="secondary" onClick={resetForm} className="py-2 text-xs font-bold">Cancel</Button>}
+                {editingId && <Button type="button" variant="secondary" onClick={resetForm} className="py-1.5 text-xs font-bold">Cancel</Button>}
               </div>
             )}
           </form>
@@ -1058,57 +1008,58 @@ function StockUnitsPanel({ canManage }) {
 
       {/* RIGHT GET DATA TABLE */}
       <div className="lg:col-span-8">
-        <div className="card border border-border-soft bg-white shadow-xs rounded-2xl overflow-hidden">
-          <div className="p-4 border-b border-border-soft flex items-center justify-between">
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+        <div className="card border border-border-soft bg-white shadow-xs rounded-xl overflow-hidden">
+          <div className="px-3.5 py-2.5 border-b border-border-soft flex items-center justify-between">
+            <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
               <span>Stock Units Directory</span>
-              <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-700">{filtered.length} Total</span>
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-700">{filtered.length} Total</span>
             </h2>
             <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-              <input type="text" placeholder="Search units..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="input pl-8 py-1 text-xs w-48" />
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={13} />
+              <input type="text" placeholder="Search units..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="input pl-7 py-1 text-xs w-40" />
             </div>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto max-h-[calc(100vh-210px)] overflow-y-auto">
             <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-border-soft bg-slate-50/80 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                  <th className="px-4 py-3">#</th>
-                  <th className="px-4 py-3">Unit Name</th>
-                  <th className="px-4 py-3">Short Code</th>
-                  <th className="px-4 py-3">Decimal?</th>
-                  <th className="px-4 py-3">Status</th>
-                  {canManage && <th className="px-4 py-3 text-right">Actions</th>}
+              <thead className="sticky top-0 bg-slate-50 z-10">
+                <tr className="border-b border-border-soft bg-slate-50/95 text-[10.5px] font-bold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2">#</th>
+                  <th className="px-3 py-2">Unit Name</th>
+                  <th className="px-3 py-2">Short Code</th>
+                  <th className="px-3 py-2">Decimal?</th>
+                  <th className="px-3 py-2">Status</th>
+                  {canManage && <th className="px-3 py-2 text-right">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-soft">
-                {filtered.map((r, index) => {
+                {pagedStockUnits.map((r, index) => {
                   const rActive = r.is_active === undefined ? true : Boolean(Number(r.is_active));
                   return (
                     <tr key={r.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-4 py-3 font-semibold text-slate-400">{index + 1}</td>
-                      <td className="px-4 py-3 font-bold text-slate-900">{r.name}</td>
-                      <td className="px-4 py-3 font-bold text-indigo-600">{r.short_code}</td>
-                      <td className="px-4 py-3 font-semibold text-slate-600">{r.is_decimal ? 'Yes' : 'No'}</td>
-                      <td className="px-4 py-3">
-                        {rActive ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200">Active</span> : <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-500 border border-slate-200">Inactive</span>}
+                      <td className="px-3 py-1.5 font-semibold text-slate-400">{startIndex + index + 1}</td>
+                      <td className="px-3 py-1.5 font-bold text-slate-900">{r.name}</td>
+                      <td className="px-3 py-1.5 font-bold text-indigo-600">{r.short_code}</td>
+                      <td className="px-3 py-1.5 font-semibold text-slate-600">{r.is_decimal ? 'Yes' : 'No'}</td>
+                      <td className="px-3 py-1.5">
+                        {rActive ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10.5px] font-bold text-emerald-700 border border-emerald-200">Active</span> : <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10.5px] font-bold text-slate-500 border border-slate-200">Inactive</span>}
                       </td>
                       {canManage && (
-                        <td className="px-4 py-3 text-right space-x-1">
-                          <button onClick={() => handleEdit(r)} className="rounded-lg bg-slate-100 p-1.5 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600"><Edit2 size={14} /></button>
-                          <button onClick={() => { if (confirm(`Delete "${r.name}"?`)) removeMutation.mutate(r.id); }} className="rounded-lg bg-slate-100 p-1.5 text-slate-700 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={14} /></button>
+                        <td className="px-3 py-1.5 text-right space-x-1">
+                          <button onClick={() => handleEdit(r)} className="rounded-md bg-slate-100 p-1 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600"><Edit2 size={13} /></button>
+                          <button onClick={() => { if (confirm(`Delete "${r.name}"?`)) removeMutation.mutate(r.id); }} className="rounded-md bg-slate-100 p-1 text-slate-700 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={13} /></button>
                         </td>
                       )}
                     </tr>
                   );
                 })}
                 {filtered.length === 0 && (
-                  <tr><td colSpan={canManage ? 6 : 5} className="px-4 py-8 text-center text-slate-400 font-medium">No stock units found.</td></tr>
+                  <tr><td colSpan={canManage ? 6 : 5} className="px-3 py-6 text-center text-slate-400 font-medium">No stock units found.</td></tr>
                 )}
               </tbody>
             </table>
           </div>
+          <Pagination page={page} pageSize={10} total={total} onPageChange={setPage} />
         </div>
       </div>
     </div>
@@ -1210,68 +1161,78 @@ function TaxCodesPanel({ canManage }) {
     r.code?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const {
+    page,
+    setPage,
+    total,
+    paginatedItems: pagedTaxCodes,
+    startIndex,
+  } = useClientPagination(filtered, 10);
+
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+    <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
       {/* LEFT FORM */}
       <div className="lg:col-span-4">
-        <div className="card p-5 border border-border-soft bg-white shadow-xs rounded-2xl sticky top-4">
-          <div className="flex items-center justify-between border-b border-border-soft pb-3 mb-4">
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <Tag className="h-5 w-5 text-indigo-600" />
+        <div className="card p-3.5 border border-border-soft bg-white shadow-xs rounded-xl sticky top-2">
+          <div className="flex items-center justify-between border-b border-border-soft pb-2 mb-2.5">
+            <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <Tag className="h-4 w-4 text-indigo-600" />
               {editingId ? 'Edit Tax Code (GST)' : 'Create Tax Code (GST)'}
             </h2>
           </div>
 
-          {successMsg && <div className="mb-4 rounded-xl bg-emerald-50 p-3 text-xs font-semibold text-emerald-800 border border-emerald-200 flex items-center gap-1.5"><CheckCircle2 size={16} /> {successMsg}</div>}
-          {formError && <div className="mb-4 rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-800 border border-red-200">{formError}</div>}
+          {successMsg && <div className="mb-2.5 rounded-lg bg-emerald-50 p-2 text-xs font-semibold text-emerald-800 border border-emerald-200 flex items-center gap-1.5"><CheckCircle2 size={15} /> {successMsg}</div>}
+          {formError && <div className="mb-2.5 rounded-lg bg-red-50 p-2 text-xs font-semibold text-red-800 border border-red-200">{formError}</div>}
 
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Code <span className="text-red-500">*</span></label>
-              <input type="text" value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g., GST18" disabled={!canManage} className="input w-full" />
+          <form onSubmit={handleSubmit} className="space-y-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-0.5">Code <span className="text-red-500">*</span></label>
+                <input type="text" value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g., GST18" disabled={!canManage} className="input w-full" />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-0.5">Name <span className="text-red-500">*</span></label>
+                <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., GST 18%" disabled={!canManage} className="input w-full" />
+              </div>
             </div>
 
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Name <span className="text-red-500">*</span></label>
-              <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., GST 18% Standard" disabled={!canManage} className="input w-full" />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">GST % <span className="text-red-500">*</span></label>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-0.5">GST % <span className="text-red-500">*</span></label>
               <input type="number" step="0.01" value={gstPercent} onChange={(e) => setGstPercent(e.target.value)} placeholder="e.g., 18" disabled={!canManage} className="input w-full" />
             </div>
 
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">CGST %</label>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">CGST %</label>
                 <input type="number" step="0.01" value={cgstPercent} onChange={(e) => setCgstPercent(e.target.value)} placeholder="Auto (GST/2)" disabled={!canManage} className="input w-full" />
               </div>
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">SGST %</label>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">SGST %</label>
                 <input type="number" step="0.01" value={sgstPercent} onChange={(e) => setSgstPercent(e.target.value)} placeholder="Auto (GST/2)" disabled={!canManage} className="input w-full" />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">Status</label>
-              <div className="flex items-center gap-4 bg-slate-50 p-2.5 rounded-xl border border-border-soft">
-                <label className="flex items-center gap-2 text-xs font-bold cursor-pointer text-slate-800">
-                  <input type="radio" name="tax_status" checked={isActive} onChange={() => setIsActive(true)} disabled={!canManage} className="accent-emerald-600 h-4 w-4" />
-                  <span className="flex items-center gap-1 text-emerald-700"><Power size={14} /> Active</span>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-0.5">Status</label>
+              <div className="flex items-center gap-4 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-border-soft">
+                <label className="flex items-center gap-1.5 text-xs font-bold cursor-pointer text-slate-800">
+                  <input type="radio" name="tax_status" checked={isActive} onChange={() => setIsActive(true)} disabled={!canManage} className="accent-emerald-600 h-3.5 w-3.5" />
+                  <span className="flex items-center gap-1 text-emerald-700 text-xs"><Power size={13} /> Active</span>
                 </label>
-                <label className="flex items-center gap-2 text-xs font-bold cursor-pointer text-slate-800">
-                  <input type="radio" name="tax_status" checked={!isActive} onChange={() => setIsActive(false)} disabled={!canManage} className="accent-rose-600 h-4 w-4" />
-                  <span className="flex items-center gap-1 text-slate-500"><Power size={14} /> Inactive</span>
+                <label className="flex items-center gap-1.5 text-xs font-bold cursor-pointer text-slate-800">
+                  <input type="radio" name="tax_status" checked={!isActive} onChange={() => setIsActive(false)} disabled={!canManage} className="accent-rose-600 h-3.5 w-3.5" />
+                  <span className="flex items-center gap-1 text-slate-500 text-xs"><Power size={13} /> Inactive</span>
                 </label>
               </div>
             </div>
 
             {canManage && (
-              <div className="flex items-center gap-2 pt-2">
-                <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="flex-1 justify-center py-2 text-xs font-bold">
+              <div className="flex items-center gap-2 pt-1">
+                <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="flex-1 justify-center py-1.5 text-xs font-bold">
                   {editingId ? 'Update Tax Code' : 'Save Tax Code'}
                 </Button>
-                {editingId && <Button type="button" variant="secondary" onClick={resetForm} className="py-2 text-xs font-bold">Cancel</Button>}
+                {editingId && <Button type="button" variant="secondary" onClick={resetForm} className="py-1.5 text-xs font-bold">Cancel</Button>}
               </div>
             )}
           </form>
@@ -1280,180 +1241,60 @@ function TaxCodesPanel({ canManage }) {
 
       {/* RIGHT GET DATA TABLE */}
       <div className="lg:col-span-8">
-        <div className="card border border-border-soft bg-white shadow-xs rounded-2xl overflow-hidden">
-          <div className="p-4 border-b border-border-soft flex items-center justify-between">
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+        <div className="card border border-border-soft bg-white shadow-xs rounded-xl overflow-hidden">
+          <div className="px-3.5 py-2.5 border-b border-border-soft flex items-center justify-between">
+            <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
               <span>Tax Codes Directory</span>
-              <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-700">{filtered.length} Total</span>
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-700">{filtered.length} Total</span>
             </h2>
             <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-              <input type="text" placeholder="Search tax codes..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="input pl-8 py-1 text-xs w-48" />
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={13} />
+              <input type="text" placeholder="Search tax codes..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="input pl-7 py-1 text-xs w-40" />
             </div>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto max-h-[calc(100vh-210px)] overflow-y-auto">
             <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-border-soft bg-slate-50/80 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                  <th className="px-4 py-3">#</th>
-                  <th className="px-4 py-3">Code</th>
-                  <th className="px-4 py-3">Tax Name</th>
-                  <th className="px-4 py-3">GST %</th>
-                  <th className="px-4 py-3">CGST / SGST</th>
-                  <th className="px-4 py-3">Status</th>
-                  {canManage && <th className="px-4 py-3 text-right">Actions</th>}
+              <thead className="sticky top-0 bg-slate-50 z-10">
+                <tr className="border-b border-border-soft bg-slate-50/95 text-[10.5px] font-bold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2">#</th>
+                  <th className="px-3 py-2">Code</th>
+                  <th className="px-3 py-2">Tax Name</th>
+                  <th className="px-3 py-2">GST %</th>
+                  <th className="px-3 py-2">CGST / SGST</th>
+                  <th className="px-3 py-2">Status</th>
+                  {canManage && <th className="px-3 py-2 text-right">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-soft">
-                {filtered.map((r, index) => {
+                {pagedTaxCodes.map((r, index) => {
                   const rActive = r.is_active === undefined ? true : Boolean(Number(r.is_active));
                   return (
                     <tr key={r.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-4 py-3 font-semibold text-slate-400">{index + 1}</td>
-                      <td className="px-4 py-3 font-bold text-indigo-600">{r.code}</td>
-                      <td className="px-4 py-3 font-bold text-slate-900">{r.name}</td>
-                      <td className="px-4 py-3 font-extrabold text-slate-900">{r.gst_percent}%</td>
-                      <td className="px-4 py-3 font-medium text-slate-600">{r.cgst_percent}% / {r.sgst_percent}%</td>
-                      <td className="px-4 py-3">
-                        {rActive ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200">Active</span> : <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-500 border border-slate-200">Inactive</span>}
+                      <td className="px-3 py-1.5 font-semibold text-slate-400">{startIndex + index + 1}</td>
+                      <td className="px-3 py-1.5 font-bold text-indigo-600">{r.code}</td>
+                      <td className="px-3 py-1.5 font-bold text-slate-900">{r.name}</td>
+                      <td className="px-3 py-1.5 font-extrabold text-slate-900">{r.gst_percent}%</td>
+                      <td className="px-3 py-1.5 font-medium text-slate-600">{r.cgst_percent}% / {r.sgst_percent}%</td>
+                      <td className="px-3 py-1.5">
+                        {rActive ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10.5px] font-bold text-emerald-700 border border-emerald-200">Active</span> : <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10.5px] font-bold text-slate-500 border border-slate-200">Inactive</span>}
                       </td>
                       {canManage && (
-                        <td className="px-4 py-3 text-right space-x-1">
-                          <button onClick={() => handleEdit(r)} className="rounded-lg bg-slate-100 p-1.5 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600"><Edit2 size={14} /></button>
-                          <button onClick={() => { if (confirm(`Delete "${r.name}"?`)) removeMutation.mutate(r.id); }} className="rounded-lg bg-slate-100 p-1.5 text-slate-700 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={14} /></button>
+                        <td className="px-3 py-1.5 text-right space-x-1">
+                          <button onClick={() => handleEdit(r)} className="rounded-md bg-slate-100 p-1 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600"><Edit2 size={13} /></button>
+                          <button onClick={() => { if (confirm(`Delete "${r.name}"?`)) removeMutation.mutate(r.id); }} className="rounded-md bg-slate-100 p-1 text-slate-700 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={13} /></button>
                         </td>
                       )}
                     </tr>
                   );
                 })}
                 {filtered.length === 0 && (
-                  <tr><td colSpan={canManage ? 7 : 6} className="px-4 py-8 text-center text-slate-400 font-medium">No tax codes found.</td></tr>
+                  <tr><td colSpan={canManage ? 7 : 6} className="px-3 py-6 text-center text-slate-400 font-medium">No tax codes found.</td></tr>
                 )}
               </tbody>
             </table>
           </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function CategoryBrandMappingPanel() {
-  const [categoryId, setCategoryId] = useState('');
-  const [selected, setSelected] = useState([]);
-  const [message, setMessage] = useState('');
-  const categoriesQuery = useQuery({ queryKey: ['categories'], queryFn: categoriesApi.list });
-  const brandsQuery = useQuery({ queryKey: ['brands'], queryFn: brandsApi.list });
-
-  const saveMutation = useMutation({
-    mutationFn: () => categoryBrandsApi.set(categoryId, selected),
-    onSuccess: () => {
-      setMessage('Category-Brand mapping saved successfully!');
-      setTimeout(() => setMessage(''), 3000);
-    },
-  });
-
-  const categories = categoriesQuery.data || [];
-  const brands = brandsQuery.data || [];
-
-  const pickCategory = async (id) => {
-    setCategoryId(id);
-    if (id) {
-      const data = await categoryBrandsApi.get(id);
-      setSelected(data.brand_ids || []);
-    } else {
-      setSelected([]);
-    }
-  };
-
-  const toggle = (brandId) => {
-    setSelected((prev) => (prev.includes(brandId) ? prev.filter((b) => b !== brandId) : [...prev, brandId]));
-  };
-
-  return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-      {/* LEFT FORM */}
-      <div className="lg:col-span-5">
-        <div className="card p-5 border border-border-soft bg-white shadow-xs rounded-2xl sticky top-4 space-y-4">
-          <div className="border-b border-border-soft pb-3">
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <Tag className="h-5 w-5 text-indigo-600" />
-              Assign Brands to Category
-            </h2>
-            <p className="text-xs text-slate-500 font-medium mt-1">
-              Restrict which brands are allowed under a category. If no brands are selected, all brands are permitted.
-            </p>
-          </div>
-
-          {message && (
-            <div className="rounded-xl bg-emerald-50 p-3 text-xs font-semibold text-emerald-800 border border-emerald-200 flex items-center gap-1.5">
-              <CheckCircle2 size={16} /> {message}
-            </div>
-          )}
-
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
-              Select Category
-            </label>
-            <select value={categoryId} onChange={(e) => pickCategory(e.target.value)} className="input w-full">
-              <option value="">-- Choose Category --</option>
-              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </div>
-
-          {categoryId && (
-            <>
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">
-                  Allowed Brands
-                </label>
-                <div className="max-h-60 overflow-y-auto space-y-2 p-3 bg-slate-50 rounded-xl border border-border-soft">
-                  {brands.map((b) => (
-                    <label key={b.id} className="flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer p-1 rounded-lg hover:bg-white transition-colors">
-                      <input type="checkbox" checked={selected.includes(b.id)} onChange={() => toggle(b.id)} className="accent-indigo-600 h-4 w-4 rounded" />
-                      <span>{b.name}</span>
-                      {b.code && <span className="text-[10px] text-slate-400">({b.code})</span>}
-                    </label>
-                  ))}
-                  {brands.length === 0 && <p className="text-xs text-slate-400">No brands found. Add brands first.</p>}
-                </div>
-              </div>
-
-              <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} className="w-full justify-center py-2 text-xs font-bold">
-                Save Brand Mapping
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* RIGHT GET DATA LIST */}
-      <div className="lg:col-span-7">
-        <div className="card border border-border-soft bg-white shadow-xs rounded-2xl overflow-hidden p-4">
-          <h2 className="text-base font-bold text-slate-900 mb-3 flex items-center justify-between">
-            <span>Mapped Category Overview</span>
-            <span className="text-xs text-slate-500 font-normal">{categories.length} Categories</span>
-          </h2>
-
-          <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-1">
-            {categories.map((c) => (
-              <div
-                key={c.id}
-                onClick={() => pickCategory(c.id)}
-                className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
-                  String(categoryId) === String(c.id)
-                    ? 'border-indigo-500 bg-indigo-50/40 ring-1 ring-indigo-500/20'
-                    : 'border-border-soft bg-white hover:border-slate-300'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-xs text-slate-900">{c.name}</span>
-                  <span className="text-[11px] font-semibold text-indigo-600 hover:underline">Select &amp; Edit →</span>
-                </div>
-              </div>
-            ))}
-          </div>
+          <Pagination page={page} pageSize={10} total={total} onPageChange={setPage} />
         </div>
       </div>
     </div>
@@ -1465,14 +1306,12 @@ export function Catalog() {
 
   return (
     <div>
-      <h1 className="mb-4 text-2xl font-bold text-slate-900 tracking-tight">Catalog Master Management</h1>
+      <h1 className="mb-2 text-xl font-bold text-slate-900 tracking-tight">Catalog Master Management</h1>
       <Tabs
         tabs={[
           { key: 'items', label: 'Items', content: <ItemsPanel canManage={canManage} /> },
           { key: 'categories', label: 'Categories', content: <CategoriesPanel canManage={canManage} /> },
           { key: 'brands', label: 'Brands', content: <BrandsPanel canManage={canManage} /> },
-          { key: 'category-brand', label: 'Category ↔ Brand', content: <CategoryBrandMappingPanel /> },
-          { key: 'product-lines', label: 'Product Lines', content: <ProductLinesPanel canManage={canManage} /> },
           { key: 'stock-units', label: 'Stock Units', content: <StockUnitsPanel canManage={canManage} /> },
           { key: 'tax-codes', label: 'Tax Codes (GST)', content: <TaxCodesPanel canManage={canManage} /> },
         ]}

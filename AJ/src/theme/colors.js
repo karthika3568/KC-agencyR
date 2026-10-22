@@ -1,4 +1,4 @@
-// Mirrors the web app's AJ Agency palette (frontend/tailwind.config.js)
+// Mirrors the web app's KC Agency palette (frontend/tailwind.config.js)
 // so the mobile app feels like the same product, not a different one.
 export const colors = {
   navbar: '#171E2B',

@@ -32,11 +32,11 @@ export function DashboardScreen({ navigation }) {
       contentContainerStyle={styles.scrollContent}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
-      {/* Top Banner Header with AJ Agency Title */}
+      {/* Top Banner Header with KC Agency Title */}
       <View style={styles.topBanner}>
         <View style={{ flex: 1 }}>
           <View style={styles.logoRow}>
-            <Text style={styles.brandTitle}>AJ </Text>
+            <Text style={styles.brandTitle}>KC </Text>
             <Text style={styles.brandTitleGold}>Agency</Text>
           </View>
           <Text style={styles.brandSub}>DISTRIBUTOR BILLING & INVENTORY</Text>

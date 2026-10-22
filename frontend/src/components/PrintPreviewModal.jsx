@@ -2,21 +2,96 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Printer } from 'lucide-react';
 import { invoicesApi } from '../api/invoices';
+import { vanStockIssuesApi } from '../api/purchasing';
 import { ThermalTemplate } from '../print/ThermalTemplate';
 import { A4Template } from '../print/A4Template';
-import SurandaiInvoice from './SurandaiInvoice';
 import { Button } from './Button.jsx';
 import '../print/print.css';
+
+/**
+ * Transforms a stock issue transaction into the KC Agency bill presentation format.
+ * Maps issue number, date, salesman, branch, product list, unit prices, and line totals
+ * without fabricating sales customer, tax, or payment info.
+ */
+export function adaptStockIssueToPrintData(issue) {
+  if (!issue) return null;
+  const rawItems = issue.items || [];
+  const items = rawItems.map((it, idx) => {
+    const qty = Number(it.quantity ?? it.qty ?? 0);
+    const unitPrice = Number(it.unit_price ?? it.rate ?? 0);
+    const lineAmount = Number(it.line_amount ?? it.amount ?? (qty * unitPrice));
+    return {
+      id: it.id || idx,
+      item_name: it.item_name || it.name || '',
+      item_name_snapshot: it.item_name || it.name || '',
+      sku: it.sku || it.item_code || '',
+      item_code: it.sku || it.item_code || '',
+      unit: it.unit || it.unit_code || 'PCS',
+      unit_code: it.unit || it.unit_code || 'PCS',
+      qty: qty,
+      rate: unitPrice,
+      unit_price: unitPrice,
+      line_total: lineAmount,
+      net_amount: lineAmount,
+    };
+  });
+
+  const totalQty = issue.total_qty != null
+    ? Number(issue.total_qty)
+    : items.reduce((s, it) => s + it.qty, 0);
+
+  const totalAmount = issue.total_amount != null
+    ? Number(issue.total_amount)
+    : items.reduce((s, it) => s + it.line_total, 0);
+
+  const issueNo = issue.issue_no || (`VSI-${String(issue.id || '').padStart(5, '0')}`);
+  const issueDate = issue.issued_at || issue.created_at || new Date().toISOString();
+  const salesmanName = issue.salesman_name || issue.salesman?.name || 'Salesman';
+  const salesmanCode = issue.salesman_code || issue.salesman?.code || '';
+  const salesmanPhone = issue.salesman_phone || issue.salesman?.phone || '';
+  const branchName = issue.branch_name || issue.branch?.name || 'Main Branch';
+  const notes = issue.notes || '';
+
+  return {
+    is_stock_issue: true,
+    title: 'STOCK ISSUE BILL',
+    invoice: {
+      invoice_no: issueNo,
+      invoice_date: issueDate,
+      salesman_name: salesmanName,
+      salesman_code: salesmanCode,
+      salesman_phone: salesmanPhone,
+      branch_name: branchName,
+      notes: notes,
+      items: items,
+      grand_total: totalAmount,
+      subtotal: totalAmount,
+      taxable_value: totalAmount,
+    },
+    branch: {
+      name: branchName,
+      print_name: 'KC AGENCY',
+    },
+    tax_slabs: [],
+    amount_in_words: issue.amount_in_words || '',
+    total_qty: totalQty,
+    total_amount: totalAmount,
+  };
+}
 
 /**
  * In-app print preview — replaces the old window.open(new tab) flow.
  * Rendered via portal directly into <body> so print.css's
  * `body.has-print-modal #root { display: none }` rule can hide the app
  * shell and print only this modal's content.
+ *
+ * Supports both sales invoices (invoiceId) and van stock issues (stockIssue / issueId)
+ * reusing the established KC Agency bill templates (A4 and Thermal 80mm).
  */
-export function PrintPreviewModal({ invoiceId, onClose }) {
-  const [format, setFormat] = useState('surandai');
-  const [data, setData] = useState(null);
+export function PrintPreviewModal({ invoiceId, stockIssue, issueId, onClose }) {
+  const isStockIssue = Boolean(stockIssue || issueId);
+  const [format, setFormat] = useState(isStockIssue ? 'a4' : 'thermal');
+  const [data, setData] = useState(() => (stockIssue ? adaptStockIssueToPrintData(stockIssue) : null));
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -25,28 +100,46 @@ export function PrintPreviewModal({ invoiceId, onClose }) {
   }, []);
 
   useEffect(() => {
-    invoicesApi.print(invoiceId).then(setData).catch((err) => setError(err?.response?.data?.error || 'Failed to load'));
-  }, [invoiceId]);
+    if (invoiceId) {
+      invoicesApi.print(invoiceId)
+        .then(setData)
+        .catch((err) => setError(err?.response?.data?.error || 'Failed to load invoice print data'));
+    } else if (stockIssue?.id || issueId) {
+      const targetId = stockIssue?.id || issueId;
+      vanStockIssuesApi.get(targetId)
+        .then((fullIssue) => {
+          setData(adaptStockIssueToPrintData(fullIssue));
+        })
+        .catch((err) => {
+          if (!stockIssue) {
+            setError(err?.response?.data?.error || 'Failed to load stock issue print data');
+          }
+        });
+    }
+  }, [invoiceId, issueId, stockIssue?.id]);
 
   const whatsappHref = () => {
     if (!data) return '#';
+    if (data.is_stock_issue) {
+      const phone = (data.invoice.salesman_phone || '').replace(/\D/g, '');
+      const text = encodeURIComponent(
+        `Hi ${data.invoice.salesman_name || ''}! Stock Issue ${data.invoice.invoice_no || ''} from KC AGENCY — Total Qty: ${data.total_qty}, Total Value: Rs. ${data.total_amount}.`
+      );
+      return `https://wa.me/${phone ? '91' + phone : ''}?text=${text}`;
+    }
     const phone = (data.invoice.customer_phone || '').replace(/\D/g, '');
     const text = encodeURIComponent(
-      `Hi! Your invoice ${data.invoice.invoice_no || ''} from ${data.branch.print_name} — Total: Rs. ${data.invoice.grand_total}. Thank you for your business!`
+      `Hi! Your invoice ${data.invoice.invoice_no || ''} from ${data.branch?.print_name || 'KC AGENCY'} — Total: Rs. ${data.invoice.grand_total}. Thank you for your business!`
     );
     return `https://wa.me/${phone ? '91' + phone : ''}?text=${text}`;
   };
+
+  const hasPhone = data?.invoice?.customer_phone || (data?.is_stock_issue && data?.invoice?.salesman_phone);
 
   return createPortal(
     <div className="fixed inset-0 z-50 overflow-auto bg-black/40 py-6">
       <div className="no-print mx-auto mb-4 flex max-w-3xl items-center gap-2 rounded-lg bg-white p-3 shadow-sm">
         <span className="text-sm font-medium text-gray-600">Format:</span>
-        <button
-          onClick={() => setFormat('a4')}
-          className={`rounded px-3 py-1 text-sm ${format === 'a4' ? 'bg-navbar text-white' : 'bg-gray-100 text-gray-700'}`}
-        >
-          A4
-        </button>
         <button
           onClick={() => setFormat('thermal')}
           className={`rounded px-3 py-1 text-sm ${format === 'thermal' ? 'bg-navbar text-white' : 'bg-gray-100 text-gray-700'}`}
@@ -54,13 +147,13 @@ export function PrintPreviewModal({ invoiceId, onClose }) {
           Thermal (80mm)
         </button>
         <button
-          onClick={() => setFormat('surandai')}
-          className={`rounded px-3 py-1 text-sm ${format === 'surandai' ? 'bg-navbar text-white' : 'bg-gray-100 text-gray-700'}`}
+          onClick={() => setFormat('a4')}
+          className={`rounded px-3 py-1 text-sm ${format === 'a4' ? 'bg-navbar text-white' : 'bg-gray-100 text-gray-700'}`}
         >
-          Paper Bill (Mandi Slip)
+          A4
         </button>
         <div className="ml-auto flex items-center gap-2">
-          {data?.invoice?.customer_phone && (
+          {hasPhone && (
             <a href={whatsappHref()} target="_blank" rel="noreferrer" className="rounded bg-green-600 px-3 py-1 text-sm text-white">
               Share via WhatsApp
             </a>
@@ -74,9 +167,7 @@ export function PrintPreviewModal({ invoiceId, onClose }) {
       {!error && !data && <div className="mx-auto w-fit rounded-lg bg-white p-6 text-gray-500 shadow-sm">Loading…</div>}
       {data && (
         <div className="mx-auto w-fit rounded-lg bg-white p-6 shadow-sm">
-          {format === 'surandai' ? (
-            <SurandaiInvoice bill={data.invoice} settings={data.branch || {}} lang="ta" />
-          ) : format === 'thermal' ? (
+          {format === 'thermal' ? (
             <ThermalTemplate data={data} />
           ) : (
             <A4Template data={data} />

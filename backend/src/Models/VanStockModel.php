@@ -20,17 +20,17 @@ class VanStockModel
     {
     }
 
-    public function issue(int $branchId, int $employeeId, ?int $routeId, int $issuedBy, ?string $notes, array $lines): int
+    public function issue(int $branchId, int $employeeId, int $issuedBy, ?string $notes, array $lines): int
     {
         $this->pdo->beginTransaction();
         try {
             $stmt = $this->pdo->prepare(
-                'INSERT INTO stock_issue_notes (branch_id, employee_id, route_id, issued_by, notes)
-                 VALUES (:branch_id, :employee_id, :route_id, :issued_by, :notes)'
+                'INSERT INTO stock_issue_notes (branch_id, employee_id, issued_by, notes)
+                 VALUES (:branch_id, :employee_id, :issued_by, :notes)'
             );
             $stmt->execute([
                 'branch_id' => $branchId, 'employee_id' => $employeeId,
-                'route_id' => $routeId, 'issued_by' => $issuedBy, 'notes' => $notes,
+                'issued_by' => $issuedBy, 'notes' => $notes,
             ]);
             $issueId = (int) $this->pdo->lastInsertId();
             $this->pdo->prepare('UPDATE stock_issue_notes SET issue_no = :code WHERE id = :id')
@@ -103,15 +103,18 @@ class VanStockModel
     public function listIssues(int $branchId, ?int $employeeId = null): array
     {
         $sql = "SELECT sin.id, sin.issue_no, sin.issued_at, sin.notes,
-                       sin.employee_id, u.name AS employee_name,
-                       sin.route_id, r.name AS route_name,
+                       sin.branch_id, sin.employee_id, u.name AS employee_name,
                        ub.name AS issued_by_name,
-                       COUNT(sii.id) AS item_count, SUM(sii.qty) AS total_qty
+                       b.branch_name, b.print_name AS branch_print_name,
+                       COUNT(sii.id) AS item_count,
+                       COALESCE(SUM(sii.qty), 0) AS total_qty,
+                       COALESCE(SUM(sii.qty * COALESCE(i.net_srate, i.retail_price, 0)), 0) AS total_amount
                 FROM stock_issue_notes sin
                 JOIN users u ON u.id = sin.employee_id
-                LEFT JOIN routes r ON r.id = sin.route_id
                 LEFT JOIN users ub ON ub.id = sin.issued_by
+                LEFT JOIN branches b ON b.id = sin.branch_id
                 LEFT JOIN stock_issue_items sii ON sii.issue_id = sin.id
+                LEFT JOIN items i ON i.id = sii.item_id
                 WHERE sin.branch_id = :branch_id";
         $params = ['branch_id' => $branchId];
         if ($employeeId !== null) {
@@ -122,14 +125,51 @@ class VanStockModel
 
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
-        return $stmt->fetchAll();
+        $issues = $stmt->fetchAll();
+
+        if (!empty($issues)) {
+            $issueIds = array_column($issues, 'id');
+            $placeholders = implode(',', array_fill(0, count($issueIds), '?'));
+            $itemSql = "SELECT sii.id, sii.issue_id, sii.item_id, sii.qty,
+                               i.item_name, i.item_code, su.short_code AS unit_code,
+                               COALESCE(i.net_srate, i.retail_price, 0) AS unit_price,
+                               ROUND(sii.qty * COALESCE(i.net_srate, i.retail_price, 0), 2) AS line_amount
+                        FROM stock_issue_items sii
+                        JOIN items i ON i.id = sii.item_id
+                        LEFT JOIN stock_units su ON su.id = i.base_unit_id
+                        WHERE sii.issue_id IN ($placeholders)
+                        ORDER BY sii.id";
+            $itemStmt = $this->pdo->prepare($itemSql);
+            $itemStmt->execute($issueIds);
+            $allItems = $itemStmt->fetchAll();
+
+            $itemsByIssue = [];
+            foreach ($allItems as $item) {
+                $item['qty'] = (float) $item['qty'];
+                $item['unit_price'] = (float) $item['unit_price'];
+                $item['line_amount'] = (float) $item['line_amount'];
+                $itemsByIssue[$item['issue_id']][] = $item;
+            }
+
+            foreach ($issues as &$iss) {
+                $iss['items'] = $itemsByIssue[$iss['id']] ?? [];
+                $iss['item_count'] = count($iss['items']);
+                $iss['total_qty'] = (float) array_sum(array_column($iss['items'], 'qty'));
+                $iss['total_amount'] = (float) round(array_sum(array_column($iss['items'], 'line_amount')), 2);
+            }
+            unset($iss);
+        }
+
+        return $issues;
     }
 
     /** Item lines of one issue transaction — the "ONE ISSUE TRANSACTION → MANY ITEMS" detail (section 24). */
     public function issueLines(int $issueId): array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT sii.*, i.item_name, i.item_code, su.short_code AS unit_code
+            'SELECT sii.*, i.item_name, i.item_code, su.short_code AS unit_code,
+                    COALESCE(i.net_srate, i.retail_price, 0) AS unit_price,
+                    ROUND(sii.qty * COALESCE(i.net_srate, i.retail_price, 0), 2) AS line_amount
              FROM stock_issue_items sii
              JOIN items i ON i.id = sii.item_id
              LEFT JOIN stock_units su ON su.id = i.base_unit_id
@@ -137,17 +177,27 @@ class VanStockModel
              ORDER BY sii.id'
         );
         $stmt->execute(['issue_id' => $issueId]);
-        return $stmt->fetchAll();
+        $lines = $stmt->fetchAll();
+        foreach ($lines as &$line) {
+            $line['qty'] = (float) $line['qty'];
+            $line['unit_price'] = (float) $line['unit_price'];
+            $line['line_amount'] = (float) $line['line_amount'];
+        }
+        return $lines;
     }
 
     public function findIssue(int $issueId): ?array
     {
         $stmt = $this->pdo->prepare(
-            'SELECT sin.*, u.name AS employee_name, r.name AS route_name, ub.name AS issued_by_name
+            'SELECT sin.*, u.name AS employee_name, ub.name AS issued_by_name,
+                    b.branch_name, b.print_name AS branch_print_name,
+                    b.address_line1, b.city, b.state, b.pincode, b.phone AS branch_phone, b.gstin AS branch_gstin,
+                    c.name AS company_name
              FROM stock_issue_notes sin
              JOIN users u ON u.id = sin.employee_id
-             LEFT JOIN routes r ON r.id = sin.route_id
              LEFT JOIN users ub ON ub.id = sin.issued_by
+             LEFT JOIN branches b ON b.id = sin.branch_id
+             LEFT JOIN company c ON c.id = b.company_id
              WHERE sin.id = :id'
         );
         $stmt->execute(['id' => $issueId]);
@@ -156,6 +206,8 @@ class VanStockModel
             return null;
         }
         $issue['items'] = $this->issueLines($issueId);
+        $issue['total_qty'] = (float) array_sum(array_column($issue['items'], 'qty'));
+        $issue['total_amount'] = (float) round(array_sum(array_column($issue['items'], 'line_amount')), 2);
         return $issue;
     }
 

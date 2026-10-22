@@ -91,7 +91,6 @@ class CustomerPrebookingController
         $header = [
             'customer_id' => (int) $body['customer_id'],
             'branch_id' => $branchId,
-            'route_id' => !empty($body['route_id']) ? (int) $body['route_id'] : null,
             'employee_id' => !empty($body['employee_id']) ? (int) $body['employee_id'] : null,
             'booking_source' => $body['booking_source'] ?? 'direct',
             'notes' => $body['notes'] ?? null,
@@ -179,13 +178,13 @@ class CustomerPrebookingController
 
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
-        $headers = ['Order No', 'Date', 'Customer', 'Route', 'Branch', 'Salesman', 'Booking Source', 'Total Items', 'Estimated Total', 'Status'];
+        $headers = ['Order No', 'Date', 'Customer', 'Branch', 'Salesman', 'Booking Source', 'Total Items', 'Estimated Total', 'Status'];
         $sheet->fromArray($headers, null, 'A1');
 
         $rowNum = 2;
         foreach ($rows as $r) {
             $sheet->fromArray([
-                $r['prebooking_no'], $r['created_at'], $r['customer_name'], $r['route_name'] ?? '-',
+                $r['prebooking_no'], $r['created_at'], $r['customer_name'],
                 $r['branch_id'], $r['employee_name'] ?? '-', $r['booking_source'], $r['item_count'],
                 $r['estimated_total'], $r['status'],
             ], null, "A{$rowNum}");
@@ -197,5 +196,67 @@ class CustomerPrebookingController
         $writer = new Xlsx($spreadsheet);
         $writer->save('php://output');
         exit;
+    }
+
+    public function dispatchVan(string $id): void
+    {
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::require($claims, 'inventory.issue_van_stock');
+
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        if (empty($body['employee_id'])) {
+            Response::error('employee_id is required', 422);
+        }
+
+        $branchId = $this->resolveBranchId($claims);
+        $booking = $this->model->find((int) $id);
+        if (!$booking) {
+            Response::error('Pre-booking not found', 404);
+        }
+
+        // Use custom items if provided or booking's own items
+        $items = !empty($body['items']) ? $body['items'] : array_map(function ($it) {
+            return [
+                'item_id' => (int) $it['item_id'],
+                'qty' => (float) $it['qty'],
+            ];
+        }, $booking['items'] ?? []);
+
+        if (empty($items)) {
+            Response::error('No items to dispatch', 422);
+        }
+
+        $vanStockModel = new \App\Models\VanStockModel($this->pdo);
+        $issueId = $vanStockModel->issue(
+            $branchId,
+            (int) $body['employee_id'],
+            (int) $claims['sub'],
+            $body['notes'] ?? ("Dispatched from Pre-booking #" . ($booking['prebooking_no'] ?? $id)),
+            $items
+        );
+
+        $this->model->linkVanIssue((int) $id, $issueId, (int) $body['employee_id']);
+
+        Response::json([
+            'message' => 'Dispatched to van successfully',
+            'issue_id' => $issueId,
+            'prebooking_id' => (int) $id,
+            'status' => 'processing',
+        ], 201);
+    }
+
+    public function linkInvoice(string $id): void
+    {
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::require($claims, 'orders.manage_prebooking_status');
+
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+        if (empty($body['invoice_id'])) {
+            Response::error('invoice_id is required', 422);
+        }
+
+        $this->model->linkInvoice((int) $id, (int) $body['invoice_id']);
+
+        Response::json(['message' => 'Pre-booking linked to invoice and completed']);
     }
 }

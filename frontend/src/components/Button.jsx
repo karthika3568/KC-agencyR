@@ -1,9 +1,9 @@
 const VARIANT_CLASSES = {
-  primary: 'bg-success text-white hover:bg-success/90 disabled:opacity-40',
-  secondary: 'bg-white text-ink border border-border-soft hover:bg-page disabled:opacity-40',
-  danger: 'bg-red-50 text-danger hover:bg-red-100 disabled:opacity-40',
-  ghost: 'text-ink-muted hover:text-ink disabled:opacity-40',
-  gold: 'bg-gold text-white hover:bg-gold-soft disabled:opacity-40',
+  primary: 'bg-[#6F2DA8] text-white hover:bg-[#5C238C] shadow-sm disabled:opacity-40',
+  secondary: 'bg-white text-[#17233D] border border-[#E5E7F5] hover:bg-[#F7F5FF] hover:border-[#DDD0FF] disabled:opacity-40',
+  danger: 'bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100 disabled:opacity-40',
+  ghost: 'text-[#697797] hover:text-[#17233D] hover:bg-[#EEE5FF]/60 disabled:opacity-40',
+  gold: 'bg-[#6F2DA8] text-white hover:bg-[#5C238C] shadow-sm disabled:opacity-40',
 };
 
 /**
@@ -19,11 +19,11 @@ export function Button({
   children,
   ...props
 }) {
-  const sizeClasses = size === 'sm' ? 'px-3 py-1 text-xs' : size === 'lg' ? 'px-4 py-2.5 text-sm' : 'px-4 py-1.5 text-sm';
+  const sizeClasses = size === 'sm' ? 'px-3 py-1.5 text-xs' : size === 'lg' ? 'px-5 py-2.5 text-sm' : 'px-4 py-2 text-sm';
 
   return (
     <button
-      className={`inline-flex items-center justify-center gap-1.5 rounded-lg font-semibold transition-colors ${sizeClasses} ${VARIANT_CLASSES[variant] || VARIANT_CLASSES.primary} ${className}`}
+      className={`inline-flex items-center justify-center gap-1.5 rounded-xl font-semibold transition-all active:scale-[0.99] ${sizeClasses} ${VARIANT_CLASSES[variant] || VARIANT_CLASSES.primary} ${className}`}
       {...props}
     >
       {icon}

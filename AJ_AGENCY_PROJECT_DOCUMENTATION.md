@@ -1,6 +1,6 @@
-# AJ Agency — Project Documentation
+# KC Agency — Project Documentation
 
-Complete technical reference for the AJ Agency POS / Distributor Billing System:
+Complete technical reference for the KC Agency POS / Distributor Billing System:
 a React.js web app, a React Native mobile app, and a PHP REST API backend on
 MySQL/MariaDB. Everything below is verified against the actual codebase at the
 time of writing — no invented tables, endpoints, or versions.
@@ -13,7 +13,7 @@ For the phase-by-phase build history and detailed feature notes, see the root
 ## 1. System Overview
 
 ```
-AJ Agency
+KC Agency
    │
    ├── React.js Web (frontend/)
    │       │

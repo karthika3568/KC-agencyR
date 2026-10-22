@@ -4,6 +4,8 @@ import { CheckSquare, Square } from 'lucide-react';
 import { collectionsApi } from '../api/postsale';
 import { usePermission } from '../hooks/usePermission';
 import { Button } from '../components/Button.jsx';
+import { Pagination } from '../components/Pagination';
+import { useClientPagination } from '../hooks/useClientPagination';
 
 function CollectModal({ customer, onClose }) {
   const queryClient = useQueryClient();
@@ -70,7 +72,7 @@ function CollectModal({ customer, onClose }) {
       <div className="w-[520px] card p-5">
         <div className="mb-1 text-lg font-semibold text-ink">Collect from {customer.ledger_name}</div>
         <div className="mb-3 text-xs text-ink-muted">
-          Route: {customer.route_id || '-'} · Credit limit: Rs. {customer.credit_limit} · Outstanding: Rs. {customer.total_due}
+          Credit limit: Rs. {customer.credit_limit} · Outstanding: Rs. {customer.total_due}
         </div>
 
         <div className="mb-3 flex gap-1 rounded-lg border border-border-soft bg-page p-1 text-sm">
@@ -172,71 +174,102 @@ export function Collections() {
 
   const pending = pendingQuery.data || [];
   const history = historyQuery.data || [];
-  const routeTotal = pending.reduce((sum, c) => sum + Number(c.total_due), 0);
+  const pendingTotal = pending.reduce((sum, c) => sum + Number(c.total_due), 0);
   const historyTotal = history.reduce((sum, c) => sum + Number(c.amount), 0);
 
+  const {
+    page: pendingPage,
+    setPage: setPendingPage,
+    total: pendingCount,
+    paginatedItems: pagedPending,
+  } = useClientPagination(pending, 10);
+
+  const {
+    page: historyPage,
+    setPage: setHistoryPage,
+    total: historyCount,
+    paginatedItems: pagedHistory,
+  } = useClientPagination(history, 10);
+
   return (
-    <div>
-      <h1 className="mb-1 text-2xl font-bold text-ink">Credit Management</h1>
-      <p className="mb-4 text-sm text-ink-muted">Customer credit balances and collections.</p>
+    <div className="space-y-2.5">
+      <div className="border-b border-border-soft pb-2">
+        <h1 className="text-xl font-bold text-ink">Credit Management</h1>
+        <p className="text-xs text-ink-muted">Customer credit balances and collections.</p>
+      </div>
 
       {canViewAll && (
-        <div className="mb-4 card">
-          <div className="flex items-center justify-between border-b border-border-soft px-4 py-3">
-            <span className="font-semibold text-ink">Route Pending Credit Balances</span>
-            <span className="text-sm font-medium text-ink-muted">Total pending: Rs. {routeTotal.toFixed(2)}</span>
+        <div className="card overflow-hidden">
+          <div className="flex items-center justify-between border-b border-border-soft px-3.5 py-2">
+            <span className="font-semibold text-ink text-xs sm:text-sm">Pending Credit Balances</span>
+            <span className="text-xs font-medium text-ink-muted">Total pending: Rs. {pendingTotal.toFixed(2)}</span>
           </div>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border-soft text-left text-xs uppercase text-ink-muted">
-                <th className="px-4 py-2">Customer</th><th className="px-4 py-2">Phone</th><th className="px-4 py-2">Unpaid Bills</th><th className="px-4 py-2">Total Due</th><th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {pending.map((c) => (
-                <tr key={c.customer_id} className="border-b border-border-soft">
-                  <td className="px-4 py-2">{c.ledger_name}</td>
-                  <td className="px-4 py-2">{c.phone || '-'}</td>
-                  <td className="px-4 py-2">{c.unpaid_invoice_count}</td>
-                  <td className="px-4 py-2 font-medium text-danger">{c.total_due}</td>
-                  <td className="px-4 py-2 text-right">
-                    {canCollect && (
-                      <button onClick={() => setSelected(c)} className="text-xs font-medium text-gold hover:underline">Collect</button>
-                    )}
-                  </td>
+          <div className="max-h-[calc(50vh-90px)] overflow-y-auto">
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-page z-10 shadow-sm">
+                <tr className="border-b border-border-soft text-left uppercase text-ink-muted font-medium bg-surface-subtle/30">
+                  <th className="px-3 py-2">Customer</th>
+                  <th className="px-3 py-2">Phone</th>
+                  <th className="px-3 py-2">Unpaid Bills</th>
+                  <th className="px-3 py-2">Total Due</th>
+                  <th className="px-3 py-2"></th>
                 </tr>
-              ))}
-              {pending.length === 0 && <tr><td colSpan={5} className="px-4 py-6 text-center text-ink-muted">No customers with an outstanding balance.</td></tr>}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-border-soft/60">
+                {pagedPending.map((c) => (
+                  <tr key={c.customer_id} className="hover:bg-surface-subtle/20 transition">
+                    <td className="px-3 py-1.5 font-medium text-ink">{c.ledger_name}</td>
+                    <td className="px-3 py-1.5 text-ink-muted">{c.phone || '-'}</td>
+                    <td className="px-3 py-1.5">{c.unpaid_invoice_count}</td>
+                    <td className="px-3 py-1.5 font-semibold text-danger">₹{c.total_due}</td>
+                    <td className="px-3 py-1.5 text-right">
+                      {canCollect && (
+                        <button onClick={() => setSelected(c)} className="text-xs font-semibold text-indigo-600 hover:underline">Collect</button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {pending.length === 0 && <tr><td colSpan={5} className="px-3 py-5 text-center text-ink-muted">No customers with an outstanding balance.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+          <Pagination page={pendingPage} pageSize={10} total={pendingCount} onPageChange={setPendingPage} />
         </div>
       )}
 
-      <div className="card">
-        <div className="flex items-center justify-between border-b border-border-soft px-4 py-3">
-          <span className="font-semibold text-ink">Past Collection Receipts</span>
-          <span className="text-sm font-medium text-ink-muted">Total collected: Rs. {historyTotal.toFixed(2)}</span>
+      <div className="card overflow-hidden">
+        <div className="flex items-center justify-between border-b border-border-soft px-3.5 py-2">
+          <span className="font-semibold text-ink text-xs sm:text-sm">Past Collection Receipts</span>
+          <span className="text-xs font-medium text-ink-muted">Total collected: Rs. {historyTotal.toFixed(2)}</span>
         </div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border-soft text-left text-xs uppercase text-ink-muted">
-              <th className="px-4 py-2">Receipt #</th><th className="px-4 py-2">Customer</th><th className="px-4 py-2">Amount</th><th className="px-4 py-2">Mode</th><th className="px-4 py-2">Collected By</th><th className="px-4 py-2">Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            {history.map((c) => (
-              <tr key={c.id} className="border-b border-border-soft">
-                <td className="px-4 py-2">{c.receipt_no}</td>
-                <td className="px-4 py-2">{c.customer_name}</td>
-                <td className="px-4 py-2">{c.amount}</td>
-                <td className="px-4 py-2 capitalize">{c.payment_method}</td>
-                <td className="px-4 py-2 text-ink-muted">{c.collected_by_name}</td>
-                <td className="px-4 py-2 text-ink-muted">{c.collected_at}</td>
+        <div className="max-h-[calc(50vh-90px)] overflow-y-auto">
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 bg-page z-10 shadow-sm">
+              <tr className="border-b border-border-soft text-left uppercase text-ink-muted font-medium bg-surface-subtle/30">
+                <th className="px-3 py-2">Receipt #</th>
+                <th className="px-3 py-2">Customer</th>
+                <th className="px-3 py-2">Amount</th>
+                <th className="px-3 py-2">Mode</th>
+                <th className="px-3 py-2">Collected By</th>
+                <th className="px-3 py-2">Date</th>
               </tr>
-            ))}
-            {history.length === 0 && <tr><td colSpan={6} className="px-4 py-6 text-center text-ink-muted">No collections yet.</td></tr>}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-border-soft/60">
+              {pagedHistory.map((c) => (
+                <tr key={c.id} className="hover:bg-surface-subtle/20 transition">
+                  <td className="px-3 py-1.5 font-medium font-mono text-ink">{c.receipt_no}</td>
+                  <td className="px-3 py-1.5">{c.customer_name}</td>
+                  <td className="px-3 py-1.5 font-semibold text-emerald-600">₹{c.amount}</td>
+                  <td className="px-3 py-1.5 capitalize">{c.payment_method}</td>
+                  <td className="px-3 py-1.5 text-ink-muted">{c.collected_by_name}</td>
+                  <td className="px-3 py-1.5 text-ink-muted">{c.collected_at}</td>
+                </tr>
+              ))}
+              {history.length === 0 && <tr><td colSpan={6} className="px-3 py-5 text-center text-ink-muted">No collections yet.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        <Pagination page={historyPage} pageSize={10} total={historyCount} onPageChange={setHistoryPage} />
       </div>
 
       {selected && <CollectModal customer={selected} onClose={() => setSelected(null)} />}

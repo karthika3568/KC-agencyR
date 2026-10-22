@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { categoriesApi, brandsApi, stockUnitsApi, taxCodesApi, productLinesApi } from '../../api/catalog';
+import { categoriesApi, brandsApi, stockUnitsApi, taxCodesApi } from '../../api/catalog';
 import { SegmentedTabs } from '../../components/SegmentedTabs';
 import { EntityListScreen } from '../../components/EntityListScreen';
 import { ProductsScreen } from './ProductsScreen';
@@ -19,7 +19,6 @@ export function CatalogScreen() {
           { key: 'categories', label: 'Categories' },
           { key: 'brands', label: 'Brands' },
           { key: 'units', label: 'Units' },
-          { key: 'product-lines', label: 'Product Lines' },
           { key: 'tax-codes', label: 'Tax Codes' },
         ]}
         active={tab}
@@ -46,19 +45,6 @@ export function CatalogScreen() {
             queryKey="stock-units" api={stockUnitsApi} title="Unit" canManage={canManage}
             fields={[{ name: 'name', label: 'Unit name' }, { name: 'short_code', label: 'Short code' }]}
             renderTitle={(r) => `${r.name} (${r.short_code})`}
-          />
-        )}
-        {tab === 'product-lines' && (
-          <EntityListScreen
-            queryKey="product-lines" api={productLinesApi} title="Product Line" canManage={canManage}
-            fields={[
-              { name: 'name', label: 'Line Name' },
-              { name: 'code', label: 'Line Code' },
-              { name: 'is_active', label: 'Status', type: 'switch', default: 1 },
-            ]}
-            transformSubmit={(f) => ({ name: (f.name || '').trim(), code: (f.code || '').trim(), is_active: f.is_active ? 1 : 0 })}
-            renderTitle={(r) => r.name}
-            renderSubtitle={(r) => `${r.code || 'No code'}${Number(r.is_active) === 0 ? ' · Inactive' : ''}`}
           />
         )}
         {tab === 'tax-codes' && (

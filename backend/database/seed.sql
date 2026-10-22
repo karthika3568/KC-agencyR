@@ -1,5 +1,5 @@
 -- =====================================================================
--- AJ Agency POS / Distributor Billing System — Seed / Demo Data
+-- KC Agency POS / Distributor Billing System — Seed / Demo Data
 -- Consolidated from seed.sql + seed_phase2.sql + seed_phase3.sql +
 -- seed_phase5.sql (the exact, already-applied seed sequence for this
 -- project, concatenated in order — nothing rewritten, nothing invented).
