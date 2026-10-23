@@ -855,7 +855,7 @@ SET FOREIGN_KEY_CHECKS = 0;
 CREATE TABLE IF NOT EXISTS branch_print_settings (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   branch_id INT UNSIGNED NOT NULL,
-  printer_type ENUM('thermal_58','thermal_80','a4') NOT NULL DEFAULT 'a4',
+  printer_type ENUM('thermal_58','thermal_80','a4','a5') NOT NULL DEFAULT 'a4',
   invoice_footer_note VARCHAR(255) NULL,
   default_print_copies TINYINT UNSIGNED NOT NULL DEFAULT 1,
   bank_account_no VARCHAR(30) NULL,

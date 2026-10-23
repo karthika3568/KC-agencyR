@@ -863,12 +863,29 @@ class InvoiceModel
         $rate = isset($input['rate']) && $input['rate'] !== '' ? (float) $input['rate'] : $unitPricing['rate'];
 
         $gross = round($qty * $rate, 2);
-        $discountPercent = (float) ($input['discount_percent'] ?? 0);
-        $discountAmount = isset($input['discount_amount']) && $input['discount_amount'] !== ''
-            ? (float) $input['discount_amount']
-            : round($gross * $discountPercent / 100, 2);
+        $mode = $input['discount_mode'] ?? null;
+        if ($mode === 'amount') {
+            $discountAmount = min($gross, max(0.0, (float) ($input['discount_amount'] ?? 0)));
+            $discountPercent = $gross > 0 ? round(($discountAmount / $gross) * 100, 2) : 0.0;
+        } elseif ($mode === 'percent') {
+            $discountPercent = min(100.0, max(0.0, (float) ($input['discount_percent'] ?? 0)));
+            $discountAmount = $gross > 0 ? round(($gross * $discountPercent) / 100, 2) : 0.0;
+            $discountAmount = min($gross, $discountAmount);
+        } else {
+            if (isset($input['discount_amount']) && $input['discount_amount'] !== '' && (float) $input['discount_amount'] > 0) {
+                $discountAmount = min($gross, max(0.0, (float) $input['discount_amount']));
+                $discountPercent = $gross > 0 ? round(($discountAmount / $gross) * 100, 2) : 0.0;
+            } elseif (isset($input['discount_percent']) && $input['discount_percent'] !== '' && (float) $input['discount_percent'] > 0) {
+                $discountPercent = min(100.0, max(0.0, (float) $input['discount_percent']));
+                $discountAmount = $gross > 0 ? round(($gross * $discountPercent) / 100, 2) : 0.0;
+                $discountAmount = min($gross, $discountAmount);
+            } else {
+                $discountPercent = 0.0;
+                $discountAmount = 0.0;
+            }
+        }
 
-        $taxable = round($gross - $discountAmount, 2);
+        $taxable = max(0.0, round($gross - $discountAmount, 2));
         if ($billType === 'non_gst') {
             $taxPercent = 0.0;
             $taxAmount = 0.0;

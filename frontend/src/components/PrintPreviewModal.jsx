@@ -5,6 +5,7 @@ import { invoicesApi } from '../api/invoices';
 import { vanStockIssuesApi } from '../api/purchasing';
 import { ThermalTemplate } from '../print/ThermalTemplate';
 import { A4Template } from '../print/A4Template';
+import { A5Template } from '../print/A5Template';
 import { Button } from './Button.jsx';
 import '../print/print.css';
 
@@ -102,7 +103,17 @@ export function PrintPreviewModal({ invoiceId, stockIssue, issueId, onClose }) {
   useEffect(() => {
     if (invoiceId) {
       invoicesApi.print(invoiceId)
-        .then(setData)
+        .then((res) => {
+          setData(res);
+          const pType = res?.branch_print_settings?.printer_type;
+          if (pType === 'a5') {
+            setFormat('a5');
+          } else if (pType === 'a4') {
+            setFormat('a4');
+          } else if (pType?.startsWith('thermal')) {
+            setFormat('thermal');
+          }
+        })
         .catch((err) => setError(err?.response?.data?.error || 'Failed to load invoice print data'));
     } else if (stockIssue?.id || issueId) {
       const targetId = stockIssue?.id || issueId;
@@ -152,6 +163,12 @@ export function PrintPreviewModal({ invoiceId, stockIssue, issueId, onClose }) {
         >
           A4
         </button>
+        <button
+          onClick={() => setFormat('a5')}
+          className={`rounded px-3 py-1 text-sm ${format === 'a5' ? 'bg-navbar text-white' : 'bg-gray-100 text-gray-700'}`}
+        >
+          A5
+        </button>
         <div className="ml-auto flex items-center gap-2">
           {hasPhone && (
             <a href={whatsappHref()} target="_blank" rel="noreferrer" className="rounded bg-green-600 px-3 py-1 text-sm text-white">
@@ -167,8 +184,13 @@ export function PrintPreviewModal({ invoiceId, stockIssue, issueId, onClose }) {
       {!error && !data && <div className="mx-auto w-fit rounded-lg bg-white p-6 text-gray-500 shadow-sm">Loading…</div>}
       {data && (
         <div className="mx-auto w-fit rounded-lg bg-white p-6 shadow-sm">
+          {format === 'a5' && <style>{`@page { size: A5 portrait; margin: 3.5mm; }`}</style>}
+          {format === 'a4' && <style>{`@page { size: A4 portrait; margin: 5mm; }`}</style>}
+          {format === 'thermal' && <style>{`@page { size: 80mm auto; margin: 2mm; }`}</style>}
           {format === 'thermal' ? (
             <ThermalTemplate data={data} />
+          ) : format === 'a5' ? (
+            <A5Template data={data} />
           ) : (
             <A4Template data={data} />
           )}

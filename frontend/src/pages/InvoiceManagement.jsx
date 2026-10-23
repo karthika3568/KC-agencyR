@@ -296,7 +296,7 @@ function EditModal({ id, onClose }) {
     () =>
       (lines || []).map((line) => ({
         ...line,
-        priced: priceLine(line.item, line.discount_mode === 'amount' ? { ...line, discount_percent: 0 } : { ...line, discount_amount: '' }),
+        priced: priceLine(line.item, line),
       })),
     [lines]
   );
@@ -314,9 +314,9 @@ function EditModal({ id, onClose }) {
         item,
         qty: 1,
         free_qty: 0,
-        discount_percent: 0,
+        discount_percent: '',
         discount_amount: '',
-        discount_mode: 'percent',
+        discount_mode: 'amount',
         unit_id: item.base_unit_id,
         rate: item.retail_price,
       },
@@ -333,9 +333,11 @@ function EditModal({ id, onClose }) {
           free_qty: Number(l.free_qty || 0),
           unit_id: l.unit_id,
           ...(canDiscount
-            ? l.discount_mode === 'amount'
-              ? { discount_amount: Number(l.discount_amount || 0) }
-              : { discount_percent: Number(l.discount_percent || 0) }
+            ? {
+                discount_amount: Number(l.discount_amount || 0),
+                discount_percent: Number(l.discount_percent || 0),
+                discount_mode: l.discount_mode || 'amount',
+              }
             : {}),
           ...(canEditPrice ? { rate: Number(l.rate) } : {}),
         })),
@@ -416,18 +418,90 @@ function EditModal({ id, onClose }) {
                       />
                     </label>
                     {canDiscount && (
-                      <label className="flex items-center gap-1">
-                        Disc
-                        <div className="flex overflow-hidden rounded border border-border-soft">
-                          <button type="button" onClick={() => updateLine(line.key, { discount_mode: 'percent' })} className={`px-1.5 py-0.5 text-xs font-medium ${line.discount_mode !== 'amount' ? 'bg-gold text-white' : 'bg-white text-ink-muted'}`}>%</button>
-                          <button type="button" onClick={() => updateLine(line.key, { discount_mode: 'amount' })} className={`px-1.5 py-0.5 text-xs font-medium ${line.discount_mode === 'amount' ? 'bg-gold text-white' : 'bg-white text-ink-muted'}`}>Rs.</button>
+                      <div className="flex items-center gap-1.5 text-xs text-ink-muted">
+                        <span className="font-medium text-ink">Disc:</span>
+                        <div className="flex items-center rounded border border-border-soft bg-white px-1.5 py-0.5 focus-within:border-gold">
+                          <span className="text-[11px] text-ink-muted mr-1 font-semibold">₹</span>
+                          <input
+                            type="number"
+                            min="0"
+                            max={line.priced?.gross}
+                            step="any"
+                            placeholder="0.00"
+                            value={
+                              line.discount_mode === 'amount'
+                                ? (line.discount_amount ?? '')
+                                : (line.priced?.discount_amount > 0 ? line.priced.discount_amount : '')
+                            }
+                            onFocus={() => {
+                              if (line.discount_mode !== 'amount') {
+                                updateLine(line.key, {
+                                  discount_mode: 'amount',
+                                  discount_amount: line.priced?.discount_amount > 0 ? String(line.priced.discount_amount) : '',
+                                });
+                              }
+                            }}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              updateLine(line.key, {
+                                discount_mode: 'amount',
+                                discount_amount: val,
+                              });
+                            }}
+                            onBlur={() => {
+                              const num = Number(line.discount_amount);
+                              if (num > (line.priced?.gross || 0)) {
+                                updateLine(line.key, { discount_amount: String(line.priced.gross) });
+                              } else if (num < 0) {
+                                updateLine(line.key, { discount_amount: '0' });
+                              }
+                            }}
+                            className="w-14 bg-transparent text-right text-xs text-ink outline-none"
+                            title="Discount Amount in ₹"
+                          />
                         </div>
-                        {line.discount_mode === 'amount' ? (
-                          <input type="number" min="0" step="any" value={line.discount_amount} onChange={(e) => updateLine(line.key, { discount_amount: e.target.value })} className="w-16 rounded border border-border-soft px-1 py-0.5" />
-                        ) : (
-                          <input type="number" min="0" step="any" value={line.discount_percent} onChange={(e) => updateLine(line.key, { discount_percent: e.target.value })} className="w-14 rounded border border-border-soft px-1 py-0.5" />
-                        )}
-                      </label>
+
+                        <div className="flex items-center rounded border border-border-soft bg-white px-1.5 py-0.5 focus-within:border-gold">
+                          <span className="text-[11px] text-ink-muted mr-1 font-semibold">%</span>
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="any"
+                            placeholder="0"
+                            value={
+                              line.discount_mode === 'percent'
+                                ? (line.discount_percent ?? '')
+                                : (line.priced?.discount_percent > 0 ? line.priced.discount_percent : '')
+                            }
+                            onFocus={() => {
+                              if (line.discount_mode !== 'percent') {
+                                updateLine(line.key, {
+                                  discount_mode: 'percent',
+                                  discount_percent: line.priced?.discount_percent > 0 ? String(line.priced.discount_percent) : '',
+                                });
+                              }
+                            }}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              updateLine(line.key, {
+                                discount_mode: 'percent',
+                                discount_percent: val,
+                              });
+                            }}
+                            onBlur={() => {
+                              const num = Number(line.discount_percent);
+                              if (num > 100) {
+                                updateLine(line.key, { discount_percent: '100' });
+                              } else if (num < 0) {
+                                updateLine(line.key, { discount_percent: '0' });
+                              }
+                            }}
+                            className="w-11 bg-transparent text-right text-xs text-ink outline-none"
+                            title="Discount Percentage"
+                          />
+                        </div>
+                      </div>
                     )}
                     <span className="ml-auto font-semibold text-ink">Rs. {line.priced.line_total.toFixed(2)}</span>
                   </div>

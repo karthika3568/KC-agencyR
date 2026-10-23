@@ -49,6 +49,31 @@
   border-color: #000000 !important;
 }
 
+.a5-invoice {
+  width: 100%;
+  max-width: 142mm;
+  margin: 0 auto;
+  border: 1.2px solid #000000;
+  background-color: #ffffff;
+  color: #000000;
+  font-family: Arial, Helvetica, sans-serif;
+  box-sizing: border-box;
+}
+
+.a5-invoice * {
+  box-sizing: border-box;
+}
+
+.a5-invoice table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.a5-invoice th,
+.a5-invoice td {
+  border-color: #000000 !important;
+}
+
 @media print {
   @page {
     size: auto;
@@ -72,6 +97,12 @@
     max-width: 100% !important;
     width: 100% !important;
     border: 1.5px solid #000 !important;
+    box-shadow: none !important;
+  }
+  .a5-invoice {
+    max-width: 100% !important;
+    width: 100% !important;
+    border: 1.2px solid #000 !important;
     box-shadow: none !important;
   }
   .thermal-invoice {

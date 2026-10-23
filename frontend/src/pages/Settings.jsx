@@ -95,6 +95,7 @@ function PrintSettingsPanel({ canManage }) {
           <span className="text-xs font-medium text-ink-muted">Printer type</span>
           <select value={form.printer_type} onChange={(e) => setForm({ ...form, printer_type: e.target.value })} disabled={!canManage} className="input disabled:bg-page text-xs py-1">
             <option value="a4">A4</option>
+            <option value="a5">A5</option>
             <option value="thermal_58">Thermal 58mm</option>
             <option value="thermal_80">Thermal 80mm</option>
           </select>

@@ -69,12 +69,29 @@ export function priceLine(item, input, billType = 'gst', priceType = 'normal') {
   const mrp = input.mrp !== undefined && input.mrp !== '' ? Number(input.mrp) : unitPricing.mrp;
   const gross = round2(qty * rate);
 
-  const discountPercent = Number(input.discount_percent || 0);
-  const discountAmount = input.discount_amount !== undefined && input.discount_amount !== ''
-    ? Number(input.discount_amount)
-    : round2((gross * discountPercent) / 100);
+  let discountAmount = 0;
+  let discountPercent = 0;
 
-  const taxable = round2(gross - discountAmount);
+  const mode = input.discount_mode;
+  if (mode === 'amount') {
+    discountAmount = Math.min(gross, Math.max(0, Number(input.discount_amount || 0)));
+    discountPercent = gross > 0 ? round2((discountAmount / gross) * 100) : 0;
+  } else if (mode === 'percent') {
+    discountPercent = Math.min(100, Math.max(0, Number(input.discount_percent || 0)));
+    discountAmount = gross > 0 ? round2((gross * discountPercent) / 100) : 0;
+    discountAmount = Math.min(gross, discountAmount);
+  } else {
+    if (input.discount_amount !== undefined && input.discount_amount !== '' && Number(input.discount_amount) > 0) {
+      discountAmount = Math.min(gross, Math.max(0, Number(input.discount_amount)));
+      discountPercent = gross > 0 ? round2((discountAmount / gross) * 100) : 0;
+    } else if (input.discount_percent !== undefined && input.discount_percent !== '' && Number(input.discount_percent) > 0) {
+      discountPercent = Math.min(100, Math.max(0, Number(input.discount_percent)));
+      discountAmount = gross > 0 ? round2((gross * discountPercent) / 100) : 0;
+      discountAmount = Math.min(gross, discountAmount);
+    }
+  }
+
+  const taxable = Math.max(0, round2(gross - discountAmount));
   const isNonGst = billType === 'non_gst';
   const taxPercent = isNonGst ? 0 : Number(item.gst_percent || 0);
   const taxAmount = isNonGst ? 0 : round2((taxable * taxPercent) / 100);

@@ -430,13 +430,22 @@ class InvoiceController
             $taxSlabs[$pct]['cess'] += (float) $item['cess_amount'];
         }
 
+        $stmtSettings = $this->pdo->prepare('SELECT * FROM branch_print_settings WHERE branch_id = :id');
+        $stmtSettings->execute(['id' => $invoice['branch_id']]);
+        $printSettings = $stmtSettings->fetch() ?: null;
+
+        $isNonGst = ($invoice['bill_type'] ?? '') === 'non_gst';
+        $title = $isNonGst ? 'BILL OF SUPPLY / ESTIMATE' : 'TAX INVOICE';
+
         $outstanding = $invoice['customer_id']
             ? (new CreditLedgerService($this->pdo))->currentOutstanding((int) $invoice['customer_id'])
             : null;
 
         Response::json([
+            'title' => $title,
             'invoice' => $invoice,
             'branch' => $branch,
+            'branch_print_settings' => $printSettings,
             'tax_slabs' => array_values($taxSlabs),
             'amount_in_words' => NumberToWords::convert((float) $invoice['grand_total']),
             'customer_outstanding' => $outstanding,
@@ -532,8 +541,19 @@ class InvoiceController
                 $qty = (float) $line['qty'];
                 $rate = (float) ($line['rate'] ?? 0);
                 $gross = round($qty * $rate, 2);
-                $discountAmount = isset($line['discount_amount']) && $line['discount_amount'] !== '' ? (float) $line['discount_amount'] : 0.0;
-                $taxable = round($gross - $discountAmount, 2);
+                $mode = $line['discount_mode'] ?? null;
+                if ($mode === 'amount') {
+                    $discountAmount = min($gross, max(0.0, (float) ($line['discount_amount'] ?? 0)));
+                    $discountPercent = $gross > 0 ? round(($discountAmount / $gross) * 100, 2) : 0.0;
+                } elseif ($mode === 'percent') {
+                    $discountPercent = min(100.0, max(0.0, (float) ($line['discount_percent'] ?? 0)));
+                    $discountAmount = $gross > 0 ? round(($gross * $discountPercent) / 100, 2) : 0.0;
+                    $discountAmount = min($gross, $discountAmount);
+                } else {
+                    $discountAmount = isset($line['discount_amount']) && $line['discount_amount'] !== '' ? min($gross, max(0.0, (float) $line['discount_amount'])) : 0.0;
+                    $discountPercent = $gross > 0 ? round(($discountAmount / $gross) * 100, 2) : 0.0;
+                }
+                $taxable = max(0.0, round($gross - $discountAmount, 2));
                 $unitId = !empty($line['unit_id']) ? (int) $line['unit_id'] : 1;
                 $lines[] = [
                     'item_id' => null,
@@ -544,7 +564,7 @@ class InvoiceController
                     'free_qty' => 0.0,
                     'rate' => $rate,
                     'mrp' => $rate,
-                    'discount_percent' => 0.0,
+                    'discount_percent' => $discountPercent,
                     'discount_amount' => $discountAmount,
                     'tax_percent' => 0.0,
                     'tax_amount' => 0.0,
@@ -569,7 +589,7 @@ class InvoiceController
                 unset($line['rate']);
             }
             if (!$canDiscount) {
-                unset($line['discount_percent'], $line['discount_amount']);
+                unset($line['discount_percent'], $line['discount_amount'], $line['discount_mode']);
             }
             if (!$isFreeQtyAllowed) {
                 $line['free_qty'] = 0;

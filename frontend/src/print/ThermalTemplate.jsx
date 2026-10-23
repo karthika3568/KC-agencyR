@@ -21,6 +21,7 @@ function formatDateDMY(dStr) {
 export function ThermalTemplate({ data }) {
   const {
     invoice = {},
+    branch = {},
     tax_slabs: taxSlabs = [],
     amount_in_words: amountInWords = '',
     is_stock_issue = false,
@@ -39,6 +40,14 @@ export function ThermalTemplate({ data }) {
   const discount = Number(invoice.discount_amount || 0).toFixed(2);
   const netAmount = Number(invoice.grand_total || 0).toFixed(2);
   const isInterstate = Number(invoice.igst_amount || 0) > 0;
+  const isNonGst = invoice.bill_type === 'non_gst';
+
+  const companyName = branch.print_name || branch.name || COMPANY_DETAILS.name;
+  const companyAddress = [branch.address_line1, branch.city, branch.state, branch.pincode]
+    .filter(Boolean)
+    .join(', ') || COMPANY_DETAILS.address;
+  const companyGst = branch.gstin || COMPANY_DETAILS.gst;
+  const companyPhone = branch.phone || COMPANY_DETAILS.phone;
 
   let wordsText = amountInWords || '';
   if (wordsText) {
@@ -97,10 +106,10 @@ export function ThermalTemplate({ data }) {
           FSSAI NO : {COMPANY_DETAILS.fssai}
         </div>
         <div style={{ fontSize: '14px', fontWeight: 'bold', letterSpacing: '0.3px', lineHeight: 1.1 }}>
-          {COMPANY_DETAILS.name}
+          {companyName}
         </div>
         <div style={{ fontSize: '7.5px', marginTop: '1px', lineHeight: 1.1 }}>
-          {COMPANY_DETAILS.address}
+          {companyAddress}
         </div>
       </div>
 
@@ -117,9 +126,9 @@ export function ThermalTemplate({ data }) {
           paddingBottom: '2px',
         }}
       >
-        <div><strong>GST No: </strong>{COMPANY_DETAILS.gst}</div>
-        <div style={{ fontWeight: 'bold' }}>{is_stock_issue ? 'STOCK ISSUE BILL' : (data?.title || COMPANY_DETAILS.title)}</div>
-        <div><strong>PH:</strong>{COMPANY_DETAILS.phone}</div>
+        <div><strong>GST No: </strong>{companyGst}</div>
+        <div style={{ fontWeight: 'bold' }}>{is_stock_issue ? 'STOCK ISSUE BILL' : (data?.title || (isNonGst ? 'BILL OF SUPPLY / ESTIMATE' : COMPANY_DETAILS.title))}</div>
+        <div><strong>PH:</strong>{companyPhone}</div>
       </div>
 
       {/* 2. Customer / Salesman & Bill Info Section */}
@@ -312,11 +321,11 @@ export function ThermalTemplate({ data }) {
               const freeQty = Number(item.free_qty || 0);
               const mrp = Number(item.mrp || 0).toFixed(2);
               const rate = Number(item.rate || 0).toFixed(2);
-              const gstPercent = Number(item.tax_percent || 0).toFixed(2);
-              const gstAmount = Number(item.tax_amount || 0).toFixed(2);
+              const gstPercent = isNonGst ? '0.00' : Number(item.tax_percent || 0).toFixed(2);
+              const gstAmount = isNonGst ? '0.00' : Number(item.tax_amount || 0).toFixed(2);
               const amount = Number(
                 item.net_amount ??
-                  Number(item.line_total || 0) + Number(item.tax_amount || 0) + Number(item.cess_amount || 0)
+                  (Number(item.line_total || 0) + (isNonGst ? 0 : Number(item.tax_amount || 0) + Number(item.cess_amount || 0)))
               ).toFixed(2);
               const nRate = qty > 0 ? (Number(amount) / qty).toFixed(2) : rate;
 
@@ -374,58 +383,64 @@ export function ThermalTemplate({ data }) {
 
         {/* Tax Slabs Breakdown Sub-table */}
         <div style={{ padding: '2px', borderBottom: '0.5px solid #000' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '7px', textAlign: 'right' }}>
-            <thead>
-              {isInterstate ? (
-                <tr>
-                  <th style={{ textAlign: 'left', fontWeight: 'bold', padding: '1px' }}>IGST%</th>
-                  <th style={{ fontWeight: 'bold', padding: '1px' }}>IGST</th>
-                  <th style={{ fontWeight: 'bold', padding: '1px' }}>TOTAL</th>
-                </tr>
-              ) : (
-                <tr>
-                  <th style={{ textAlign: 'left', fontWeight: 'bold', padding: '1px' }}>CGST%</th>
-                  <th style={{ fontWeight: 'bold', padding: '1px' }}>CGST</th>
-                  <th style={{ fontWeight: 'bold', padding: '1px' }}>SGST%</th>
-                  <th style={{ fontWeight: 'bold', padding: '1px' }}>SGST</th>
-                  <th style={{ fontWeight: 'bold', padding: '1px' }}>TOTAL</th>
-                </tr>
-              )}
-            </thead>
-            <tbody>
-              {slabs.map((slab, i) => {
-                const cgstPct = (Number(slab.gst_percent || 0) / 2).toFixed(2);
-                const cgstAmt = Number(slab.cgst || 0).toFixed(2);
-                const sgstPct = (Number(slab.gst_percent || 0) / 2).toFixed(2);
-                const sgstAmt = Number(slab.sgst || 0).toFixed(2);
-                const totSlab = (
-                  Number(slab.cgst || 0) +
-                  Number(slab.sgst || 0) +
-                  Number(slab.cess || 0)
-                ).toFixed(2);
+          {isNonGst ? (
+            <div style={{ fontSize: '7.5px', color: '#444', fontStyle: 'italic', padding: '2px 0' }}>
+              Composition / Non-GST — No tax charged.
+            </div>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '7px', textAlign: 'right' }}>
+              <thead>
+                {isInterstate ? (
+                  <tr>
+                    <th style={{ textAlign: 'left', fontWeight: 'bold', padding: '1px' }}>IGST%</th>
+                    <th style={{ fontWeight: 'bold', padding: '1px' }}>IGST</th>
+                    <th style={{ fontWeight: 'bold', padding: '1px' }}>TOTAL</th>
+                  </tr>
+                ) : (
+                  <tr>
+                    <th style={{ textAlign: 'left', fontWeight: 'bold', padding: '1px' }}>CGST%</th>
+                    <th style={{ fontWeight: 'bold', padding: '1px' }}>CGST</th>
+                    <th style={{ fontWeight: 'bold', padding: '1px' }}>SGST%</th>
+                    <th style={{ fontWeight: 'bold', padding: '1px' }}>SGST</th>
+                    <th style={{ fontWeight: 'bold', padding: '1px' }}>TOTAL</th>
+                  </tr>
+                )}
+              </thead>
+              <tbody>
+                {slabs.map((slab, i) => {
+                  const cgstPct = (Number(slab.gst_percent || 0) / 2).toFixed(2);
+                  const cgstAmt = Number(slab.cgst || 0).toFixed(2);
+                  const sgstPct = (Number(slab.gst_percent || 0) / 2).toFixed(2);
+                  const sgstAmt = Number(slab.sgst || 0).toFixed(2);
+                  const totSlab = (
+                    Number(slab.cgst || 0) +
+                    Number(slab.sgst || 0) +
+                    Number(slab.cess || 0)
+                  ).toFixed(2);
 
-                if (isInterstate) {
+                  if (isInterstate) {
+                    return (
+                      <tr key={i} style={{ fontWeight: 'bold' }}>
+                        <td style={{ textAlign: 'left', padding: '1px' }}>{Number(slab.gst_percent || 0).toFixed(2)}</td>
+                        <td style={{ padding: '1px' }}>{totSlab}</td>
+                        <td style={{ padding: '1px' }}>{totSlab}</td>
+                      </tr>
+                    );
+                  }
+
                   return (
                     <tr key={i} style={{ fontWeight: 'bold' }}>
-                      <td style={{ textAlign: 'left', padding: '1px' }}>{Number(slab.gst_percent || 0).toFixed(2)}</td>
-                      <td style={{ padding: '1px' }}>{totSlab}</td>
+                      <td style={{ textAlign: 'left', padding: '1px' }}>{cgstPct}</td>
+                      <td style={{ padding: '1px' }}>{cgstAmt}</td>
+                      <td style={{ padding: '1px' }}>{sgstPct}</td>
+                      <td style={{ padding: '1px' }}>{sgstAmt}</td>
                       <td style={{ padding: '1px' }}>{totSlab}</td>
                     </tr>
                   );
-                }
-
-                return (
-                  <tr key={i} style={{ fontWeight: 'bold' }}>
-                    <td style={{ textAlign: 'left', padding: '1px' }}>{cgstPct}</td>
-                    <td style={{ padding: '1px' }}>{cgstAmt}</td>
-                    <td style={{ padding: '1px' }}>{sgstPct}</td>
-                    <td style={{ padding: '1px' }}>{sgstAmt}</td>
-                    <td style={{ padding: '1px' }}>{totSlab}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
 
         {/* Gross Amt, Tot Tax Amt, Discount, Net Amount */}
@@ -436,7 +451,7 @@ export function ThermalTemplate({ data }) {
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span>Tot Tax Amt :</span>
-            <span>{totalTax}</span>
+            <span>{isNonGst ? '0.00' : totalTax}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span>Discount :</span>
@@ -471,7 +486,7 @@ export function ThermalTemplate({ data }) {
         }}
       >
         <div>Customer Signature and Seal</div>
-        <div>For &nbsp;&nbsp;{COMPANY_DETAILS.name}</div>
+        <div>For &nbsp;&nbsp;{companyName}</div>
       </div>
     </div>
   );

@@ -3,12 +3,12 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { invoicesApi } from '../api/invoices';
 import { ThermalTemplate } from '../print/ThermalTemplate';
 import { A4Template } from '../print/A4Template';
+import { A5Template } from '../print/A5Template';
 import '../print/print.css';
 
 export function InvoicePrint() {
   const { id } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const format = searchParams.get('format') || 'a4';
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
 
@@ -16,11 +16,17 @@ export function InvoicePrint() {
     invoicesApi.print(id).then(setData).catch((err) => setError(err?.response?.data?.error || 'Failed to load'));
   }, [id]);
 
+  const defaultFormat = data?.branch_print_settings?.printer_type === 'a5'
+    ? 'a5'
+    : (data?.branch_print_settings?.printer_type?.startsWith('thermal') ? 'thermal' : 'a4');
+
+  const format = searchParams.get('format') || defaultFormat;
+
   const whatsappHref = () => {
     if (!data) return '#';
     const phone = (data.invoice.customer_phone || '').replace(/\D/g, '');
     const text = encodeURIComponent(
-      `Hi! Your invoice ${data.invoice.invoice_no || ''} from ${data.branch.print_name} — Total: Rs. ${data.invoice.grand_total}. Thank you for your business!`
+      `Hi! Your invoice ${data.invoice.invoice_no || ''} from ${data.branch?.print_name || 'KC AGENCY'} — Total: Rs. ${data.invoice.grand_total}. Thank you for your business!`
     );
     return `https://wa.me/${phone ? '91' + phone : ''}?text=${text}`;
   };
@@ -44,6 +50,12 @@ export function InvoicePrint() {
         >
           A4
         </button>
+        <button
+          onClick={() => setSearchParams({ format: 'a5' })}
+          className={`rounded px-3 py-1 text-sm ${format === 'a5' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+        >
+          A5
+        </button>
         <button onClick={() => window.print()} className="ml-auto rounded bg-gray-800 px-3 py-1 text-sm text-white">
           Print
         </button>
@@ -55,7 +67,16 @@ export function InvoicePrint() {
       </div>
 
       <div className="mx-auto w-fit rounded-lg bg-white p-6 shadow-sm">
-        {format === 'thermal' ? <ThermalTemplate data={data} /> : <A4Template data={data} />}
+        {format === 'a5' && <style>{`@page { size: A5 portrait; margin: 3.5mm; }`}</style>}
+        {format === 'a4' && <style>{`@page { size: A4 portrait; margin: 5mm; }`}</style>}
+        {format === 'thermal' && <style>{`@page { size: 80mm auto; margin: 2mm; }`}</style>}
+        {format === 'thermal' ? (
+          <ThermalTemplate data={data} />
+        ) : format === 'a5' ? (
+          <A5Template data={data} />
+        ) : (
+          <A4Template data={data} />
+        )}
       </div>
     </div>
   );
