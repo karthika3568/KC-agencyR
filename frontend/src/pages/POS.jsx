@@ -284,32 +284,19 @@ export function POS() {
           const qty = Number(line.qty || 0);
           const rate = Number(line.rate || 0);
           const gross = Math.round(qty * rate * 100) / 100;
-          let discountAmount = 0;
-          let discountPercent = 0;
-          const mode = line.discount_mode;
-          if (mode === 'amount') {
-            discountAmount = Math.min(gross, Math.max(0, Number(line.discount_amount || 0)));
-            discountPercent = gross > 0 ? Math.round(((discountAmount / gross) * 100) * 100) / 100 : 0;
-          } else if (mode === 'percent') {
-            discountPercent = Math.min(100, Math.max(0, Number(line.discount_percent || 0)));
-            discountAmount = gross > 0 ? Math.round(((gross * discountPercent) / 100) * 100) / 100 : 0;
-            discountAmount = Math.min(gross, discountAmount);
-          } else {
-            if (line.discount_amount !== undefined && line.discount_amount !== '' && Number(line.discount_amount) > 0) {
-              discountAmount = Math.min(gross, Math.max(0, Number(line.discount_amount)));
-              discountPercent = gross > 0 ? Math.round(((discountAmount / gross) * 100) * 100) / 100 : 0;
-            } else if (line.discount_percent !== undefined && line.discount_percent !== '' && Number(line.discount_percent) > 0) {
-              discountPercent = Math.min(100, Math.max(0, Number(line.discount_percent)));
-              discountAmount = gross > 0 ? Math.round(((gross * discountPercent) / 100) * 100) / 100 : 0;
-              discountAmount = Math.min(gross, discountAmount);
-            }
-          }
-          const taxable = Math.max(0, Math.round((gross - discountAmount) * 100) / 100);
+          const inputPercent = Number(line.discount_percent || 0);
+          const inputAmount = Number(line.discount_amount || 0);
+          const cleanPercent = Math.min(100, Math.max(0, isNaN(inputPercent) ? 0 : inputPercent));
+          const cleanAmount = Math.max(0, isNaN(inputAmount) ? 0 : inputAmount);
+          const percentDisc = gross > 0 && cleanPercent > 0 ? Math.round(((gross * cleanPercent) / 100) * 100) / 100 : 0;
+          const directAmountDisc = cleanAmount > 0 ? cleanAmount : 0;
+          const effectiveDiscount = Math.min(gross, Math.round((percentDisc + directAmountDisc) * 100) / 100);
+          const taxable = Math.max(0, Math.round((gross - effectiveDiscount) * 100) / 100);
           return {
             ...line,
             gross,
-            discount_amount: discountAmount,
-            discount_percent: discountPercent,
+            discount_amount: effectiveDiscount,
+            discount_percent: cleanPercent,
             tax_percent: 0,
             cess_percent: 0,
             tax_amount: 0,
@@ -320,8 +307,8 @@ export function POS() {
               free_qty: 0,
               rate,
               mrp: rate,
-              discount_percent: discountPercent,
-              discount_amount: discountAmount,
+              discount_percent: cleanPercent,
+              discount_amount: effectiveDiscount,
               tax_percent: 0,
               tax_amount: 0,
               cess_percent: 0,
@@ -857,9 +844,9 @@ export function POS() {
       unit_id: l.unit_id || 1,
       ...(canDiscount
         ? {
-            discount_amount: Number(l.combined_discount_amount ?? l.discount_amount ?? 0),
+            discount_amount: Math.round((Number(l.discount_amount || 0) + Number(l.bill_discount_share || 0)) * 100) / 100,
             discount_percent: Number(l.discount_percent ?? 0),
-            discount_mode: l.discount_mode || 'amount',
+            discount_mode: 'amount',
           }
         : {}),
       ...(canEditPrice || !l.item ? { rate: Number(l.rate) } : {}),
@@ -921,28 +908,34 @@ export function POS() {
     setCustomerId(invoice.customer_id || '');
     setVehicleNo(invoice.vehicle_no || '');
     setCart(
-      invoice.items.map((it) => ({
-        key: `${it.item_id || 'manual'}-${it.id}`,
-        is_manual: !it.item_id,
-        item: it.item_id
-          ? {
-              id: it.item_id,
-              item_name: it.item_name_snapshot,
-              retail_price: it.rate,
-              gst_percent: it.tax_percent,
-              cess_percent: 0,
-              base_unit_id: it.unit_id,
-            }
-          : null,
-        name: it.item_name_snapshot,
-        qty: Number(it.qty),
-        free_qty: Number(it.free_qty),
-        discount_percent: Number(it.discount_percent) > 0 ? Number(it.discount_percent) : '',
-        discount_amount: Number(it.discount_amount) > 0 ? Number(it.discount_amount) : '',
-        discount_mode: Number(it.discount_amount) > 0 && Number(it.discount_percent) === 0 ? 'amount' : 'percent',
-        unit_id: it.unit_id,
-        rate: Number(it.rate),
-      }))
+      invoice.items.map((it) => {
+        const lineGross = Number(it.qty) * Number(it.rate);
+        const pctVal = Number(it.discount_percent || 0);
+        const pctDisc = lineGross > 0 && pctVal > 0 ? Math.round(((lineGross * pctVal) / 100) * 100) / 100 : 0;
+        const directAmt = Math.max(0, Math.round((Number(it.discount_amount || 0) - pctDisc) * 100) / 100);
+
+        return {
+          key: `${it.item_id || 'manual'}-${it.id}`,
+          is_manual: !it.item_id,
+          item: it.item_id
+            ? {
+                id: it.item_id,
+                item_name: it.item_name_snapshot,
+                retail_price: it.rate,
+                gst_percent: it.tax_percent,
+                cess_percent: 0,
+                base_unit_id: it.unit_id,
+              }
+            : null,
+          name: it.item_name_snapshot,
+          qty: Number(it.qty),
+          free_qty: Number(it.free_qty),
+          discount_percent: pctVal > 0 ? pctVal : '',
+          discount_amount: directAmt > 0 ? directAmt : '',
+          unit_id: it.unit_id,
+          rate: Number(it.rate),
+        };
+      })
     );
     setShowHeldList(false);
     setIsQuickSale(false);
@@ -1493,26 +1486,8 @@ export function POS() {
                             max={line.gross}
                             step="any"
                             placeholder="0.00"
-                            value={
-                              line.discount_mode === 'amount'
-                                ? (line.discount_amount ?? '')
-                                : (line.priced?.discount_amount > 0 ? line.priced.discount_amount : '')
-                            }
-                            onFocus={() => {
-                              if (line.discount_mode !== 'amount') {
-                                updateLine(line.key, {
-                                  discount_mode: 'amount',
-                                  discount_amount: line.priced?.discount_amount > 0 ? String(line.priced.discount_amount) : '',
-                                });
-                              }
-                            }}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              updateLine(line.key, {
-                                discount_mode: 'amount',
-                                discount_amount: val,
-                              });
-                            }}
+                            value={line.discount_amount ?? ''}
+                            onChange={(e) => updateLine(line.key, { discount_amount: e.target.value })}
                             onBlur={() => {
                               const num = Number(line.discount_amount);
                               if (num > line.gross) {
@@ -1534,26 +1509,8 @@ export function POS() {
                             max="100"
                             step="any"
                             placeholder="0"
-                            value={
-                              line.discount_mode === 'percent'
-                                ? (line.discount_percent ?? '')
-                                : (line.priced?.discount_percent > 0 ? line.priced.discount_percent : '')
-                            }
-                            onFocus={() => {
-                              if (line.discount_mode !== 'percent') {
-                                updateLine(line.key, {
-                                  discount_mode: 'percent',
-                                  discount_percent: line.priced?.discount_percent > 0 ? String(line.priced.discount_percent) : '',
-                                });
-                              }
-                            }}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              updateLine(line.key, {
-                                discount_mode: 'percent',
-                                discount_percent: val,
-                              });
-                            }}
+                            value={line.discount_percent ?? ''}
+                            onChange={(e) => updateLine(line.key, { discount_percent: e.target.value })}
                             onBlur={() => {
                               const num = Number(line.discount_percent);
                               if (num > 100) {

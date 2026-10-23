@@ -541,19 +541,14 @@ class InvoiceController
                 $qty = (float) $line['qty'];
                 $rate = (float) ($line['rate'] ?? 0);
                 $gross = round($qty * $rate, 2);
-                $mode = $line['discount_mode'] ?? null;
-                if ($mode === 'amount') {
-                    $discountAmount = min($gross, max(0.0, (float) ($line['discount_amount'] ?? 0)));
-                    $discountPercent = $gross > 0 ? round(($discountAmount / $gross) * 100, 2) : 0.0;
-                } elseif ($mode === 'percent') {
-                    $discountPercent = min(100.0, max(0.0, (float) ($line['discount_percent'] ?? 0)));
-                    $discountAmount = $gross > 0 ? round(($gross * $discountPercent) / 100, 2) : 0.0;
-                    $discountAmount = min($gross, $discountAmount);
-                } else {
-                    $discountAmount = isset($line['discount_amount']) && $line['discount_amount'] !== '' ? min($gross, max(0.0, (float) $line['discount_amount'])) : 0.0;
-                    $discountPercent = $gross > 0 ? round(($discountAmount / $gross) * 100, 2) : 0.0;
-                }
-                $taxable = max(0.0, round($gross - $discountAmount, 2));
+                $inputPercent = (float) ($line['discount_percent'] ?? 0);
+                $inputAmount = (float) ($line['discount_amount'] ?? 0);
+                $cleanPercent = max(0.0, min(100.0, $inputPercent));
+                $cleanAmount = max(0.0, $inputAmount);
+                $percentDisc = ($gross > 0 && $cleanPercent > 0) ? round(($gross * $cleanPercent) / 100, 2) : 0.0;
+                $directAmountDisc = $cleanAmount > 0 ? $cleanAmount : 0.0;
+                $effectiveDiscount = min($gross, round($percentDisc + $directAmountDisc, 2));
+                $taxable = max(0.0, round($gross - $effectiveDiscount, 2));
                 $unitId = !empty($line['unit_id']) ? (int) $line['unit_id'] : 1;
                 $lines[] = [
                     'item_id' => null,

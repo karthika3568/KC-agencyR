@@ -69,29 +69,19 @@ export function priceLine(item, input, billType = 'gst', priceType = 'normal') {
   const mrp = input.mrp !== undefined && input.mrp !== '' ? Number(input.mrp) : unitPricing.mrp;
   const gross = round2(qty * rate);
 
-  let discountAmount = 0;
-  let discountPercent = 0;
+  const inputPercent = Number(input.discount_percent || 0);
+  const inputAmount = Number(input.discount_amount || 0);
 
-  const mode = input.discount_mode;
-  if (mode === 'amount') {
-    discountAmount = Math.min(gross, Math.max(0, Number(input.discount_amount || 0)));
-    discountPercent = gross > 0 ? round2((discountAmount / gross) * 100) : 0;
-  } else if (mode === 'percent') {
-    discountPercent = Math.min(100, Math.max(0, Number(input.discount_percent || 0)));
-    discountAmount = gross > 0 ? round2((gross * discountPercent) / 100) : 0;
-    discountAmount = Math.min(gross, discountAmount);
-  } else {
-    if (input.discount_amount !== undefined && input.discount_amount !== '' && Number(input.discount_amount) > 0) {
-      discountAmount = Math.min(gross, Math.max(0, Number(input.discount_amount)));
-      discountPercent = gross > 0 ? round2((discountAmount / gross) * 100) : 0;
-    } else if (input.discount_percent !== undefined && input.discount_percent !== '' && Number(input.discount_percent) > 0) {
-      discountPercent = Math.min(100, Math.max(0, Number(input.discount_percent)));
-      discountAmount = gross > 0 ? round2((gross * discountPercent) / 100) : 0;
-      discountAmount = Math.min(gross, discountAmount);
-    }
-  }
+  const cleanPercent = Math.min(100, Math.max(0, isNaN(inputPercent) ? 0 : inputPercent));
+  const cleanAmount = Math.max(0, isNaN(inputAmount) ? 0 : inputAmount);
 
-  const taxable = Math.max(0, round2(gross - discountAmount));
+  const percentDisc = gross > 0 && cleanPercent > 0 ? round2((gross * cleanPercent) / 100) : 0;
+  const directAmountDisc = cleanAmount > 0 ? cleanAmount : 0;
+
+  // Standalone format: effective discount directly reduces paid amount without altering either input field
+  const effectiveDiscount = Math.min(gross, round2(percentDisc + directAmountDisc));
+
+  const taxable = Math.max(0, round2(gross - effectiveDiscount));
   const isNonGst = billType === 'non_gst';
   const taxPercent = isNonGst ? 0 : Number(item.gst_percent || 0);
   const taxAmount = isNonGst ? 0 : round2((taxable * taxPercent) / 100);
@@ -104,8 +94,9 @@ export function priceLine(item, input, billType = 'gst', priceType = 'normal') {
     rate,
     mrp,
     price_configured: unitPricing.configured,
-    discount_percent: discountPercent,
-    discount_amount: discountAmount,
+    discount_percent: cleanPercent,
+    discount_amount: cleanAmount,
+    effective_discount: effectiveDiscount,
     tax_percent: taxPercent,
     tax_amount: taxAmount,
     cess_percent: cessPercent,
@@ -121,7 +112,10 @@ export function computeCartTotals(lines, overallDiscount = { amount: 0, mode: 'a
 
   for (const line of lines) {
     subtotal += line.gross;
-    itemDiscountAmount += line.discount_amount;
+    const lineEffDisc = line.effective_discount !== undefined
+      ? line.effective_discount
+      : (line.discount_amount || 0);
+    itemDiscountAmount += lineEffDisc;
   }
 
   const rawOverallDisc = Number(overallDiscount?.amount || 0);
@@ -136,8 +130,11 @@ export function computeCartTotals(lines, overallDiscount = { amount: 0, mode: 'a
   let cessAmount = 0;
 
   const updatedLines = lines.map((line) => {
+    const lineEffDisc = line.effective_discount !== undefined
+      ? line.effective_discount
+      : (line.discount_amount || 0);
     const lineShare = subtotal > 0 ? round2(overallDiscountAmount * (line.gross / subtotal)) : 0;
-    const combinedLineDiscount = round2(line.discount_amount + lineShare);
+    const combinedLineDiscount = round2(lineEffDisc + lineShare);
     const taxable = Math.max(0, round2(line.gross - combinedLineDiscount));
     const tax = round2((taxable * line.tax_percent) / 100);
     const cess = line.cess_percent > 0 ? round2((taxable * line.cess_percent) / 100) : 0;
@@ -148,6 +145,7 @@ export function computeCartTotals(lines, overallDiscount = { amount: 0, mode: 'a
 
     return {
       ...line,
+      bill_discount_share: lineShare,
       combined_discount_amount: combinedLineDiscount,
       taxable,
       tax_amount: tax,

@@ -266,24 +266,30 @@ function EditModal({ id, onClose }) {
       const inv = invoiceQuery.data;
       setCustomerId(inv.customer_id ?? '');
       setLines(
-        inv.items.map((it) => ({
-          key: `${it.id}-${Math.random()}`,
-          item: {
-            id: it.item_id,
-            item_name: it.item_name_snapshot,
-            retail_price: it.rate,
-            gst_percent: it.tax_percent,
-            cess_percent: 0,
-            base_unit_id: it.unit_id,
-          },
-          qty: Number(it.qty),
-          free_qty: Number(it.free_qty),
-          discount_percent: Number(it.discount_percent),
-          discount_amount: Number(it.discount_amount) > 0 ? Number(it.discount_amount) : '',
-          discount_mode: Number(it.discount_amount) > 0 && Number(it.discount_percent) === 0 ? 'amount' : 'percent',
-          unit_id: it.unit_id,
-          rate: Number(it.rate),
-        }))
+        inv.items.map((it) => {
+          const lineGross = Number(it.qty) * Number(it.rate);
+          const pctVal = Number(it.discount_percent || 0);
+          const pctDisc = lineGross > 0 && pctVal > 0 ? Math.round(((lineGross * pctVal) / 100) * 100) / 100 : 0;
+          const directAmt = Math.max(0, Math.round((Number(it.discount_amount || 0) - pctDisc) * 100) / 100);
+
+          return {
+            key: `${it.id}-${Math.random()}`,
+            item: {
+              id: it.item_id,
+              item_name: it.item_name_snapshot,
+              retail_price: it.rate,
+              gst_percent: it.tax_percent,
+              cess_percent: 0,
+              base_unit_id: it.unit_id,
+            },
+            qty: Number(it.qty),
+            free_qty: Number(it.free_qty),
+            discount_percent: pctVal > 0 ? pctVal : '',
+            discount_amount: directAmt > 0 ? directAmt : '',
+            unit_id: it.unit_id,
+            rate: Number(it.rate),
+          };
+        })
       );
     }
   }, [invoiceQuery.data, lines]);
@@ -428,26 +434,8 @@ function EditModal({ id, onClose }) {
                             max={line.priced?.gross}
                             step="any"
                             placeholder="0.00"
-                            value={
-                              line.discount_mode === 'amount'
-                                ? (line.discount_amount ?? '')
-                                : (line.priced?.discount_amount > 0 ? line.priced.discount_amount : '')
-                            }
-                            onFocus={() => {
-                              if (line.discount_mode !== 'amount') {
-                                updateLine(line.key, {
-                                  discount_mode: 'amount',
-                                  discount_amount: line.priced?.discount_amount > 0 ? String(line.priced.discount_amount) : '',
-                                });
-                              }
-                            }}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              updateLine(line.key, {
-                                discount_mode: 'amount',
-                                discount_amount: val,
-                              });
-                            }}
+                            value={line.discount_amount ?? ''}
+                            onChange={(e) => updateLine(line.key, { discount_amount: e.target.value })}
                             onBlur={() => {
                               const num = Number(line.discount_amount);
                               if (num > (line.priced?.gross || 0)) {
@@ -469,26 +457,8 @@ function EditModal({ id, onClose }) {
                             max="100"
                             step="any"
                             placeholder="0"
-                            value={
-                              line.discount_mode === 'percent'
-                                ? (line.discount_percent ?? '')
-                                : (line.priced?.discount_percent > 0 ? line.priced.discount_percent : '')
-                            }
-                            onFocus={() => {
-                              if (line.discount_mode !== 'percent') {
-                                updateLine(line.key, {
-                                  discount_mode: 'percent',
-                                  discount_percent: line.priced?.discount_percent > 0 ? String(line.priced.discount_percent) : '',
-                                });
-                              }
-                            }}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              updateLine(line.key, {
-                                discount_mode: 'percent',
-                                discount_percent: val,
-                              });
-                            }}
+                            value={line.discount_percent ?? ''}
+                            onChange={(e) => updateLine(line.key, { discount_percent: e.target.value })}
                             onBlur={() => {
                               const num = Number(line.discount_percent);
                               if (num > 100) {
