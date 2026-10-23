@@ -39,20 +39,23 @@ export function InvoicePrint() {
       <div className="no-print mx-auto mb-4 flex max-w-3xl items-center gap-2 rounded-lg bg-white p-3 shadow-sm">
         <span className="text-sm font-medium text-gray-600">Format:</span>
         <button
+          type="button"
           onClick={() => setSearchParams({ format: 'thermal' })}
-          className={`rounded px-3 py-1 text-sm ${format === 'thermal' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+          className={`rounded px-3 py-1 text-sm font-medium transition-colors ${format === 'thermal' ? 'bg-[#6F2DA8] text-white shadow-sm' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
         >
           Thermal (80mm)
         </button>
         <button
+          type="button"
           onClick={() => setSearchParams({ format: 'a4' })}
-          className={`rounded px-3 py-1 text-sm ${format === 'a4' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+          className={`rounded px-3 py-1 text-sm font-medium transition-colors ${format === 'a4' ? 'bg-[#6F2DA8] text-white shadow-sm' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
         >
           A4
         </button>
         <button
+          type="button"
           onClick={() => setSearchParams({ format: 'a5' })}
-          className={`rounded px-3 py-1 text-sm ${format === 'a5' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+          className={`rounded px-3 py-1 text-sm font-medium transition-colors ${format === 'a5' ? 'bg-[#6F2DA8] text-white shadow-sm' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
         >
           A5
         </button>
