@@ -43,6 +43,16 @@ export function A5Template({ data }) {
     Number(invoice.igst_amount || 0)
   ).toFixed(2);
   const discount = Number(invoice.discount_amount || 0).toFixed(2);
+  let percentDiscountTotal = 0;
+  let rupeeDiscountTotal = 0;
+  items.forEach((it) => {
+    const gross = Number(it.qty || 0) * Number(it.rate || 0);
+    const pct = Number(it.discount_percent || 0);
+    const pctDisc = gross > 0 && pct > 0 ? Math.round(((gross * pct) / 100) * 100) / 100 : 0;
+    const directAmt = Math.max(0, Math.round((Number(it.discount_amount || 0) - pctDisc) * 100) / 100);
+    percentDiscountTotal += pctDisc;
+    rupeeDiscountTotal += directAmt;
+  });
   const netAmount = Number(invoice.grand_total || 0).toFixed(2);
 
   const isInterstate = Number(invoice.igst_amount || 0) > 0;
@@ -621,10 +631,24 @@ export function A5Template({ data }) {
                 <span>Tot Tax Amt :</span>
                 <span>{isNonGst ? '0.00' : totalTax}</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>Discount :</span>
-                <span>{discount}</span>
-              </div>
+              {percentDiscountTotal > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1px' }}>
+                  <span>Discount (%) :</span>
+                  <span>{percentDiscountTotal.toFixed(2)}</span>
+                </div>
+              )}
+              {rupeeDiscountTotal > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1px' }}>
+                  <span>Discount (₹) :</span>
+                  <span>{rupeeDiscountTotal.toFixed(2)}</span>
+                </div>
+              )}
+              {percentDiscountTotal <= 0 && rupeeDiscountTotal <= 0 && Number(discount) > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Discount :</span>
+                  <span>{discount}</span>
+                </div>
+              )}
             </div>
             <div
               style={{

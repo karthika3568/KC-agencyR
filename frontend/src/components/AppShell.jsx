@@ -1,21 +1,25 @@
+import { useLocation } from 'react-router-dom';
 import { TopNav } from './TopNav.jsx';
 import { StatusFooter } from './StatusFooter.jsx';
 
 export function AppShell({ children }) {
+  const location = useLocation();
+  const isPos = location.pathname === '/pos';
+
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#F7F5FF] font-sans text-[#17233D]">
       {/* Top Header Bar & Sub-Nav */}
       <TopNav />
 
-      {/* Scrollable Page Canvas */}
-      <main className="flex-1 overflow-y-auto p-2.5 sm:p-3 lg:px-5 lg:py-3">
-        <div className="mx-auto max-w-[1500px]">
+      {/* Page Canvas - overflow-hidden on POS to prevent whole-page scroll */}
+      <main className={`flex-1 min-h-0 ${isPos ? 'overflow-hidden p-2 sm:p-2.5 flex flex-col' : 'overflow-y-auto p-2.5 sm:p-3 lg:px-5 lg:py-3'}`}>
+        <div className={isPos ? 'flex-1 min-h-0 w-full max-w-[1700px] mx-auto flex flex-col overflow-hidden' : 'mx-auto max-w-[1500px]'}>
           {children}
         </div>
       </main>
 
-      {/* Bottom Persistent Status Footer */}
-      <StatusFooter />
+      {/* Bottom Persistent Status Footer (Hidden on POS since POS has its own approved status footer) */}
+      {!isPos && <StatusFooter />}
     </div>
   );
 }
