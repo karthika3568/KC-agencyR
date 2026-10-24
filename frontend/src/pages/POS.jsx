@@ -1966,10 +1966,10 @@ function PaymentModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
-      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto card p-5 shadow-soft-lg">
-        <div className="mb-3">
+      <div className="w-full max-w-md card p-4 shadow-soft-lg">
+        <div className="mb-2">
           <div className="flex items-center gap-2">
-            <div className="text-lg font-bold text-ink">{isQuickSale ? 'Quick Sale Payment' : 'Payment'}</div>
+            <div className="text-base font-bold text-ink">{isQuickSale ? 'Quick Sale Payment' : 'Payment'}</div>
             {isQuickSale && (
               <span className="rounded bg-primary-soft px-2 py-0.5 text-xs font-bold text-primary">
                 Quick Sale
@@ -1979,56 +1979,23 @@ function PaymentModal({
           <div className="text-xs text-ink-muted">{customerName || (isQuickSale ? 'Quick Sale (Walk-in / Guest)' : 'Walk-in Customer')} · {itemCount} item(s)</div>
         </div>
 
-        {canDiscount && (
-          <div className="mb-3 rounded-xl border border-border-soft bg-page p-2.5">
-            <div className="mb-1 flex items-center justify-between text-xs font-semibold text-ink-muted">
-              <span>Bill Discount</span>
-              <div className="flex overflow-hidden rounded-full border border-border-soft text-xs bg-white">
-                <button
-                  type="button"
-                  onClick={() => setBillDiscountMode('amount')}
-                  className={`px-2.5 py-0.5 font-bold ${billDiscountMode === 'amount' ? 'bg-[#6F2DA8] text-white' : 'text-ink-muted'}`}
-                >
-                  ₹
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setBillDiscountMode('percent')}
-                  className={`px-2.5 py-0.5 font-bold ${billDiscountMode === 'percent' ? 'bg-[#6F2DA8] text-white' : 'text-ink-muted'}`}
-                >
-                  %
-                </button>
-              </div>
-            </div>
-            <input
-              type="number"
-              min="0"
-              step="any"
-              placeholder="Enter discount amount..."
-              value={billDiscount}
-              onChange={(e) => setBillDiscount(e.target.value)}
-              className="input font-semibold text-ink"
-            />
-          </div>
-        )}
-
-        <div className="mb-4 rounded-xl bg-[#EEE5FF] px-3 py-3 text-center border border-[#D8CEE2]">
-          <div className="text-xs font-bold uppercase tracking-wider text-[#6F2DA8]">Total Payable</div>
-          <div className="text-2xl font-black text-[#351442]">₹ {grandTotal.toFixed(2)}</div>
+        <div className="mb-2.5 rounded-lg bg-[#EEE5FF] px-3 py-1.5 text-center border border-[#D8CEE2]">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-[#6F2DA8]">Total Payable</div>
+          <div className="text-lg font-black text-[#351442] leading-tight">₹ {grandTotal.toFixed(2)}</div>
         </div>
 
-        <div className="mb-3 flex overflow-hidden rounded-xl border border-border-soft bg-page p-1 text-xs">
+        <div className="mb-2 flex overflow-hidden rounded-lg border border-border-soft bg-page p-0.5 text-xs">
           <button
             type="button"
             onClick={() => toggleSplit(false)}
-            className={`flex-1 rounded-lg px-3 py-1.5 font-bold transition-all ${!splitMode ? 'bg-white shadow-soft text-ink' : 'text-ink-muted'}`}
+            className={`flex-1 rounded-md px-3 py-1 font-bold transition-all ${!splitMode ? 'bg-white shadow-soft text-ink' : 'text-ink-muted'}`}
           >
             Single Payment
           </button>
           <button
             type="button"
             onClick={() => toggleSplit(true)}
-            className={`flex-1 rounded-lg px-3 py-1.5 font-bold transition-all ${splitMode ? 'bg-white shadow-soft text-ink' : 'text-ink-muted'}`}
+            className={`flex-1 rounded-md px-3 py-1 font-bold transition-all ${splitMode ? 'bg-white shadow-soft text-ink' : 'text-ink-muted'}`}
           >
             Split Payment
           </button>
@@ -2036,14 +2003,14 @@ function PaymentModal({
 
         {!splitMode ? (
           <>
-            <div className="mb-1 text-xs font-semibold text-ink-muted">Payment Method</div>
-            <div className="mb-3 grid grid-cols-3 gap-2">
+            <div className="mb-1 text-[11px] font-semibold text-ink-muted">Payment Method</div>
+            <div className="mb-2 grid grid-cols-5 gap-1.5">
               {PAYMENT_METHODS.map((m) => (
                 <button
                   key={m.key}
                   type="button"
                   onClick={() => setPayments((prev) => [{ ...prev[0], payment_method: m.key }])}
-                  className={`rounded-xl border px-2 py-2 text-xs font-bold transition-all ${
+                  className={`rounded-lg border px-1 py-1.5 text-xs font-bold transition-all text-center ${
                     singleMethod === m.key
                       ? 'border-[#6F2DA8] bg-[#EEE5FF] text-[#6F2DA8]'
                       : 'border-border-soft bg-white text-ink-muted hover:bg-page'
@@ -2053,18 +2020,18 @@ function PaymentModal({
                 </button>
               ))}
             </div>
-            <div className="mb-1 text-xs font-semibold text-ink-muted">Amount</div>
+            <div className="mb-1 text-[11px] font-semibold text-ink-muted">Amount</div>
             <input
               type="number"
               min="0"
               step="any"
               value={singleAmount}
               onChange={(e) => setSingleAmount(e.target.value)}
-              className="input mb-3 text-base font-bold"
+              className="input mb-2 text-base font-bold py-1.5"
             />
           </>
         ) : (
-          <div className="mb-3 flex flex-col gap-2">
+          <div className="mb-2 flex flex-col gap-1.5">
             {PAYMENT_METHODS.map((m) => (
               <div key={m.key} className="flex items-center justify-between gap-2">
                 <span className="w-14 text-xs font-bold text-ink">{m.label}</span>
@@ -2074,14 +2041,14 @@ function PaymentModal({
                   step="any"
                   value={getAmount(m.key)}
                   onChange={(e) => setSplitAmount(m.key, e.target.value)}
-                  className="input flex-1 text-right text-xs"
+                  className="input flex-1 text-right text-xs py-1"
                 />
               </div>
             ))}
           </div>
         )}
 
-        <div className="space-y-1 mb-3 text-xs text-ink-muted border-t border-border-soft pt-2">
+        <div className="space-y-0.5 mb-2 text-xs text-ink-muted border-t border-border-soft pt-1.5">
           <div className="flex justify-between">
             <span>Subtotal</span><span>₹ {totals.subtotal.toFixed(2)}</span>
           </div>
@@ -2095,7 +2062,7 @@ function PaymentModal({
           </div>
         </div>
 
-        <div className={`mb-3 flex justify-between rounded-xl px-3 py-2 text-xs font-bold ${
+        <div className={`mb-2 flex justify-between rounded-lg px-3 py-1.5 text-xs font-bold ${
           remaining > 0.009 ? 'bg-amber-50 text-amber-800 border border-amber-200' : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
         }`}>
           <span>{remaining > 0.009 ? 'Remaining (on credit)' : 'Fully Paid'}</span>
@@ -2103,12 +2070,12 @@ function PaymentModal({
         </div>
 
         {blockedNoCustomer && (
-          <p className="mb-2 text-xs text-danger font-medium">Select a customer above to allow a partial/credit payment — a walk-in sale must be paid in full.</p>
+          <p className="mb-1.5 text-xs text-danger font-medium">Select a customer above to allow a partial/credit payment — a walk-in sale must be paid in full.</p>
         )}
         {!isValid && (
-          <p className="mb-2 text-xs font-bold text-danger">⚠️ Cannot complete payment: one or more items exceed available stock.</p>
+          <p className="mb-1.5 text-xs font-bold text-danger">⚠️ Cannot complete payment: one or more items exceed available stock.</p>
         )}
-        {error && <p className="mb-2 text-xs text-danger font-medium">{error}</p>}
+        {error && <p className="mb-1.5 text-xs text-danger font-medium">{error}</p>}
 
         <div className="flex justify-end gap-2 pt-2 border-t border-border-soft">
           <Button variant="secondary" size="sm" onClick={onBack} disabled={isPending}>Back</Button>
