@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import {
   Tag, CheckCircle2, Power, Edit2, Trash2, Search, Plus, Loader2
@@ -11,6 +11,200 @@ import { usePermission } from '../hooks/usePermission';
 import { ItemsPanel } from './ItemsPanel.jsx';
 import { Pagination } from '../components/Pagination';
 import { useClientPagination } from '../hooks/useClientPagination';
+import { handleFormKeyDown } from '../utils/formNavigation';
+
+// Spatial & context-aware keyboard navigation helper for Catalog
+function findNextCatalogNavElement(currentEl, items, dir) {
+  if (!currentEl || !items || items.length === 0) return null;
+
+  // 1. Contextual table row navigation
+  const isRow = currentEl.hasAttribute('data-catalog-row');
+  const isAction = currentEl.hasAttribute('data-catalog-action');
+
+  if (isRow) {
+    if (dir === 'ArrowRight') {
+      const firstAction = currentEl.querySelector('[data-catalog-action="true"]');
+      if (firstAction && !firstAction.disabled && firstAction.offsetParent !== null) {
+        return firstAction;
+      }
+    } else if (dir === 'ArrowDown') {
+      let nextRow = currentEl.nextElementSibling;
+      while (nextRow && (!nextRow.hasAttribute('data-catalog-row') || nextRow.offsetParent === null)) {
+        nextRow = nextRow.nextElementSibling;
+      }
+      if (nextRow) return nextRow;
+      // If at last row, spatial algorithm below will find pagination controls below
+    } else if (dir === 'ArrowUp') {
+      let prevRow = currentEl.previousElementSibling;
+      while (prevRow && (!prevRow.hasAttribute('data-catalog-row') || prevRow.offsetParent === null)) {
+        prevRow = prevRow.previousElementSibling;
+      }
+      if (prevRow) return prevRow;
+      // If at first row, spatial algorithm below will find search / filter above
+    }
+  }
+
+  if (isAction) {
+    const parentRow = currentEl.closest('[data-catalog-row="true"]');
+    const actionsInRow = parentRow ? Array.from(parentRow.querySelectorAll('[data-catalog-action="true"]')).filter(el => !el.disabled && el.offsetParent !== null) : [];
+    const actionIndex = actionsInRow.indexOf(currentEl);
+
+    if (dir === 'ArrowLeft') {
+      if (actionIndex > 0) {
+        return actionsInRow[actionIndex - 1];
+      }
+      if (parentRow) return parentRow;
+    } else if (dir === 'ArrowRight') {
+      if (actionIndex >= 0 && actionIndex < actionsInRow.length - 1) {
+        return actionsInRow[actionIndex + 1];
+      }
+    } else if (dir === 'ArrowDown') {
+      let nextRow = parentRow?.nextElementSibling;
+      while (nextRow && (!nextRow.hasAttribute('data-catalog-row') || nextRow.offsetParent === null)) {
+        nextRow = nextRow.nextElementSibling;
+      }
+      if (nextRow) {
+        const nextActions = Array.from(nextRow.querySelectorAll('[data-catalog-action="true"]')).filter(el => !el.disabled && el.offsetParent !== null);
+        if (nextActions[actionIndex]) return nextActions[actionIndex];
+        if (nextActions[0]) return nextActions[0];
+        return nextRow;
+      }
+    } else if (dir === 'ArrowUp') {
+      let prevRow = parentRow?.previousElementSibling;
+      while (prevRow && (!prevRow.hasAttribute('data-catalog-row') || prevRow.offsetParent === null)) {
+        prevRow = prevRow.previousElementSibling;
+      }
+      if (prevRow) {
+        const prevActions = Array.from(prevRow.querySelectorAll('[data-catalog-action="true"]')).filter(el => !el.disabled && el.offsetParent !== null);
+        if (prevActions[actionIndex]) return prevActions[actionIndex];
+        if (prevActions[0]) return prevActions[0];
+        return prevRow;
+      }
+    }
+  }
+
+  // 2. 2D DOM Spatial geometric navigation for tabs, filters, forms, pagination, etc.
+  const currentRect = currentEl.getBoundingClientRect();
+  const cAx = currentRect.left + currentRect.width / 2;
+  const cAy = currentRect.top + currentRect.height / 2;
+
+  let bestCandidate = null;
+  let bestScore = Infinity;
+
+  for (const item of items) {
+    if (item === currentEl) continue;
+
+    const isChild = currentEl.contains(item);
+    const isParent = item.contains(currentEl);
+
+    const rect = item.getBoundingClientRect();
+    const cBx = rect.left + rect.width / 2;
+    const cBy = rect.top + rect.height / 2;
+
+    let isValid = false;
+    let score = Infinity;
+
+    if (dir === 'ArrowRight') {
+      if (isChild) {
+        isValid = cBx > cAx + 5;
+      } else if (isParent) {
+        isValid = false;
+      } else {
+        isValid = cBx > cAx + 5 && rect.right > currentRect.right + 2;
+      }
+
+      if (isValid) {
+        const dx = isChild ? 10 : Math.max(0, rect.left - currentRect.right);
+        const vOverlap = Math.max(0, Math.min(currentRect.bottom, rect.bottom) - Math.max(currentRect.top, rect.top));
+        const dyCenter = Math.abs(cAy - cBy);
+
+        if (isChild) {
+          score = 15 + dx;
+        } else if (vOverlap > 0 || dyCenter < Math.max(currentRect.height, rect.height) * 0.8) {
+          const topDiff = Math.abs(rect.top - currentRect.top);
+          score = dx * 1.0 + topDiff * 0.2 + dyCenter * 0.2;
+        } else {
+          score = dx * 1.5 + dyCenter * 1.5 + 200;
+        }
+      }
+    } else if (dir === 'ArrowLeft') {
+      if (isChild) {
+        isValid = cBx < cAx - 5;
+      } else if (isParent) {
+        isValid = true;
+      } else {
+        isValid = cBx < cAx - 5 && rect.left < currentRect.left - 2;
+      }
+
+      if (isValid) {
+        const dx = isParent ? 5 : Math.max(0, currentRect.left - rect.right);
+        const vOverlap = Math.max(0, Math.min(currentRect.bottom, rect.bottom) - Math.max(currentRect.top, rect.top));
+        const dyCenter = Math.abs(cAy - cBy);
+
+        if (isParent) {
+          score = 10;
+        } else if (vOverlap > 0 || dyCenter < Math.max(currentRect.height, rect.height) * 0.8) {
+          score = dx * 1.0 + dyCenter * 0.3;
+        } else {
+          score = dx * 1.5 + dyCenter * 1.5 + 200;
+        }
+      }
+    } else if (dir === 'ArrowDown') {
+      if (isChild) {
+        isValid = cBy > cAy + 8;
+      } else if (isParent) {
+        isValid = false;
+      } else {
+        isValid = cBy > cAy + 8 && rect.bottom > currentRect.bottom + 4;
+      }
+
+      if (isValid) {
+        const dy = isChild ? 10 : Math.max(0, rect.top - currentRect.bottom);
+        const hOverlap = Math.max(0, Math.min(currentRect.right, rect.right) - Math.max(currentRect.left, rect.left));
+        const dxCenter = Math.abs(cAx - cBx);
+
+        if (isChild) {
+          score = 15;
+        } else if (hOverlap > 0) {
+          score = dy * 2.0 + dxCenter * 0.4;
+        } else {
+          const dxEdge = Math.min(Math.abs(rect.left - currentRect.right), Math.abs(currentRect.left - rect.right));
+          score = dy * 2.0 + dxEdge * 1.0 + 150;
+        }
+      }
+    } else if (dir === 'ArrowUp') {
+      if (isChild) {
+        isValid = cBy < cAy - 8;
+      } else if (isParent) {
+        isValid = true;
+      } else {
+        isValid = cBy < cAy - 8 && rect.top < currentRect.top - 4;
+      }
+
+      if (isValid) {
+        const dy = isParent ? 0 : Math.max(0, currentRect.top - rect.bottom);
+        const hOverlap = Math.max(0, Math.min(currentRect.right, rect.right) - Math.max(currentRect.left, rect.left));
+        const dxCenter = Math.abs(cAx - cBx);
+
+        if (isParent) {
+          score = 10;
+        } else if (hOverlap > 0) {
+          score = dy * 2.0 + dxCenter * 0.4;
+        } else {
+          const dxEdge = Math.min(Math.abs(rect.left - currentRect.right), Math.abs(currentRect.left - rect.right));
+          score = dy * 2.0 + dxEdge * 1.0 + 150;
+        }
+      }
+    }
+
+    if (isValid && score < bestScore) {
+      bestScore = score;
+      bestCandidate = item;
+    }
+  }
+
+  return bestCandidate;
+}
 
 function useEntity(key, api) {
   const queryClient = useQueryClient();
@@ -231,18 +425,19 @@ function CategoriesPanel({ canManage }) {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-2.5">
+          <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="space-y-2.5">
             <div>
               <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-0.5">
                 Category Name <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
+                data-catalog-nav="true"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g., Beverages, Electronics..."
                 disabled={!canManage || isSaving}
-                className="input w-full"
+                className="input w-full focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1"
               />
             </div>
 
@@ -254,11 +449,12 @@ function CategoriesPanel({ canManage }) {
                 <label className="flex items-center gap-2 text-xs font-bold cursor-pointer text-slate-800">
                   <input
                     type="radio"
+                    data-catalog-nav="true"
                     name="category_status"
                     checked={isActive}
                     onChange={() => setIsActive(true)}
                     disabled={!canManage || isSaving}
-                    className="accent-emerald-600 h-4 w-4"
+                    className="accent-emerald-600 h-4 w-4 focus:ring-2 focus:ring-[#6F2DA8]"
                   />
                   <span className="flex items-center gap-1 text-emerald-700">
                     <Power size={14} /> Active
@@ -268,11 +464,12 @@ function CategoriesPanel({ canManage }) {
                 <label className="flex items-center gap-2 text-xs font-bold cursor-pointer text-slate-800">
                   <input
                     type="radio"
+                    data-catalog-nav="true"
                     name="category_status"
                     checked={!isActive}
                     onChange={() => setIsActive(false)}
                     disabled={!canManage || isSaving}
-                    className="accent-rose-600 h-4 w-4"
+                    className="accent-rose-600 h-4 w-4 focus:ring-2 focus:ring-[#6F2DA8]"
                   />
                   <span className="flex items-center gap-1 text-slate-500">
                     <Power size={14} /> Inactive
@@ -308,11 +505,13 @@ function CategoriesPanel({ canManage }) {
                       <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={13} />
                       <input
                         type="text"
+                        data-catalog-nav="true"
+                        data-enter-ignore="true"
                         placeholder="Filter brands..."
                         value={brandSearch}
                         onChange={(e) => setBrandSearch(e.target.value)}
                         disabled={!canManage || isSaving}
-                        className="input pl-8 py-1 text-xs w-full bg-white"
+                        className="input pl-8 py-1 text-xs w-full bg-white focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1"
                       />
                     </div>
                   )}
@@ -321,18 +520,20 @@ function CategoriesPanel({ canManage }) {
                     <div className="flex items-center justify-between pt-1 pb-1 text-[11px]">
                       <button
                         type="button"
+                        data-catalog-nav="true"
                         onClick={() => selectAllFilteredBrands(filteredBrands)}
                         disabled={!canManage || isSaving || filteredBrands.length === 0}
-                        className="font-bold text-indigo-600 hover:text-indigo-800 disabled:opacity-50"
+                        className="font-bold text-indigo-600 hover:text-indigo-800 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] rounded px-1"
                       >
                         Select All {filteredBrands.length < allBrands.length ? `(${filteredBrands.length})` : ''}
                       </button>
                       {selectedBrandIds.length > 0 && (
                         <button
                           type="button"
+                          data-catalog-nav="true"
                           onClick={clearAllBrands}
                           disabled={!canManage || isSaving}
-                          className="font-bold text-rose-600 hover:text-rose-800 disabled:opacity-50"
+                          className="font-bold text-rose-600 hover:text-rose-800 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-rose-500 rounded px-1"
                         >
                           Clear All
                         </button>
@@ -355,10 +556,12 @@ function CategoriesPanel({ canManage }) {
                           <div className="flex items-center gap-2 min-w-0">
                             <input
                               type="checkbox"
+                              data-catalog-nav="true"
+                              data-enter-ignore="true"
                               checked={isChecked}
                               onChange={() => toggleBrand(b.id)}
                               disabled={!canManage || isSaving}
-                              className="accent-indigo-600 h-4 w-4 rounded"
+                              className="accent-indigo-600 h-4 w-4 rounded focus:ring-2 focus:ring-[#6F2DA8]"
                             />
                             <span className="truncate">{b.name}</span>
                           </div>
@@ -390,6 +593,7 @@ function CategoriesPanel({ canManage }) {
               <div className="flex items-center gap-2 pt-1">
                 <Button
                   type="submit"
+                  data-catalog-nav="true"
                   disabled={isSaving}
                   className="flex-1 justify-center py-1.5 text-xs font-bold"
                 >
@@ -400,6 +604,7 @@ function CategoriesPanel({ canManage }) {
                 {editingId && (
                   <Button
                     type="button"
+                    data-catalog-nav="true"
                     variant="secondary"
                     onClick={resetForm}
                     disabled={isSaving}
@@ -432,17 +637,20 @@ function CategoriesPanel({ canManage }) {
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={13} />
                 <input
                   type="text"
+                  data-catalog-nav="true"
+                  data-catalog-search="true"
                   placeholder="Search categories..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="input pl-7 py-1 text-xs w-36 sm:w-48"
+                  className="input pl-7 py-1 text-xs w-36 sm:w-48 focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1"
                 />
               </div>
 
               <select
+                data-catalog-nav="true"
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="input py-1 text-xs w-24"
+                className="input py-1 text-xs w-24 focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1"
               >
                 <option value="all">All Status</option>
                 <option value="active">Active Only</option>
@@ -466,7 +674,13 @@ function CategoriesPanel({ canManage }) {
                 {pagedCategories.map((c, index) => {
                   const cActive = c.is_active === undefined ? true : Boolean(Number(c.is_active));
                   return (
-                    <tr key={c.id} className="hover:bg-slate-50/50 transition-colors">
+                    <tr
+                      key={c.id}
+                      tabIndex={0}
+                      data-catalog-nav="true"
+                      data-catalog-row="true"
+                      className="hover:bg-slate-50/50 transition-colors focus:outline-none focus:ring-2 focus:ring-[#6F2DA8]/60 focus:bg-[#EDE8FF]/30"
+                    >
                       <td className="px-3 py-1.5 font-semibold text-slate-400">{startIndex + index + 1}</td>
                       <td className="px-3 py-1.5 font-bold text-slate-900">{c.name}</td>
                       <td className="px-3 py-1.5">
@@ -488,19 +702,25 @@ function CategoriesPanel({ canManage }) {
                       {canManage && (
                         <td className="px-3 py-1.5 text-right space-x-1">
                           <button
+                            type="button"
+                            data-catalog-nav="true"
+                            data-catalog-action="true"
                             onClick={() => handleEdit(c)}
-                            className="rounded-md bg-slate-100 p-1 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                            className="rounded-md bg-slate-100 p-1 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1"
                             title="Edit Category"
                           >
                             <Edit2 size={13} />
                           </button>
                           <button
+                            type="button"
+                            data-catalog-nav="true"
+                            data-catalog-action="true"
                             onClick={() => {
                               if (confirm(`Are you sure you want to delete category "${c.name}"?`)) {
                                 removeMutation.mutate(c.id);
                               }
                             }}
-                            className="rounded-md bg-slate-100 p-1 text-slate-700 hover:bg-rose-50 hover:text-rose-600 transition-colors"
+                            className="rounded-md bg-slate-100 p-1 text-slate-700 hover:bg-rose-50 hover:text-rose-600 transition-colors focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-1"
                             title="Delete Category"
                           >
                             <Trash2 size={13} />
@@ -661,18 +881,19 @@ function BrandsPanel({ canManage }) {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-2.5">
+          <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="space-y-2.5">
             <div>
               <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-0.5">
                 Brand Name <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
+                data-catalog-nav="true"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g., Nestle, Samsung..."
                 disabled={!canManage}
-                className="input w-full"
+                className="input w-full focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1"
               />
             </div>
 
@@ -682,11 +903,12 @@ function BrandsPanel({ canManage }) {
               </label>
               <input
                 type="text"
+                data-catalog-nav="true"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
                 placeholder="e.g., BR-01"
                 disabled={!canManage}
-                className="input w-full"
+                className="input w-full focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1"
               />
             </div>
 
@@ -698,11 +920,12 @@ function BrandsPanel({ canManage }) {
                 <label className="flex items-center gap-1.5 text-xs font-bold cursor-pointer text-slate-800">
                   <input
                     type="radio"
+                    data-catalog-nav="true"
                     name="brand_status"
                     checked={isActive}
                     onChange={() => setIsActive(true)}
                     disabled={!canManage}
-                    className="accent-emerald-600 h-3.5 w-3.5"
+                    className="accent-emerald-600 h-3.5 w-3.5 focus:ring-2 focus:ring-[#6F2DA8]"
                   />
                   <span className="flex items-center gap-1 text-emerald-700 text-xs">
                     <Power size={13} /> Active
@@ -712,11 +935,12 @@ function BrandsPanel({ canManage }) {
                 <label className="flex items-center gap-1.5 text-xs font-bold cursor-pointer text-slate-800">
                   <input
                     type="radio"
+                    data-catalog-nav="true"
                     name="brand_status"
                     checked={!isActive}
                     onChange={() => setIsActive(false)}
                     disabled={!canManage}
-                    className="accent-rose-600 h-3.5 w-3.5"
+                    className="accent-rose-600 h-3.5 w-3.5 focus:ring-2 focus:ring-[#6F2DA8]"
                   />
                   <span className="flex items-center gap-1 text-slate-500 text-xs">
                     <Power size={13} /> Inactive
@@ -729,6 +953,7 @@ function BrandsPanel({ canManage }) {
               <div className="flex items-center gap-2 pt-1">
                 <Button
                   type="submit"
+                  data-catalog-nav="true"
                   disabled={createMutation.isPending || updateMutation.isPending}
                   className="flex-1 justify-center py-1.5 text-xs font-bold"
                 >
@@ -738,6 +963,7 @@ function BrandsPanel({ canManage }) {
                 {editingId && (
                   <Button
                     type="button"
+                    data-catalog-nav="true"
                     variant="secondary"
                     onClick={resetForm}
                     className="py-1.5 text-xs font-bold"
@@ -767,17 +993,20 @@ function BrandsPanel({ canManage }) {
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={13} />
                 <input
                   type="text"
+                  data-catalog-nav="true"
+                  data-catalog-search="true"
                   placeholder="Search brands..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="input pl-7 py-1 text-xs w-36 sm:w-48"
+                  className="input pl-7 py-1 text-xs w-36 sm:w-48 focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1"
                 />
               </div>
 
               <select
+                data-catalog-nav="true"
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="input py-1 text-xs w-24"
+                className="input py-1 text-xs w-24 focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1"
               >
                 <option value="all">All Status</option>
                 <option value="active">Active</option>
@@ -801,7 +1030,13 @@ function BrandsPanel({ canManage }) {
                 {pagedBrands.map((b, index) => {
                   const bActive = b.is_active === undefined ? true : Boolean(Number(b.is_active));
                   return (
-                    <tr key={b.id} className="hover:bg-slate-50/50 transition-colors">
+                    <tr
+                      key={b.id}
+                      tabIndex={0}
+                      data-catalog-nav="true"
+                      data-catalog-row="true"
+                      className="hover:bg-slate-50/50 transition-colors focus:outline-none focus:ring-2 focus:ring-[#6F2DA8]/60 focus:bg-[#EDE8FF]/30"
+                    >
                       <td className="px-3 py-1.5 font-semibold text-slate-400">{startIndex + index + 1}</td>
                       <td className="px-3 py-1.5 font-semibold text-slate-600">{b.code || '-'}</td>
                       <td className="px-3 py-1.5 font-bold text-slate-900">{b.name}</td>
@@ -819,16 +1054,22 @@ function BrandsPanel({ canManage }) {
                       {canManage && (
                         <td className="px-3 py-1.5 text-right space-x-1">
                           <button
+                            type="button"
+                            data-catalog-nav="true"
+                            data-catalog-action="true"
                             onClick={() => handleEdit(b)}
-                            className="rounded-md bg-slate-100 p-1 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                            className="rounded-md bg-slate-100 p-1 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1"
                           >
                             <Edit2 size={13} />
                           </button>
                           <button
+                            type="button"
+                            data-catalog-nav="true"
+                            data-catalog-action="true"
                             onClick={() => {
                               if (confirm(`Delete brand "${b.name}"?`)) removeMutation.mutate(b.id);
                             }}
-                            className="rounded-md bg-slate-100 p-1 text-slate-700 hover:bg-rose-50 hover:text-rose-600 transition-colors"
+                            className="rounded-md bg-slate-100 p-1 text-slate-700 hover:bg-rose-50 hover:text-rose-600 transition-colors focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-1"
                           >
                             <Trash2 size={13} />
                           </button>
@@ -957,24 +1198,46 @@ function StockUnitsPanel({ canManage }) {
           {successMsg && <div className="mb-2.5 rounded-lg bg-emerald-50 p-2 text-xs font-semibold text-emerald-800 border border-emerald-200 flex items-center gap-1.5"><CheckCircle2 size={15} /> {successMsg}</div>}
           {formError && <div className="mb-2.5 rounded-lg bg-red-50 p-2 text-xs font-semibold text-red-800 border border-red-200">{formError}</div>}
 
-          <form onSubmit={handleSubmit} className="space-y-2.5">
+          <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="space-y-2.5">
             <div>
               <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-0.5">
                 Unit Name <span className="text-red-500">*</span>
               </label>
-              <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., Kilogram, Piece, Litre" disabled={!canManage} className="input w-full" />
+              <input
+                type="text"
+                data-catalog-nav="true"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g., Kilogram, Piece, Litre"
+                disabled={!canManage}
+                className="input w-full focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1"
+              />
             </div>
 
             <div>
               <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-0.5">
                 Short Code <span className="text-red-500">*</span>
               </label>
-              <input type="text" value={shortCode} onChange={(e) => setShortCode(e.target.value)} placeholder="e.g., KG, PCS, LTR" disabled={!canManage} className="input w-full" />
+              <input
+                type="text"
+                data-catalog-nav="true"
+                value={shortCode}
+                onChange={(e) => setShortCode(e.target.value)}
+                placeholder="e.g., KG, PCS, LTR"
+                disabled={!canManage}
+                className="input w-full focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1"
+              />
             </div>
 
             <div>
               <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-0.5">Decimal Quantity?</label>
-              <select value={isDecimal} onChange={(e) => setIsDecimal(e.target.value)} disabled={!canManage} className="input w-full">
+              <select
+                data-catalog-nav="true"
+                value={isDecimal}
+                onChange={(e) => setIsDecimal(e.target.value)}
+                disabled={!canManage}
+                className="input w-full focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1"
+              >
                 <option value="0">No (Whole integers only e.g., PCS)</option>
                 <option value="1">Yes (Decimal values e.g., 1.5 KG)</option>
               </select>
@@ -984,11 +1247,27 @@ function StockUnitsPanel({ canManage }) {
               <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-0.5">Status</label>
               <div className="flex items-center gap-4 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-border-soft">
                 <label className="flex items-center gap-1.5 text-xs font-bold cursor-pointer text-slate-800">
-                  <input type="radio" name="su_status" checked={isActive} onChange={() => setIsActive(true)} disabled={!canManage} className="accent-emerald-600 h-3.5 w-3.5" />
+                  <input
+                    type="radio"
+                    data-catalog-nav="true"
+                    name="su_status"
+                    checked={isActive}
+                    onChange={() => setIsActive(true)}
+                    disabled={!canManage}
+                    className="accent-emerald-600 h-3.5 w-3.5 focus:ring-2 focus:ring-[#6F2DA8]"
+                  />
                   <span className="flex items-center gap-1 text-emerald-700 text-xs"><Power size={13} /> Active</span>
                 </label>
                 <label className="flex items-center gap-1.5 text-xs font-bold cursor-pointer text-slate-800">
-                  <input type="radio" name="su_status" checked={!isActive} onChange={() => setIsActive(false)} disabled={!canManage} className="accent-rose-600 h-3.5 w-3.5" />
+                  <input
+                    type="radio"
+                    data-catalog-nav="true"
+                    name="su_status"
+                    checked={!isActive}
+                    onChange={() => setIsActive(false)}
+                    disabled={!canManage}
+                    className="accent-rose-600 h-3.5 w-3.5 focus:ring-2 focus:ring-[#6F2DA8]"
+                  />
                   <span className="flex items-center gap-1 text-slate-500 text-xs"><Power size={13} /> Inactive</span>
                 </label>
               </div>
@@ -996,10 +1275,25 @@ function StockUnitsPanel({ canManage }) {
 
             {canManage && (
               <div className="flex items-center gap-2 pt-1">
-                <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="flex-1 justify-center py-1.5 text-xs font-bold">
+                <Button
+                  type="submit"
+                  data-catalog-nav="true"
+                  disabled={createMutation.isPending || updateMutation.isPending}
+                  className="flex-1 justify-center py-1.5 text-xs font-bold"
+                >
                   {editingId ? 'Update Unit' : 'Save Stock Unit'}
                 </Button>
-                {editingId && <Button type="button" variant="secondary" onClick={resetForm} className="py-1.5 text-xs font-bold">Cancel</Button>}
+                {editingId && (
+                  <Button
+                    type="button"
+                    data-catalog-nav="true"
+                    variant="secondary"
+                    onClick={resetForm}
+                    className="py-1.5 text-xs font-bold"
+                  >
+                    Cancel
+                  </Button>
+                )}
               </div>
             )}
           </form>
@@ -1016,7 +1310,15 @@ function StockUnitsPanel({ canManage }) {
             </h2>
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={13} />
-              <input type="text" placeholder="Search units..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="input pl-7 py-1 text-xs w-40" />
+              <input
+                type="text"
+                data-catalog-nav="true"
+                data-catalog-search="true"
+                placeholder="Search units..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="input pl-7 py-1 text-xs w-40 focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1"
+              />
             </div>
           </div>
 
@@ -1036,7 +1338,13 @@ function StockUnitsPanel({ canManage }) {
                 {pagedStockUnits.map((r, index) => {
                   const rActive = r.is_active === undefined ? true : Boolean(Number(r.is_active));
                   return (
-                    <tr key={r.id} className="hover:bg-slate-50/50 transition-colors">
+                    <tr
+                      key={r.id}
+                      tabIndex={0}
+                      data-catalog-nav="true"
+                      data-catalog-row="true"
+                      className="hover:bg-slate-50/50 transition-colors focus:outline-none focus:ring-2 focus:ring-[#6F2DA8]/60 focus:bg-[#EDE8FF]/30"
+                    >
                       <td className="px-3 py-1.5 font-semibold text-slate-400">{startIndex + index + 1}</td>
                       <td className="px-3 py-1.5 font-bold text-slate-900">{r.name}</td>
                       <td className="px-3 py-1.5 font-bold text-indigo-600">{r.short_code}</td>
@@ -1046,8 +1354,24 @@ function StockUnitsPanel({ canManage }) {
                       </td>
                       {canManage && (
                         <td className="px-3 py-1.5 text-right space-x-1">
-                          <button onClick={() => handleEdit(r)} className="rounded-md bg-slate-100 p-1 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600"><Edit2 size={13} /></button>
-                          <button onClick={() => { if (confirm(`Delete "${r.name}"?`)) removeMutation.mutate(r.id); }} className="rounded-md bg-slate-100 p-1 text-slate-700 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={13} /></button>
+                          <button
+                            type="button"
+                            data-catalog-nav="true"
+                            data-catalog-action="true"
+                            onClick={() => handleEdit(r)}
+                            className="rounded-md bg-slate-100 p-1 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1"
+                          >
+                            <Edit2 size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            data-catalog-nav="true"
+                            data-catalog-action="true"
+                            onClick={() => { if (confirm(`Delete "${r.name}"?`)) removeMutation.mutate(r.id); }}
+                            className="rounded-md bg-slate-100 p-1 text-slate-700 hover:bg-rose-50 hover:text-rose-600 transition-colors focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-1"
+                          >
+                            <Trash2 size={13} />
+                          </button>
                         </td>
                       )}
                     </tr>
@@ -1184,32 +1508,75 @@ function TaxCodesPanel({ canManage }) {
           {successMsg && <div className="mb-2.5 rounded-lg bg-emerald-50 p-2 text-xs font-semibold text-emerald-800 border border-emerald-200 flex items-center gap-1.5"><CheckCircle2 size={15} /> {successMsg}</div>}
           {formError && <div className="mb-2.5 rounded-lg bg-red-50 p-2 text-xs font-semibold text-red-800 border border-red-200">{formError}</div>}
 
-          <form onSubmit={handleSubmit} className="space-y-2">
+          <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="space-y-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-0.5">Code <span className="text-red-500">*</span></label>
-                <input type="text" value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g., GST18" disabled={!canManage} className="input w-full" />
+                <input
+                  type="text"
+                  data-catalog-nav="true"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  placeholder="e.g., GST18"
+                  disabled={!canManage}
+                  className="input w-full focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1"
+                />
               </div>
 
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-0.5">Name <span className="text-red-500">*</span></label>
-                <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., GST 18%" disabled={!canManage} className="input w-full" />
+                <input
+                  type="text"
+                  data-catalog-nav="true"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g., GST 18%"
+                  disabled={!canManage}
+                  className="input w-full focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1"
+                />
               </div>
             </div>
 
             <div>
               <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-0.5">GST % <span className="text-red-500">*</span></label>
-              <input type="number" step="0.01" value={gstPercent} onChange={(e) => setGstPercent(e.target.value)} placeholder="e.g., 18" disabled={!canManage} className="input w-full" />
+              <input
+                type="number"
+                step="0.01"
+                data-catalog-nav="true"
+                value={gstPercent}
+                onChange={(e) => setGstPercent(e.target.value)}
+                placeholder="e.g., 18"
+                disabled={!canManage}
+                className="input w-full focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1"
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">CGST %</label>
-                <input type="number" step="0.01" value={cgstPercent} onChange={(e) => setCgstPercent(e.target.value)} placeholder="Auto (GST/2)" disabled={!canManage} className="input w-full" />
+                <input
+                  type="number"
+                  step="0.01"
+                  data-catalog-nav="true"
+                  value={cgstPercent}
+                  onChange={(e) => setCgstPercent(e.target.value)}
+                  placeholder="Auto (GST/2)"
+                  disabled={!canManage}
+                  className="input w-full focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1"
+                />
               </div>
               <div>
                 <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">SGST %</label>
-                <input type="number" step="0.01" value={sgstPercent} onChange={(e) => setSgstPercent(e.target.value)} placeholder="Auto (GST/2)" disabled={!canManage} className="input w-full" />
+                <input
+                  type="number"
+                  step="0.01"
+                  data-catalog-nav="true"
+                  value={sgstPercent}
+                  onChange={(e) => setSgstPercent(e.target.value)}
+                  placeholder="Auto (GST/2)"
+                  disabled={!canManage}
+                  className="input w-full focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1"
+                />
               </div>
             </div>
 
@@ -1217,11 +1584,27 @@ function TaxCodesPanel({ canManage }) {
               <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-0.5">Status</label>
               <div className="flex items-center gap-4 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-border-soft">
                 <label className="flex items-center gap-1.5 text-xs font-bold cursor-pointer text-slate-800">
-                  <input type="radio" name="tax_status" checked={isActive} onChange={() => setIsActive(true)} disabled={!canManage} className="accent-emerald-600 h-3.5 w-3.5" />
+                  <input
+                    type="radio"
+                    data-catalog-nav="true"
+                    name="tax_status"
+                    checked={isActive}
+                    onChange={() => setIsActive(true)}
+                    disabled={!canManage}
+                    className="accent-emerald-600 h-3.5 w-3.5 focus:ring-2 focus:ring-[#6F2DA8]"
+                  />
                   <span className="flex items-center gap-1 text-emerald-700 text-xs"><Power size={13} /> Active</span>
                 </label>
                 <label className="flex items-center gap-1.5 text-xs font-bold cursor-pointer text-slate-800">
-                  <input type="radio" name="tax_status" checked={!isActive} onChange={() => setIsActive(false)} disabled={!canManage} className="accent-rose-600 h-3.5 w-3.5" />
+                  <input
+                    type="radio"
+                    data-catalog-nav="true"
+                    name="tax_status"
+                    checked={!isActive}
+                    onChange={() => setIsActive(false)}
+                    disabled={!canManage}
+                    className="accent-rose-600 h-3.5 w-3.5 focus:ring-2 focus:ring-[#6F2DA8]"
+                  />
                   <span className="flex items-center gap-1 text-slate-500 text-xs"><Power size={13} /> Inactive</span>
                 </label>
               </div>
@@ -1229,10 +1612,25 @@ function TaxCodesPanel({ canManage }) {
 
             {canManage && (
               <div className="flex items-center gap-2 pt-1">
-                <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="flex-1 justify-center py-1.5 text-xs font-bold">
+                <Button
+                  type="submit"
+                  data-catalog-nav="true"
+                  disabled={createMutation.isPending || updateMutation.isPending}
+                  className="flex-1 justify-center py-1.5 text-xs font-bold"
+                >
                   {editingId ? 'Update Tax Code' : 'Save Tax Code'}
                 </Button>
-                {editingId && <Button type="button" variant="secondary" onClick={resetForm} className="py-1.5 text-xs font-bold">Cancel</Button>}
+                {editingId && (
+                  <Button
+                    type="button"
+                    data-catalog-nav="true"
+                    variant="secondary"
+                    onClick={resetForm}
+                    className="py-1.5 text-xs font-bold"
+                  >
+                    Cancel
+                  </Button>
+                )}
               </div>
             )}
           </form>
@@ -1249,7 +1647,15 @@ function TaxCodesPanel({ canManage }) {
             </h2>
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={13} />
-              <input type="text" placeholder="Search tax codes..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="input pl-7 py-1 text-xs w-40" />
+              <input
+                type="text"
+                data-catalog-nav="true"
+                data-catalog-search="true"
+                placeholder="Search tax codes..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="input pl-7 py-1 text-xs w-40 focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1"
+              />
             </div>
           </div>
 
@@ -1270,7 +1676,13 @@ function TaxCodesPanel({ canManage }) {
                 {pagedTaxCodes.map((r, index) => {
                   const rActive = r.is_active === undefined ? true : Boolean(Number(r.is_active));
                   return (
-                    <tr key={r.id} className="hover:bg-slate-50/50 transition-colors">
+                    <tr
+                      key={r.id}
+                      tabIndex={0}
+                      data-catalog-nav="true"
+                      data-catalog-row="true"
+                      className="hover:bg-slate-50/50 transition-colors focus:outline-none focus:ring-2 focus:ring-[#6F2DA8]/60 focus:bg-[#EDE8FF]/30"
+                    >
                       <td className="px-3 py-1.5 font-semibold text-slate-400">{startIndex + index + 1}</td>
                       <td className="px-3 py-1.5 font-bold text-indigo-600">{r.code}</td>
                       <td className="px-3 py-1.5 font-bold text-slate-900">{r.name}</td>
@@ -1281,8 +1693,24 @@ function TaxCodesPanel({ canManage }) {
                       </td>
                       {canManage && (
                         <td className="px-3 py-1.5 text-right space-x-1">
-                          <button onClick={() => handleEdit(r)} className="rounded-md bg-slate-100 p-1 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600"><Edit2 size={13} /></button>
-                          <button onClick={() => { if (confirm(`Delete "${r.name}"?`)) removeMutation.mutate(r.id); }} className="rounded-md bg-slate-100 p-1 text-slate-700 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={13} /></button>
+                          <button
+                            type="button"
+                            data-catalog-nav="true"
+                            data-catalog-action="true"
+                            onClick={() => handleEdit(r)}
+                            className="rounded-md bg-slate-100 p-1 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1"
+                          >
+                            <Edit2 size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            data-catalog-nav="true"
+                            data-catalog-action="true"
+                            onClick={() => { if (confirm(`Delete "${r.name}"?`)) removeMutation.mutate(r.id); }}
+                            className="rounded-md bg-slate-100 p-1 text-slate-700 hover:bg-rose-50 hover:text-rose-600 transition-colors focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-1"
+                          >
+                            <Trash2 size={13} />
+                          </button>
                         </td>
                       )}
                     </tr>
@@ -1303,11 +1731,128 @@ function TaxCodesPanel({ canManage }) {
 
 export function Catalog() {
   const canManage = usePermission('catalog.manage_items');
+  const [activeTabKey, setActiveTabKey] = useState('items');
+  const containerRef = useRef(null);
+
+  const getNavItems = useCallback(() => {
+    if (!containerRef.current) return [];
+    return Array.from(
+      containerRef.current.querySelectorAll('[data-catalog-nav="true"]')
+    ).filter((el) => {
+      if (el.disabled || el.getAttribute('aria-hidden') === 'true' || el.offsetParent === null) {
+        return false;
+      }
+      const rect = el.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    });
+  }, []);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleKeyDown = (e) => {
+      // 1. Ignore if modifier keys are pressed
+      if (e.ctrlKey || e.altKey || e.metaKey) return;
+
+      // 2. Ignore if focus is inside any modal dialog or fixed popup overlay
+      if (document.activeElement?.closest('[role="dialog"], .fixed')) {
+        return;
+      }
+
+      const activeEl = document.activeElement;
+      const activeTag = activeEl?.tagName?.toLowerCase();
+      const isInput = activeTag === 'input' || activeTag === 'textarea';
+      const isSelect = activeTag === 'select';
+
+      // 3. Native input preservation
+      if (isInput) {
+        // ArrowLeft / ArrowRight MUST move text cursor inside input
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+          return;
+        }
+
+        // For search inputs, allow ArrowDown to move to table, ArrowUp to tab
+        const isSearch = activeEl.getAttribute('data-catalog-search') === 'true';
+        if (isSearch && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+          const items = getNavItems();
+          const nextEl = findNextCatalogNavElement(activeEl, items, e.key);
+          if (nextEl) {
+            e.preventDefault();
+            nextEl.focus({ preventScroll: true });
+            nextEl.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+          }
+          return;
+        }
+
+        // Other inputs (number inputs, form text fields): preserve native arrow behavior
+        return;
+      }
+
+      // Native select dropdown preservation
+      if (isSelect) {
+        // ArrowUp / ArrowDown / ArrowLeft / ArrowRight cycles native select options
+        return;
+      }
+
+      // Find current focused element in catalog items
+      const items = getNavItems();
+      if (items.length === 0) return;
+
+      const currentFocused = items.find(
+        (item) => item === activeEl || item.contains(activeEl)
+      );
+
+      // 4. Enter / Space handling
+      if (e.key === 'Enter' || e.key === ' ') {
+        if (!currentFocused) return;
+
+        // If focus is on a table row, DO NOT trigger any action
+        if (currentFocused.hasAttribute('data-catalog-row')) {
+          e.preventDefault();
+          return;
+        }
+
+        // If focus is on a tab button, switch to that tab
+        if (currentFocused.getAttribute('role') === 'tab') {
+          e.preventDefault();
+          currentFocused.click();
+          return;
+        }
+
+        // If focus is on a non-button/non-a custom interactive element
+        if (currentFocused.tagName !== 'BUTTON' && currentFocused.tagName !== 'A') {
+          e.preventDefault();
+          currentFocused.click();
+        }
+        return;
+      }
+
+      // 5. Arrow keys navigation
+      if (['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp'].includes(e.key)) {
+        if (!currentFocused) return;
+
+        e.preventDefault();
+        const nextEl = findNextCatalogNavElement(currentFocused, items, e.key);
+        if (nextEl) {
+          nextEl.focus({ preventScroll: true });
+          nextEl.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+        }
+      }
+    };
+
+    container.addEventListener('keydown', handleKeyDown);
+    return () => {
+      container.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [getNavItems]);
 
   return (
-    <div>
+    <div ref={containerRef} className="space-y-2 focus:outline-none">
       <h1 className="mb-2 text-xl font-bold text-slate-900 tracking-tight">Catalog Master Management</h1>
       <Tabs
+        activeKey={activeTabKey}
+        onTabChange={setActiveTabKey}
         tabs={[
           { key: 'items', label: 'Items', content: <ItemsPanel canManage={canManage} /> },
           { key: 'categories', label: 'Categories', content: <CategoriesPanel canManage={canManage} /> },

@@ -11,6 +11,7 @@ import { usePermission } from '../hooks/usePermission';
 import { Button } from '../components/Button.jsx';
 import { Pagination } from '../components/Pagination';
 import { useClientPagination } from '../hooks/useClientPagination';
+import { handleFormKeyDown } from '../utils/formNavigation';
 
 function ReturnLineEditor({ lines, setLines, items }) {
   const addLine = () => setLines((prev) => [...prev, { item_id: '', qty: 1, rate: 0 }]);
@@ -508,7 +509,7 @@ function SalesReturnsPanel({ canCreate, canApprove }) {
               </p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-2">
+            <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="space-y-2">
               {formError && <div className="text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{formError}</div>}
 
               <div className="grid grid-cols-2 gap-2">
@@ -871,7 +872,7 @@ function PurchaseReturnsPanel({ canManage }) {
               </p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-2">
+            <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="space-y-2">
               {formError && <div className="text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{formError}</div>}
 
               <div className="grid grid-cols-2 gap-2">

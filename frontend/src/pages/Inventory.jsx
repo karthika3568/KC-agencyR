@@ -11,6 +11,7 @@ import { downloadReportPdf, downloadVanIssuePdf } from '../utils/reportPdf';
 import { Pagination } from '../components/Pagination';
 import { useClientPagination } from '../hooks/useClientPagination';
 import { PrintPreviewModal } from '../components/PrintPreviewModal';
+import { handleFormKeyDown } from '../utils/formNavigation';
 
 function StockHubPanel() {
   const [ownerType, setOwnerType] = useState('');
@@ -312,7 +313,7 @@ function StockAdjustmentPanel({ canManage }) {
               </h2>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-2">
+            <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="space-y-2">
               {formError && <div className="text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{formError}</div>}
 
               <div>
@@ -755,7 +756,7 @@ function VanStockPanel({ canManage }) {
                 </div>
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-2">
+              <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="space-y-2">
                 {formError && <div className="text-xs text-red-400 bg-red-950/40 p-2.5 rounded border border-red-800/40">{formError}</div>}
 
                 <div>

@@ -5,6 +5,7 @@ import { pricingApi } from '../api/catalog';
 import { Button } from '../components/Button.jsx';
 import { Pagination } from '../components/Pagination';
 import { useClientPagination } from '../hooks/useClientPagination';
+import { handleFormKeyDown } from '../utils/formNavigation';
 
 function PricingPanel({ type, label }) {
   const [search, setSearch] = useState('');
@@ -121,7 +122,7 @@ function PricingPanel({ type, label }) {
         </div>
       )}
 
-      <div className="card overflow-hidden">
+      <div data-form-container="true" onKeyDown={handleFormKeyDown} className="card overflow-hidden">
         <div className="max-h-[calc(100vh-200px)] overflow-y-auto">
           <table className="w-full text-xs">
             <thead className="sticky top-0 bg-page z-10 shadow-sm">
@@ -162,6 +163,7 @@ function PricingPanel({ type, label }) {
                           type="number"
                           step="any"
                           min="0"
+                          data-table-nav="true"
                           value={value}
                           placeholder="Not set"
                           onChange={(e) => handleChange(r.id, e.target.value)}

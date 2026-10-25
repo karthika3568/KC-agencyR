@@ -8,6 +8,7 @@ import { Button } from '../components/Button.jsx';
 import { Toast } from '../components/Toast.jsx';
 import { resolveImageUrl } from '../utils/media';
 import { Pagination } from '../components/Pagination';
+import { handleFormKeyDown } from '../utils/formNavigation';
 
 const emptyForm = {
   item_name: '', category_id: '', brand_id: '', supplier_id: '',
@@ -192,12 +193,28 @@ function ItemFormModal({ item, onClose }) {
     }
   };
 
+  const firstInputRef = useRef(null);
+
+  useEffect(() => {
+    firstInputRef.current?.focus();
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4">
-      <form onSubmit={submit} className="card max-h-[90vh] w-full max-w-3xl overflow-y-auto p-5">
+    <div role="dialog" aria-modal="true" className="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4">
+      <form onSubmit={submit} onKeyDown={handleFormKeyDown} className="card max-h-[90vh] w-full max-w-3xl overflow-y-auto p-5">
         <div className="mb-4 flex items-center justify-between">
           <div className="text-lg font-semibold text-ink">{isEdit ? 'Edit Item' : 'New Item'}</div>
-          <button type="button" onClick={onClose} className="rounded p-1 text-ink-muted hover:bg-page">
+          <button type="button" onClick={onClose} aria-label="Close modal" className="rounded p-1 text-ink-muted hover:bg-page focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1">
             <X size={18} />
           </button>
         </div>
@@ -220,7 +237,7 @@ function ItemFormModal({ item, onClose }) {
         </div>
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <Field label="Item name *"><input required value={form.item_name} onChange={(e) => update('item_name', e.target.value)} className="input" /></Field>
+          <Field label="Item name *"><input ref={firstInputRef} required value={form.item_name} onChange={(e) => update('item_name', e.target.value)} className="input" /></Field>
           <Field label="Category">
             <select value={form.category_id} onChange={(e) => update('category_id', e.target.value)} className="input">
               <option value="">--</option>
@@ -344,8 +361,14 @@ function ItemFormModal({ item, onClose }) {
           <div className="mb-1 text-xs font-medium text-ink-muted">Available at branches</div>
           <div className="flex flex-wrap gap-3 rounded-lg border border-border-soft p-3">
             {branches.map((b) => (
-              <label key={b.id} className="flex items-center gap-1.5 text-sm">
-                <input type="checkbox" checked={selectedBranches.includes(b.id)} onChange={() => toggleBranch(b.id)} />
+              <label key={b.id} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  data-enter-ignore="true"
+                  checked={selectedBranches.includes(b.id)}
+                  onChange={() => toggleBranch(b.id)}
+                  className="accent-[#6F2DA8] focus:ring-2 focus:ring-[#6F2DA8] rounded"
+                />
                 {b.branch_name}
               </label>
             ))}
@@ -375,6 +398,7 @@ export function ItemsPanel({ canManage }) {
   const [importFile, setImportFile] = useState(null);
   const [importSuccessMsg, setImportSuccessMsg] = useState('');
   const fileInputRef = useRef(null);
+  const lastFocusedRef = useRef(null);
 
   const itemsQuery = useQuery({
     queryKey: ['items', search, statusFilter],
@@ -406,9 +430,22 @@ export function ItemsPanel({ canManage }) {
     await reactivateItem.mutateAsync(item.id);
   };
 
+  const openAdd = () => {
+    lastFocusedRef.current = document.activeElement;
+    setModalItem(null);
+  };
+
   const openEdit = async (item) => {
+    lastFocusedRef.current = document.activeElement;
     const full = await itemsApi.get(item.id);
     setModalItem(full);
+  };
+
+  const handleCloseModal = () => {
+    setModalItem(undefined);
+    setTimeout(() => {
+      lastFocusedRef.current?.focus();
+    }, 50);
   };
 
   const handleImportFile = (e) => {
@@ -455,8 +492,9 @@ export function ItemsPanel({ canManage }) {
                 <button
                   key={value}
                   type="button"
+                  data-catalog-nav="true"
                   onClick={() => handleStatusFilterChange(value)}
-                  className={`px-2.5 py-1 font-medium ${
+                  className={`px-2.5 py-1 font-medium focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1 ${
                     statusFilter === value ? 'bg-navbar text-gold' : 'bg-white text-ink-muted hover:bg-page'
                   }`}
                 >
@@ -466,14 +504,16 @@ export function ItemsPanel({ canManage }) {
             </div>
             <input
               type="text"
+              data-catalog-nav="true"
+              data-catalog-search="true"
               placeholder="Search name / code / barcode"
               value={search}
               onChange={(e) => handleSearchChange(e.target.value)}
-              className="input w-48 sm:w-56"
+              className="input w-48 sm:w-56 focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1"
             />
-            <Button variant="secondary" size="sm" onClick={() => itemsApi.downloadExport()}>Export Excel</Button>
+            <Button variant="secondary" size="sm" data-catalog-nav="true" onClick={() => itemsApi.downloadExport()}>Export Excel</Button>
             {canManage && (
-              <Button size="sm" icon={<Plus size={13} />} onClick={() => setModalItem(null)}>Add Item</Button>
+              <Button size="sm" data-catalog-nav="true" icon={<Plus size={13} />} onClick={openAdd}>Add Item</Button>
             )}
           </div>
         </div>
@@ -499,7 +539,13 @@ export function ItemsPanel({ canManage }) {
             </thead>
             <tbody>
               {pagedItems.map((item) => (
-                <tr key={item.id} className="border-b border-border-soft hover:bg-page/50">
+                <tr
+                  key={item.id}
+                  tabIndex={0}
+                  data-catalog-nav="true"
+                  data-catalog-row="true"
+                  className="border-b border-border-soft hover:bg-page/50 focus:outline-none focus:ring-2 focus:ring-[#6F2DA8]/60 focus:bg-[#EDE8FF]/30 transition-colors"
+                >
                   <td className="px-3 py-1">
                     <div className="flex h-7 w-7 items-center justify-center overflow-hidden rounded bg-page">
                       {item.image ? (
@@ -535,15 +581,36 @@ export function ItemsPanel({ canManage }) {
                   {canManage && (
                     <td className="px-3 py-1 text-right">
                       <div className="flex justify-end gap-1">
-                        <button onClick={() => openEdit(item)} title="Edit" className="rounded p-1 text-ink-muted hover:bg-page hover:text-gold">
+                        <button
+                          type="button"
+                          data-catalog-nav="true"
+                          data-catalog-action="true"
+                          onClick={() => openEdit(item)}
+                          title="Edit"
+                          className="rounded p-1 text-ink-muted hover:bg-page hover:text-gold focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1"
+                        >
                           <Pencil size={13} />
                         </button>
                         {Number(item.is_active) ? (
-                          <button onClick={() => handleDelete(item)} title="Deactivate" className="rounded p-1 text-ink-muted hover:bg-red-50 hover:text-danger">
+                          <button
+                            type="button"
+                            data-catalog-nav="true"
+                            data-catalog-action="true"
+                            onClick={() => handleDelete(item)}
+                            title="Deactivate"
+                            className="rounded p-1 text-ink-muted hover:bg-red-50 hover:text-danger focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-1"
+                          >
                             <Trash2 size={13} />
                           </button>
                         ) : (
-                          <button onClick={() => handleReactivate(item)} title="Reactivate" className="rounded p-1 text-ink-muted hover:bg-emerald-50 hover:text-emerald-700">
+                          <button
+                            type="button"
+                            data-catalog-nav="true"
+                            data-catalog-action="true"
+                            onClick={() => handleReactivate(item)}
+                            title="Reactivate"
+                            className="rounded p-1 text-ink-muted hover:bg-emerald-50 hover:text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:ring-offset-1"
+                          >
                             <RotateCcw size={13} />
                           </button>
                         )}
@@ -568,10 +635,10 @@ export function ItemsPanel({ canManage }) {
         <div className="card p-4">
           <div className="mb-2 font-semibold text-ink">Bulk Import (Excel)</div>
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="secondary" size="sm" onClick={() => itemsApi.downloadImportTemplate()}>Download Template</Button>
-            <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleImportFile} className="text-sm" />
-            <Button variant="secondary" size="sm" disabled={!importFile} onClick={handlePreview}>Preview</Button>
-            <Button size="sm" disabled={!importFile || !importResult} onClick={handleCommit}>Commit Import</Button>
+            <Button variant="secondary" size="sm" data-catalog-nav="true" onClick={() => itemsApi.downloadImportTemplate()}>Download Template</Button>
+            <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleImportFile} data-catalog-nav="true" className="text-sm focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1 rounded" />
+            <Button variant="secondary" size="sm" data-catalog-nav="true" disabled={!importFile} onClick={handlePreview}>Preview</Button>
+            <Button size="sm" data-catalog-nav="true" disabled={!importFile || !importResult} onClick={handleCommit}>Commit Import</Button>
           </div>
 
           {importResult && (
@@ -607,7 +674,7 @@ export function ItemsPanel({ canManage }) {
         </div>
       )}
 
-      {modalItem !== undefined && <ItemFormModal item={modalItem} onClose={() => setModalItem(undefined)} />}
+      {modalItem !== undefined && <ItemFormModal item={modalItem} onClose={handleCloseModal} />}
     </div>
   );
 }

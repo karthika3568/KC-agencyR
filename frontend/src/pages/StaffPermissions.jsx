@@ -7,6 +7,7 @@ import { usePermission } from '../hooks/usePermission';
 import { Button } from '../components/Button.jsx';
 import { Pagination } from '../components/Pagination';
 import { useClientPagination } from '../hooks/useClientPagination';
+import { handleFormKeyDown } from '../utils/formNavigation';
 
 export function StaffPermissions() {
   const canManageAccounts = usePermission('staff.manage_accounts');
@@ -167,7 +168,7 @@ export function StaffPermissions() {
               )}
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-2">
+            <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="space-y-2">
               {error && <div className="text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{error}</div>}
 
               <div>

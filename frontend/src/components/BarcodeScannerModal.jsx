@@ -15,6 +15,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { Button } from './Button.jsx';
+import { handleFormKeyDown } from '../utils/formNavigation';
 
 /**
  * Short audio beep feedback using Web Audio API
@@ -864,7 +865,7 @@ export function BarcodeScannerModal({ onScan, onClose }) {
               </div>
             )}
 
-            <form onSubmit={handleManualSubmit} className="flex items-center gap-2">
+            <form onSubmit={handleManualSubmit} onKeyDown={handleFormKeyDown} className="flex items-center gap-2">
               <input
                 ref={manualInputRef}
                 type="text"

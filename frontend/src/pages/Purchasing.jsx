@@ -11,6 +11,7 @@ import { resolveUnitPricing } from '../utils/pricing';
 import { downloadReportPdf, downloadGrnPdf } from '../utils/reportPdf';
 import { Pagination } from '../components/Pagination';
 import { useClientPagination } from '../hooks/useClientPagination';
+import { handleFormKeyDown } from '../utils/formNavigation';
 
 function priceGrnLine(line) {
   const qty = Number(line.qty || 0);
@@ -337,7 +338,7 @@ function GrnFormCard({ editing, onDone, items, unitsByItemId, onPickItem }) {
   const saving = createMutation.isPending || updateMutation.isPending;
 
   return (
-    <div className="card p-3.5 space-y-2.5 sticky top-3">
+    <div data-form-container="true" onKeyDown={handleFormKeyDown} className="card p-3.5 space-y-2.5 sticky top-3">
       <div className="flex items-center justify-between border-b border-border-soft pb-2">
         <h2 className="font-semibold text-ink text-sm sm:text-base flex items-center gap-2">
           {isEdit ? <Pencil className="w-4 h-4 text-cyan-400" /> : <Plus className="w-4 h-4 text-emerald-400" />}
@@ -937,7 +938,7 @@ function SupplierPaymentsPanel({ canManage }) {
               </h2>
             </div>
 
-            <form onSubmit={submit} className="space-y-2">
+            <form onSubmit={submit} onKeyDown={handleFormKeyDown} className="space-y-2">
               {error && <div className="text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{error}</div>}
               {result && (
                 <div className="text-xs text-emerald-400 bg-emerald-950/40 p-2 rounded border border-emerald-800/40 flex items-center gap-2">

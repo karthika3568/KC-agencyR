@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -12,6 +12,102 @@ import { useAuth } from '../hooks/useAuth.jsx';
 import { usePermission } from '../hooks/usePermission';
 import { dashboardApi } from '../api/admin';
 import { Card } from '../components/Card.jsx';
+
+// Spatial 2D keyboard navigation helper based on DOM geometry
+function findNextNavElement(currentEl, items, dir) {
+  if (!currentEl || !items || items.length === 0) return null;
+
+  const currentRect = currentEl.getBoundingClientRect();
+  const cAx = currentRect.left + currentRect.width / 2;
+  const cAy = currentRect.top + currentRect.height / 2;
+
+  let bestCandidate = null;
+  let bestScore = Infinity;
+
+  for (const item of items) {
+    if (item === currentEl) continue;
+
+    const rect = item.getBoundingClientRect();
+    const cBx = rect.left + rect.width / 2;
+    const cBy = rect.top + rect.height / 2;
+
+    let isValid = false;
+    let score = Infinity;
+
+    if (dir === 'ArrowRight') {
+      isValid = cBx > cAx + 5 && rect.right > currentRect.right + 2;
+
+      if (isValid) {
+        const dx = Math.max(0, rect.left - currentRect.right);
+        const vOverlap = Math.max(0, Math.min(currentRect.bottom, rect.bottom) - Math.max(currentRect.top, rect.top));
+        const dyCenter = Math.abs(cAy - cBy);
+
+        // Horizontal navigation stays strictly within the same horizontal visual row / band
+        if (vOverlap > 0 || dyCenter < Math.max(currentRect.height, rect.height) * 0.6) {
+          const topDiff = Math.abs(rect.top - currentRect.top);
+          score = dx * 1.0 + topDiff * 0.2 + dyCenter * 0.2;
+        } else {
+          isValid = false;
+        }
+      }
+    } else if (dir === 'ArrowLeft') {
+      isValid = cBx < cAx - 5 && rect.left < currentRect.left - 2;
+
+      if (isValid) {
+        const dx = Math.max(0, currentRect.left - rect.right);
+        const vOverlap = Math.max(0, Math.min(currentRect.bottom, rect.bottom) - Math.max(currentRect.top, rect.top));
+        const dyCenter = Math.abs(cAy - cBy);
+
+        // Horizontal navigation stays strictly within the same horizontal visual row / band
+        if (vOverlap > 0 || dyCenter < Math.max(currentRect.height, rect.height) * 0.6) {
+          const topDiff = Math.abs(rect.top - currentRect.top);
+          score = dx * 1.0 + topDiff * 0.2 + dyCenter * 0.5;
+        } else {
+          isValid = false;
+        }
+      }
+    } else if (dir === 'ArrowDown') {
+      isValid = cBy > cAy + 10 && rect.bottom > currentRect.bottom + 5;
+
+      if (isValid) {
+        const dy = Math.max(0, rect.top - currentRect.bottom);
+        const hOverlap = Math.max(0, Math.min(currentRect.right, rect.right) - Math.max(currentRect.left, rect.left));
+        const dxCenter = Math.abs(cAx - cBx);
+        const dxLeft = Math.abs(currentRect.left - rect.left);
+
+        if (hOverlap > 0) {
+          score = dy * 2.5 + dxLeft * 0.3 + dxCenter * 0.2;
+        } else {
+          const dxEdge = Math.min(Math.abs(rect.left - currentRect.right), Math.abs(currentRect.left - rect.right));
+          score = dy * 2.5 + dxEdge * 1.2 + 200;
+        }
+      }
+    } else if (dir === 'ArrowUp') {
+      isValid = cBy < cAy - 10 && rect.top < currentRect.top - 5;
+
+      if (isValid) {
+        const dy = Math.max(0, currentRect.top - rect.bottom);
+        const hOverlap = Math.max(0, Math.min(currentRect.right, rect.right) - Math.max(currentRect.left, rect.left));
+        const dxCenter = Math.abs(cAx - cBx);
+        const dxLeft = Math.abs(currentRect.left - rect.left);
+
+        if (hOverlap > 0) {
+          score = dy * 2.5 + dxLeft * 0.3 + dxCenter * 0.2;
+        } else {
+          const dxEdge = Math.min(Math.abs(rect.left - currentRect.right), Math.abs(currentRect.left - rect.right));
+          score = dy * 2.5 + dxEdge * 1.2 + 200;
+        }
+      }
+    }
+
+    if (isValid && score < bestScore) {
+      bestScore = score;
+      bestCandidate = item;
+    }
+  }
+
+  return bestCandidate;
+}
 
 const MODULES = [
   {
@@ -214,8 +310,224 @@ export function Dashboard() {
     });
   }, [searchQuery, selectedCategory]);
 
+  const containerRef = useRef(null);
+
+  // Helper to retrieve all active navigable module cards inside the dashboard container
+  const getCardItems = useCallback(() => {
+    if (!containerRef.current) return [];
+    return Array.from(
+      containerRef.current.querySelectorAll('[data-dashboard-card="true"]')
+    ).filter((el) => {
+      if (el.disabled || el.getAttribute('aria-hidden') === 'true' || el.offsetParent === null) {
+        return false;
+      }
+      const rect = el.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    });
+  }, []);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleKeyDown = (e) => {
+      // Ignore if modifier keys are pressed
+      if (e.ctrlKey || e.altKey || e.metaKey) return;
+
+      // Ignore if Totals Report modal is open or focus is inside a modal dialog
+      if (showTotalsReport || document.activeElement?.closest('[role="dialog"], .fixed')) {
+        return;
+      }
+
+      // Ignore if focus is in an input, textarea, or editable element
+      const activeTag = document.activeElement?.tagName?.toLowerCase();
+      if (
+        activeTag === 'input' ||
+        activeTag === 'textarea' ||
+        activeTag === 'select' ||
+        document.activeElement?.isContentEditable
+      ) {
+        return;
+      }
+
+      const cardItems = getCardItems();
+      const currentCard = cardItems.find(
+        (item) => item === document.activeElement || item.contains(document.activeElement)
+      );
+
+      const filterButtons = Array.from(
+        container.querySelectorAll('[data-dashboard-filter="true"]')
+      );
+      const currentFilter = filterButtons.find((btn) => btn === document.activeElement);
+
+      const totalsBtn = container.querySelector('[data-dashboard-totals="true"]');
+      const discrepancyLink = container.querySelector('[data-dashboard-discrepancy="true"]');
+
+      // 1. If focus is on a module card
+      if (currentCard) {
+        // Handle Enter / Space on module cards to open the module
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          currentCard.click();
+          return;
+        }
+
+        // Handle Arrow keys among module cards
+        if (['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp'].includes(e.key)) {
+          e.preventDefault();
+
+          const nextEl = findNextNavElement(currentCard, cardItems, e.key);
+          if (nextEl) {
+            nextEl.focus({ preventScroll: true });
+            nextEl.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+          } else if (e.key === 'ArrowUp') {
+            // At the top row of cards: Up Arrow moves focus back to category buttons
+            if (filterButtons.length > 0) {
+              const lastFilter = filterButtons[filterButtons.length - 1];
+              lastFilter.focus();
+              lastFilter.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+            } else {
+              const navDashboard = document.querySelector('[data-nav-id="dashboard"]');
+              if (navDashboard) {
+                navDashboard.focus();
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }
+            }
+          }
+          return;
+        }
+      }
+
+      // 2. If focus is on a category filter button
+      if (currentFilter) {
+        const filterIdx = filterButtons.indexOf(currentFilter);
+
+        // Enter or Space: activate the focused category and update displayed modules
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          currentFilter.click();
+          return;
+        }
+
+        if (e.key === 'ArrowRight') {
+          e.preventDefault();
+          const nextFilter = filterButtons[(filterIdx + 1) % filterButtons.length];
+          nextFilter?.focus();
+          return;
+        }
+
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          const prevFilter =
+            filterButtons[(filterIdx - 1 + filterButtons.length) % filterButtons.length];
+          prevFilter?.focus();
+          return;
+        }
+
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          if (filterIdx < filterButtons.length - 1) {
+            // Move sequentially to the next category button
+            const nextFilter = filterButtons[filterIdx + 1];
+            nextFilter?.focus();
+            nextFilter?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+          } else {
+            // On the last category button (Admin & System), move onward to module cards
+            if (cardItems.length > 0) {
+              cardItems[0].focus();
+              cardItems[0].scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+            }
+          }
+          return;
+        }
+
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          if (filterIdx > 0) {
+            // Move sequentially to the previous category button
+            const prevFilter = filterButtons[filterIdx - 1];
+            prevFilter?.focus();
+            prevFilter?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+          } else {
+            // On the first category button (All Modules), move back to preceding element in Dashboard welcome section
+            const precedingEl =
+              discrepancyLink ||
+              totalsBtn ||
+              document.querySelector('[data-nav-id="dashboard"]');
+            if (precedingEl) {
+              precedingEl.focus();
+              precedingEl.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+            }
+          }
+          return;
+        }
+      }
+
+      // 3. If focus is on Totals Report button in Dashboard welcome section
+      if (document.activeElement === totalsBtn) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          if (discrepancyLink) {
+            discrepancyLink.focus();
+            discrepancyLink.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+          } else if (filterButtons.length > 0) {
+            filterButtons[0].focus();
+            filterButtons[0].scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+          } else if (cardItems.length > 0) {
+            cardItems[0].focus();
+            cardItems[0].scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+          }
+          return;
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          const navDashboard = document.querySelector('[data-nav-id="dashboard"]');
+          if (navDashboard) {
+            navDashboard.focus();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+          return;
+        }
+      }
+
+      // 4. If focus is on discrepancy alert link in Dashboard welcome section
+      if (document.activeElement === discrepancyLink) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          if (filterButtons.length > 0) {
+            filterButtons[0].focus();
+            filterButtons[0].scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+          } else if (cardItems.length > 0) {
+            cardItems[0].focus();
+            cardItems[0].scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+          }
+          return;
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          if (totalsBtn) {
+            totalsBtn.focus();
+            totalsBtn.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+          } else {
+            const navDashboard = document.querySelector('[data-nav-id="dashboard"]');
+            if (navDashboard) {
+              navDashboard.focus();
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+          }
+          return;
+        }
+      }
+    };
+
+    container.addEventListener('keydown', handleKeyDown);
+    return () => {
+      container.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [getCardItems, showTotalsReport]);
+
   return (
-    <div className="space-y-3 sm:space-y-3.5">
+    <div ref={containerRef} className="space-y-3 sm:space-y-3.5 focus:outline-none">
       {/* 1. Welcome Banner with soft purple gradient and decorative graphic */}
       <div className="relative overflow-hidden rounded-2xl border border-[#E5E7F5]/60 bg-gradient-to-r from-[#EDE8FF] via-[#F4F0FF] to-[#EAE0FF] px-4 py-3 sm:px-5 sm:py-3.5 shadow-sm">
         <div className="relative z-10 flex flex-col justify-between gap-3 md:flex-row md:items-center">
@@ -235,8 +547,10 @@ export function Dashboard() {
           {canViewFinancials && (
             <div className="flex items-center gap-2 self-start md:self-auto">
               <button
+                data-dashboard-nav="true"
+                data-dashboard-totals="true"
                 onClick={() => setShowTotalsReport(true)}
-                className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-bold text-[#6F2DA8] shadow-soft border border-[#DDD0FF] hover:bg-[#F7F5FF] transition-all active:scale-95"
+                className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-bold text-[#6F2DA8] shadow-soft border border-[#DDD0FF] hover:bg-[#F7F5FF] transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-2"
               >
                 <PieChart size={14} />
                 <span>Totals Report</span>
@@ -296,7 +610,12 @@ export function Dashboard() {
               <AlertTriangle size={16} />
               <span>{summary.unresolved_handover_discrepancies.length} unresolved cash handover discrepancy</span>
             </div>
-            <Link to="/cash-handover" className="font-bold text-rose-800 underline hover:text-rose-950">
+            <Link
+              to="/cash-handover"
+              data-dashboard-nav="true"
+              data-dashboard-discrepancy="true"
+              className="font-bold text-rose-800 underline hover:text-rose-950 focus:outline-none focus:ring-2 focus:ring-rose-600 focus:ring-offset-2 rounded"
+            >
               Resolve now →
             </Link>
           </div>
@@ -311,14 +630,16 @@ export function Dashboard() {
           return (
             <button
               key={cat.id}
+              data-dashboard-nav="true"
+              data-dashboard-filter="true"
               onClick={() => setSelectedCategory(cat.id)}
-              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all whitespace-nowrap shadow-sm ${
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap border focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-2 focus-visible:ring-2 focus-visible:ring-[#6F2DA8] focus-visible:ring-offset-2 focus:border-[#6F2DA8] ${
                 isActive
-                  ? 'bg-[#351442] text-white shadow-soft font-bold'
-                  : 'bg-white text-ink-muted border border-border-soft hover:bg-lavender-50 hover:text-ink'
+                  ? 'bg-[#351442] text-white border-[#351442] shadow-sm font-semibold'
+                  : 'bg-white text-[#6F5B85] border-[#DDD0FF] hover:bg-[#FAF8FF] hover:border-[#C4B5FD] hover:text-[#5C238C] font-medium'
               }`}
             >
-              <Icon size={13} className={isActive ? 'text-white' : 'text-ink-muted'} />
+              <Icon size={13} className={isActive ? 'text-white' : 'text-[#6F5B85]'} />
               <span>{cat.label}</span>
             </button>
           );
@@ -337,8 +658,13 @@ export function Dashboard() {
             return (
               <div
                 key={item.to}
+                data-dashboard-card="true"
+                data-dashboard-nav="true"
+                tabIndex={0}
+                role="button"
+                aria-label={`${item.label} - ${item.headerTitle}`}
                 onClick={() => navigate(item.to)}
-                className="group relative cursor-pointer col-span-1 sm:col-span-2 md:col-span-2 lg:col-span-2 row-span-2 rounded-2xl border border-[#DDD0FF] bg-gradient-to-br from-[#EDE8FF] via-[#F8F5FF] to-white p-3.5 sm:p-4 shadow-sm transition-all hover:border-primary/40 hover:shadow-soft-md active:scale-[0.99] flex flex-col justify-between overflow-hidden"
+                className="group relative cursor-pointer col-span-1 sm:col-span-2 md:col-span-2 lg:col-span-2 row-span-2 rounded-2xl border border-[#DDD0FF] bg-gradient-to-br from-[#EDE8FF] via-[#F8F5FF] to-white p-3.5 sm:p-4 shadow-sm transition-all hover:border-primary/40 hover:shadow-soft-md active:scale-[0.99] flex flex-col justify-between overflow-hidden focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-2 focus:border-[#6F2DA8] focus-visible:ring-2 focus-visible:ring-[#6F2DA8] focus-visible:ring-offset-2 focus:shadow-md"
               >
                 {/* Background subtle glow */}
                 <div className="pointer-events-none absolute -right-10 -bottom-10 h-36 w-36 rounded-full bg-primary/5 blur-xl transition-transform group-hover:scale-125" />
@@ -369,7 +695,16 @@ export function Dashboard() {
 
                 {/* Bottom: Action Button + POS Screen Graphic */}
                 <div className="flex items-end justify-between relative z-10 gap-2">
-                  <button className="inline-flex items-center gap-1.5 rounded-full bg-[#6F2DA8] px-3.5 py-1.5 text-xs font-bold text-white shadow-soft transition-all hover:bg-[#5C238C] active:scale-95 shrink-0">
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    aria-label="Launch Counter Terminal"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(item.to);
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-[#6F2DA8] px-3.5 py-1.5 text-xs font-bold text-white shadow-soft transition-all hover:bg-[#5C238C] active:scale-95 shrink-0"
+                  >
                     <span>Launch Counter Terminal</span>
                     <ArrowRight size={13} className="transition-transform group-hover:translate-x-0.5" />
                   </button>
@@ -402,8 +737,13 @@ export function Dashboard() {
           return (
             <div
               key={item.to}
+              data-dashboard-card="true"
+              data-dashboard-nav="true"
+              tabIndex={0}
+              role="button"
+              aria-label={`${item.label} - ${item.subtitle}`}
               onClick={() => navigate(item.to)}
-              className="group relative cursor-pointer rounded-xl sm:rounded-2xl border border-border-soft bg-white p-2.5 sm:p-3 shadow-sm transition-all hover:border-primary/40 hover:shadow-soft-md active:scale-95 flex flex-col justify-between min-h-[76px] sm:min-h-[82px] overflow-hidden"
+              className="group relative cursor-pointer rounded-xl sm:rounded-2xl border border-border-soft bg-white p-2.5 sm:p-3 shadow-sm transition-all hover:border-primary/40 hover:shadow-soft-md active:scale-95 flex flex-col justify-between min-h-[76px] sm:min-h-[82px] overflow-hidden focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-2 focus:border-[#6F2DA8] focus-visible:ring-2 focus-visible:ring-[#6F2DA8] focus-visible:ring-offset-2 focus:shadow-md"
             >
               {/* Subtle corner tint gradient matching reference */}
               <div

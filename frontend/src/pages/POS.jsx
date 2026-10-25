@@ -19,6 +19,7 @@ import { ImageSearchModal } from '../components/ImageSearchModal.jsx';
 import { CustomerSelect } from '../components/CustomerSelect.jsx';
 import { BarcodeScannerModal } from '../components/BarcodeScannerModal.jsx';
 import { QuickSaleModal } from '../components/QuickSaleModal.jsx';
+import { handleFormKeyDown } from '../utils/formNavigation';
 
 const PAYMENT_METHODS = [
   { key: 'cash', label: 'Cash' },
@@ -1738,7 +1739,7 @@ function PaymentModal({
 
   return (
     <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/30 p-4">
-      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto card p-5">
+      <div role="dialog" aria-modal="true" data-form-container="true" onKeyDown={handleFormKeyDown} className="max-h-[90vh] w-full max-w-md overflow-y-auto card p-5">
         <div className="mb-3">
           <div className="flex items-center gap-2">
             <div className="text-lg font-semibold text-ink">{isQuickSale ? 'Quick Sale Payment' : 'Payment'}</div>

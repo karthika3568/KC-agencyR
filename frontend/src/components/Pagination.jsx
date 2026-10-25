@@ -50,10 +50,11 @@ export function Pagination({ page = 1, pageSize = 10, total = 0, onPageChange })
       <div className="flex items-center gap-1">
         <button
           type="button"
+          data-catalog-nav="true"
           onClick={() => onPageChange(currentPage - 1)}
           disabled={currentPage <= 1}
           aria-label="Previous page"
-          className="inline-flex items-center gap-1 rounded-lg border border-border-soft px-2 py-1 text-ink transition-colors hover:bg-lavender-100/60 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+          className="inline-flex items-center gap-1 rounded-lg border border-border-soft px-2 py-1 text-ink transition-colors hover:bg-lavender-100/60 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1"
         >
           <ChevronLeft size={13} />
           <span className="hidden sm:inline">Previous</span>
@@ -69,9 +70,10 @@ export function Pagination({ page = 1, pageSize = 10, total = 0, onPageChange })
               <button
                 key={p}
                 type="button"
+                data-catalog-nav="true"
                 onClick={() => onPageChange(p)}
                 aria-current={p === currentPage ? 'page' : undefined}
-                className={`min-w-[28px] h-7 rounded-lg text-xs font-semibold transition-colors ${
+                className={`min-w-[28px] h-7 rounded-lg text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1 ${
                   p === currentPage
                     ? 'bg-primary text-white shadow-xs'
                     : 'border border-border-soft text-ink hover:bg-lavender-100/60'
@@ -85,10 +87,11 @@ export function Pagination({ page = 1, pageSize = 10, total = 0, onPageChange })
 
         <button
           type="button"
+          data-catalog-nav="true"
           onClick={() => onPageChange(currentPage + 1)}
           disabled={currentPage >= totalPages}
           aria-label="Next page"
-          className="inline-flex items-center gap-1 rounded-lg border border-border-soft px-2 py-1 text-ink transition-colors hover:bg-lavender-100/60 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+          className="inline-flex items-center gap-1 rounded-lg border border-border-soft px-2 py-1 text-ink transition-colors hover:bg-lavender-100/60 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1"
         >
           <span className="hidden sm:inline">Next</span>
           <ChevronRight size={13} />

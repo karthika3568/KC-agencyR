@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { listUsers, createUser, updateUser } from '../api/settings';
+import { handleFormKeyDown } from '../utils/formNavigation';
 
 const BLANK = { name: '', username: '', password: '', pin: '', role: 'staff' };
 
@@ -90,7 +91,7 @@ export default function Users({ embedded = false }) {
 
       {form && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 no-print p-4">
-          <form onSubmit={handleSave} className="card w-full max-w-md space-y-3">
+          <form onSubmit={handleSave} onKeyDown={handleFormKeyDown} className="card w-full max-w-md space-y-3">
             <h2 className="font-bold text-lg text-gray-900">{form.id ? t('common.edit') : t('common.add')}</h2>
             <div>
               <label className="label">{t('common.name')}</label>

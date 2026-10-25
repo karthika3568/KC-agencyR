@@ -5,6 +5,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App.jsx';
 import { AuthProvider } from './hooks/useAuth.jsx';
 import './index.css';
+import { initGlobalFormNavigation } from './utils/formNavigation';
+
+initGlobalFormNavigation();
 
 const queryClient = new QueryClient();
 

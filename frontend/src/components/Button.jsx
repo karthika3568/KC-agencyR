@@ -23,7 +23,7 @@ export function Button({
 
   return (
     <button
-      className={`inline-flex items-center justify-center gap-1.5 rounded-xl font-semibold transition-all active:scale-[0.99] ${sizeClasses} ${VARIANT_CLASSES[variant] || VARIANT_CLASSES.primary} ${className}`}
+      className={`inline-flex items-center justify-center gap-1.5 rounded-xl font-semibold transition-all active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1 ${sizeClasses} ${VARIANT_CLASSES[variant] || VARIANT_CLASSES.primary} ${className}`}
       {...props}
     >
       {icon}
