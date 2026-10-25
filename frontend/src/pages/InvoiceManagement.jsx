@@ -153,24 +153,80 @@ function ViewModal({ id, onClose }) {
           {data.customer_name || 'Walk-in'} · {data.invoice_date} · Billed by {data.employee_name}
           {data.edited_at && <span> · Last edited {data.edited_at}</span>}
         </div>
-        <table className="mb-3 w-full text-xs">
-          <thead>
-            <tr className="border-b border-border-soft text-left text-ink-muted">
-              <th className="py-1">Item</th><th className="py-1">Qty</th><th className="py-1">Rate</th><th className="py-1">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.items.map((line) => (
-              <tr key={line.id} className="border-b border-border-soft">
-                <td className="py-1">{line.item_name_snapshot}</td>
-                <td className="py-1">{line.qty} {line.unit_code}</td>
-                <td className="py-1">{line.rate}</td>
-                <td className="py-1">{line.net_amount ?? line.line_total}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <div className="mb-3 flex justify-end text-sm font-semibold text-ink">Grand Total: Rs. {data.grand_total}</div>
+        {(() => {
+          let percentDiscountTotal = 0;
+          let rupeeDiscountTotal = 0;
+          (data.items || []).forEach((it) => {
+            const gross = Number(it.qty || 0) * Number(it.rate || 0);
+            const pct = Number(it.discount_percent || 0);
+            const pctDisc = gross > 0 && pct > 0 ? Math.round(((gross * pct) / 100) * 100) / 100 : 0;
+            const directAmt = Math.max(0, Math.round((Number(it.discount_amount || 0) - pctDisc) * 100) / 100);
+            percentDiscountTotal += pctDisc;
+            rupeeDiscountTotal += directAmt;
+          });
+          return (
+            <>
+              <table className="mb-3 w-full text-xs">
+                <thead>
+                  <tr className="border-b border-border-soft text-left text-ink-muted">
+                    <th className="py-1">Item</th>
+                    <th className="py-1 text-center">Qty</th>
+                    <th className="py-1 text-right">Rate</th>
+                    <th className="py-1 text-right">Disc (₹)</th>
+                    <th className="py-1 text-right">Disc (%)</th>
+                    <th className="py-1 text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.items.map((line) => {
+                    const gross = Number(line.qty || 0) * Number(line.rate || 0);
+                    const pct = Number(line.discount_percent || 0);
+                    const pctDisc = gross > 0 && pct > 0 ? Math.round(((gross * pct) / 100) * 100) / 100 : 0;
+                    const directAmt = Math.max(0, Math.round((Number(line.discount_amount || 0) - pctDisc) * 100) / 100);
+                    return (
+                      <tr key={line.id} className="border-b border-border-soft">
+                        <td className="py-1 font-medium">{line.item_name_snapshot}</td>
+                        <td className="py-1 text-center">{line.qty} {line.unit_code}</td>
+                        <td className="py-1 text-right">₹{Number(line.rate).toFixed(2)}</td>
+                        <td className="py-1 text-right">{directAmt > 0 ? `₹${directAmt.toFixed(2)}` : '-'}</td>
+                        <td className="py-1 text-right">{pct > 0 ? `${pct.toFixed(2)}%` : '-'}</td>
+                        <td className="py-1 text-right font-semibold">₹{Number(line.net_amount ?? line.line_total).toFixed(2)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <div className="mb-3 space-y-1 text-xs border-t border-border-soft pt-2">
+                <div className="flex justify-between text-ink-muted">
+                  <span>Subtotal:</span>
+                  <span>₹{Number(data.subtotal || 0).toFixed(2)}</span>
+                </div>
+                {percentDiscountTotal > 0 && (
+                  <div className="flex justify-between text-ink-muted">
+                    <span>Discount (%):</span>
+                    <span className="text-danger font-medium">- ₹{percentDiscountTotal.toFixed(2)}</span>
+                  </div>
+                )}
+                {rupeeDiscountTotal > 0 && (
+                  <div className="flex justify-between text-ink-muted">
+                    <span>Discount (₹):</span>
+                    <span className="text-danger font-medium">- ₹{rupeeDiscountTotal.toFixed(2)}</span>
+                  </div>
+                )}
+                {percentDiscountTotal <= 0 && rupeeDiscountTotal <= 0 && Number(data.discount_amount || 0) > 0 && (
+                  <div className="flex justify-between text-ink-muted">
+                    <span>Discount:</span>
+                    <span className="text-danger font-medium">- ₹{Number(data.discount_amount).toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-sm font-bold text-ink pt-1 border-t border-border-soft">
+                  <span>Grand Total:</span>
+                  <span>₹{Number(data.grand_total).toFixed(2)}</span>
+                </div>
+              </div>
+            </>
+          );
+        })()}
         {data.bill_type === 'gst' && data.status === 'completed' && (
           <GstFilingPanel invoice={data} canManage={canManageGst} />
         )}
