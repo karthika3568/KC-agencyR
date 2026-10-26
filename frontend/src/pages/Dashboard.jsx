@@ -439,11 +439,11 @@ export function Dashboard() {
 
       {/* Totals Report Modal */}
       {canViewFinancials && showTotalsReport && summary && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-3xl rounded-3xl bg-white p-6 sm:p-7 text-ink shadow-soft-lg space-y-5 border border-border-soft">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-4 backdrop-blur-sm">
+          <div className="w-full max-w-3xl rounded-3xl bg-white p-4 sm:p-7 text-ink shadow-soft-lg space-y-4 sm:space-y-5 border border-border-soft max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-border-soft pb-4">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary-soft text-primary border border-lavender-300">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary-soft text-primary border border-lavender-300 shrink-0">
                   <TrendingUp size={20} />
                 </div>
                 <div>
@@ -463,7 +463,7 @@ export function Dashboard() {
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 max-h-[60vh] overflow-y-auto pr-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 max-h-[60vh] overflow-y-auto pr-1">
               {SUMMARY_METRICS.map((c) => (
                 <div
                   key={c.key}

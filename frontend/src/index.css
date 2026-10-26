@@ -67,5 +67,16 @@
     overflow-y: auto;
     max-height: calc(100vh - 215px);
   }
+
+  /* Hide scrollbar while preserving full scrollability */
+  .scrollbar-none::-webkit-scrollbar,
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-none,
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
 }
 

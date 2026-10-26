@@ -122,8 +122,8 @@ function PricingPanel({ type, label }) {
       )}
 
       <div className="card overflow-hidden">
-        <div className="max-h-[calc(100vh-200px)] overflow-y-auto">
-          <table className="w-full text-xs">
+        <div className="max-h-[calc(100vh-200px)] overflow-x-auto overflow-y-auto">
+          <table className="w-full min-w-[540px] text-xs">
             <thead className="sticky top-0 bg-page z-10 shadow-sm">
               <tr className="border-b border-border-soft text-left uppercase text-ink-muted font-medium bg-surface-subtle/30">
                 <th className="px-3 py-2">Item</th>

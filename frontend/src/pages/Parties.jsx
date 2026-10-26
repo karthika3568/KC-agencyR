@@ -153,7 +153,7 @@ function CustomersPanel({ canManage }) {
     <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
       {/* LEFT FORM */}
       <div className="lg:col-span-5">
-        <div className="card p-3.5 border border-border-soft bg-white shadow-xs rounded-xl sticky top-2">
+        <div className="card p-3.5 border border-border-soft bg-white shadow-xs rounded-xl lg:sticky lg:top-2">
           <div className="flex items-center justify-between border-b border-border-soft pb-2 mb-2.5">
             <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
               <Users className="h-4 w-4 text-indigo-600" />
@@ -324,7 +324,7 @@ function CustomersPanel({ canManage }) {
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-700">{filtered.length} Total</span>
             </h2>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={13} />
                 <input
@@ -416,7 +416,7 @@ function CustomersPanel({ canManage }) {
           )}
 
           <div className="overflow-x-auto max-h-[calc(100vh-210px)] overflow-y-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full min-w-[600px] text-left text-xs">
               <thead className="sticky top-0 bg-slate-50 z-10">
                 <tr className="border-b border-border-soft bg-slate-50/95 text-[10.5px] font-bold uppercase tracking-wider text-slate-500">
                   <th className="px-3 py-2">#</th>
@@ -580,7 +580,7 @@ function SuppliersPanel({ canManage }) {
     <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
       {/* LEFT FORM */}
       <div className="lg:col-span-4">
-        <div className="card p-3.5 border border-border-soft bg-white shadow-xs rounded-xl sticky top-2">
+        <div className="card p-3.5 border border-border-soft bg-white shadow-xs rounded-xl lg:sticky lg:top-2">
           <div className="flex items-center justify-between border-b border-border-soft pb-2 mb-2.5">
             <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
               <Truck className="h-4 w-4 text-indigo-600" />
@@ -650,7 +650,7 @@ function SuppliersPanel({ canManage }) {
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-700">{filtered.length} Total</span>
             </h2>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={13} />
                 <input
@@ -680,7 +680,7 @@ function SuppliersPanel({ canManage }) {
           </div>
 
           <div className="overflow-x-auto max-h-[calc(100vh-210px)] overflow-y-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full min-w-[600px] text-left text-xs">
               <thead className="sticky top-0 bg-slate-50 z-10">
                 <tr className="border-b border-border-soft bg-slate-50/95 text-[10.5px] font-bold uppercase tracking-wider text-slate-500">
                   <th className="px-3 py-2">#</th>

@@ -54,8 +54,8 @@ export function CashHandover() {
         <div className="border-b border-border-soft px-3.5 py-2 text-xs sm:text-sm font-semibold text-ink">
           Pending Salesman Collections Ready for Handover
         </div>
-        <div className="max-h-[calc(50vh-90px)] overflow-y-auto">
-          <table className="w-full text-xs">
+        <div className="max-h-[calc(50vh-90px)] overflow-x-auto overflow-y-auto">
+          <table className="w-full min-w-[650px] text-xs">
             <thead className="sticky top-0 bg-page z-10 shadow-sm">
               <tr className="border-b border-border-soft text-left uppercase text-ink-muted font-medium bg-surface-subtle/30">
                 <th className="px-3 py-2">Salesman</th>
@@ -111,8 +111,8 @@ export function CashHandover() {
         <div className="border-b border-border-soft px-3.5 py-2 text-xs sm:text-sm font-semibold text-ink">
           Reconciliation Audit Register
         </div>
-        <div className="max-h-[calc(50vh-90px)] overflow-y-auto">
-          <table className="w-full text-xs">
+        <div className="max-h-[calc(50vh-90px)] overflow-x-auto overflow-y-auto">
+          <table className="w-full min-w-[650px] text-xs">
             <thead className="sticky top-0 bg-page z-10 shadow-sm">
               <tr className="border-b border-border-soft text-left uppercase text-ink-muted font-medium bg-surface-subtle/30">
                 <th className="px-3 py-2">Handover #</th>

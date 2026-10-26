@@ -15,6 +15,8 @@ export function Button({
   size = 'md',
   icon,
   shortcut,
+  loading = false,
+  disabled = false,
   className = '',
   children,
   ...props
@@ -23,10 +25,15 @@ export function Button({
 
   return (
     <button
+      disabled={disabled || Boolean(loading)}
       className={`inline-flex items-center justify-center gap-1.5 rounded-xl font-semibold transition-all active:scale-[0.99] ${sizeClasses} ${VARIANT_CLASSES[variant] || VARIANT_CLASSES.primary} ${className}`}
       {...props}
     >
-      {icon}
+      {loading ? (
+        <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+      ) : (
+        icon
+      )}
       <span>{children}</span>
       {shortcut && (
         <span className="ml-1 rounded bg-black/10 px-1.5 py-0.5 text-[10px] font-medium opacity-80">{shortcut}</span>

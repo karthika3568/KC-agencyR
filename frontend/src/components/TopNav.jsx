@@ -403,9 +403,9 @@ export function TopNav() {
       </div>
 
       {/* 2. MAIN NAVBAR (Dark Navy/Purple Bar: Primary Nav Links Centered) */}
-      <div className="flex h-11 w-full shrink-0 items-center justify-center bg-[#2B0E36] px-4 sm:px-6 shadow-md border-b border-white/10">
-        {/* Center: Primary Headings perfectly centered with equal, uniform spacing */}
-        <nav className="flex items-center justify-center gap-1.5 sm:gap-2.5 md:gap-3.5 lg:gap-4 overflow-x-auto scrollbar-none">
+      <div className="flex h-11 w-full shrink-0 items-center bg-[#2B0E36] px-2 sm:px-6 shadow-md border-b border-white/10 overflow-x-auto scrollbar-none">
+        {/* Primary Headings: centered on desktop via mx-auto, starts cleanly at left on mobile without data-loss clipping */}
+        <nav className="flex items-center gap-1.5 sm:gap-2.5 md:gap-3.5 lg:gap-4 min-w-max mx-auto px-1">
           {visibleSections.map((sec) => {
             const Icon = sec.icon;
             const isActive = isSectionActive(sec, location.pathname);
@@ -415,7 +415,7 @@ export function TopNav() {
                 key={sec.id}
                 type="button"
                 onClick={() => handleSectionClick(sec)}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs whitespace-nowrap transition-all duration-150 ${
+                className={`flex items-center gap-2 px-3 py-1.5 sm:px-3.5 rounded-xl text-xs whitespace-nowrap transition-all duration-150 ${
                   isActive
                     ? 'bg-[#8244AD] text-white shadow-soft font-bold'
                     : 'text-[#D8CEE2]/90 hover:text-white hover:bg-white/10 font-semibold'
@@ -431,8 +431,8 @@ export function TopNav() {
 
       {/* 3. SECONDARY SUB-NAVBAR (Clean White Row for Sub-items when in a section) */}
       {visibleSubItems.length > 0 && (
-        <div className="flex w-full shrink-0 items-center justify-center border-b border-[#E5E7F5] bg-white px-4 sm:px-6 shadow-[0_1px_3px_rgba(0,0,0,0.03)] overflow-x-auto scrollbar-none">
-          <div className="flex items-center justify-center gap-2 sm:gap-4 lg:gap-6 py-0">
+        <div className="flex w-full shrink-0 items-center border-b border-[#E5E7F5] bg-white px-2 sm:px-6 shadow-[0_1px_3px_rgba(0,0,0,0.03)] overflow-x-auto scrollbar-none">
+          <div className="flex items-center gap-2 sm:gap-4 lg:gap-6 min-w-max mx-auto px-1 py-0">
             {visibleSubItems.map((item) => {
               const ItemIcon = item.icon;
               const isItemActive =
@@ -441,7 +441,7 @@ export function TopNav() {
                 <NavLink
                   key={item.to}
                   to={item.to}
-                  className={`group flex items-center gap-2 px-3.5 py-2.5 text-xs sm:text-[13px] font-semibold whitespace-nowrap transition-all border-b-2 ${
+                  className={`group flex items-center gap-2 px-3 sm:px-3.5 py-2.5 text-xs sm:text-[13px] font-semibold whitespace-nowrap transition-all border-b-2 ${
                     isItemActive
                       ? 'border-[#8244AD] text-[#8244AD] font-bold'
                       : 'border-transparent text-[#697797] hover:text-[#17233D] hover:border-[#D8CEE2]'

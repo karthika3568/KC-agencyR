@@ -643,7 +643,7 @@ export function InvoiceManagement() {
       <Card
         title="Invoices"
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="relative">
               <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
               <input
@@ -673,8 +673,8 @@ export function InvoiceManagement() {
           </div>
         }
       >
-        <div className="max-h-[calc(100vh-210px)] overflow-y-auto">
-          <table className="w-full text-xs">
+        <div className="max-h-[calc(100vh-210px)] overflow-x-auto overflow-y-auto">
+          <table className="w-full min-w-[700px] text-xs">
             <thead className="sticky top-0 bg-page z-10 shadow-sm">
               <tr className="border-b border-border-soft text-left uppercase text-ink-muted font-medium bg-surface-subtle/30">
                 <th className="px-3 py-2">Invoice #</th>

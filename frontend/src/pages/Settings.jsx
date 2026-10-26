@@ -41,14 +41,14 @@ function CompanyProfilePanel({ canManage }) {
   return (
     <div className="card p-3.5 space-y-2.5">
       <div className="font-semibold text-ink text-xs sm:text-sm">Company Profile</div>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
         {field('branch_name', 'Branch name')}
         {field('print_name', 'Print name (on invoice header)')}
         {field('gstin', 'GSTIN')}
         {field('pan_number', 'PAN number')}
         {field('phone', 'Phone')}
         {field('support_email', 'Support email')}
-        {field('address_line1', 'Address', 'col-span-2 sm:col-span-3')}
+        {field('address_line1', 'Address', 'col-span-1 sm:col-span-2 md:col-span-3')}
         {field('city', 'City')}
         {field('state', 'State')}
         {field('pincode', 'Pincode')}
@@ -90,7 +90,7 @@ function PrintSettingsPanel({ canManage }) {
   return (
     <div className="card p-3.5 space-y-2.5">
       <div className="font-semibold text-ink text-xs sm:text-sm">Thermal Printer Setup</div>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
         <label className="flex flex-col gap-0.5">
           <span className="text-xs font-medium text-ink-muted">Printer type</span>
           <select value={form.printer_type} onChange={(e) => setForm({ ...form, printer_type: e.target.value })} disabled={!canManage} className="input disabled:bg-page text-xs py-1">
@@ -157,7 +157,8 @@ function SequencesPanel({ canManage }) {
     <div className="card p-3.5 space-y-2">
       <div className="font-semibold text-ink text-xs sm:text-sm">Invoice Sequence Prefixes</div>
       <p className="text-xs text-ink-muted">Only the prefix can be changed — the running number keeps counting so numbering never repeats.</p>
-      <table className="w-full text-xs">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[480px] text-xs">
         <thead>
           <tr className="border-b border-border-soft text-left uppercase text-ink-muted bg-surface-subtle/30 font-medium">
             <th className="px-3 py-1.5">Series</th>
@@ -189,7 +190,8 @@ function SequencesPanel({ canManage }) {
             </tr>
           ))}
         </tbody>
-      </table>
+        </table>
+      </div>
     </div>
   );
 }

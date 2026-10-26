@@ -591,7 +591,7 @@ export function BarcodeScannerModal({ onScan, onClose }) {
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-border-soft overflow-hidden flex flex-col animate-in zoom-in-95 duration-150"
+        className="w-full max-w-md max-h-[92vh] overflow-y-auto rounded-2xl bg-white shadow-2xl border border-border-soft flex flex-col animate-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

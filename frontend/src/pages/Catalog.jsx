@@ -205,7 +205,7 @@ function CategoriesPanel({ canManage }) {
     <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
       {/* LEFT SIDE: Create / Edit Category Form */}
       <div className="lg:col-span-4">
-        <div className="card p-3.5 border border-border-soft bg-white shadow-xs rounded-xl sticky top-2">
+        <div className="card p-3.5 border border-border-soft bg-white shadow-xs rounded-xl lg:sticky lg:top-2">
           <div className="flex items-center justify-between border-b border-border-soft pb-2 mb-2.5">
             <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
               <Tag className="h-4 w-4 text-indigo-600" />
@@ -635,7 +635,7 @@ function BrandsPanel({ canManage }) {
     <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
       {/* LEFT FORM */}
       <div className="lg:col-span-4">
-        <div className="card p-3.5 border border-border-soft bg-white shadow-xs rounded-xl sticky top-2">
+        <div className="card p-3.5 border border-border-soft bg-white shadow-xs rounded-xl lg:sticky lg:top-2">
           <div className="flex items-center justify-between border-b border-border-soft pb-2 mb-2.5">
             <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
               <Tag className="h-4 w-4 text-indigo-600" />
@@ -946,7 +946,7 @@ function StockUnitsPanel({ canManage }) {
     <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
       {/* LEFT FORM */}
       <div className="lg:col-span-4">
-        <div className="card p-3.5 border border-border-soft bg-white shadow-xs rounded-xl sticky top-2">
+        <div className="card p-3.5 border border-border-soft bg-white shadow-xs rounded-xl lg:sticky lg:top-2">
           <div className="flex items-center justify-between border-b border-border-soft pb-2 mb-2.5">
             <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
               <Tag className="h-4 w-4 text-indigo-600" />
@@ -1173,7 +1173,7 @@ function TaxCodesPanel({ canManage }) {
     <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
       {/* LEFT FORM */}
       <div className="lg:col-span-4">
-        <div className="card p-3.5 border border-border-soft bg-white shadow-xs rounded-xl sticky top-2">
+        <div className="card p-3.5 border border-border-soft bg-white shadow-xs rounded-xl lg:sticky lg:top-2">
           <div className="flex items-center justify-between border-b border-border-soft pb-2 mb-2.5">
             <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
               <Tag className="h-4 w-4 text-indigo-600" />
