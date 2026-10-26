@@ -17,6 +17,7 @@ import { Button } from '../components/Button.jsx';
 import { Pagination } from '../components/Pagination.jsx';
 import { useClientPagination } from '../hooks/useClientPagination';
 import { usePermission } from '../hooks/usePermission';
+import { handleFormKeyDown } from '../utils/formNavigation';
 
 const BOOKING_SOURCES = [
   { value: 'direct', label: 'Direct Walk-in' },
@@ -576,7 +577,7 @@ function CustomerPrebookingPanel() {
               </h2>
             </div>
 
-            <form onSubmit={handleFormSubmit} className="space-y-2">
+            <form onSubmit={handleFormSubmit} onKeyDown={handleFormKeyDown} className="space-y-2">
               {formError && <div className="text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{formError}</div>}
 
               <div>
@@ -1204,7 +1205,7 @@ function SupplierRequestPanel() {
               </h2>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-2">
+            <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="space-y-2">
               {formError && <div className="text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{formError}</div>}
 
               <div>

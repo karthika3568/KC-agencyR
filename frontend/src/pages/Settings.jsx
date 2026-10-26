@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { settingsApi } from '../api/admin';
 import { Tabs } from '../components/Tabs';
 import { usePermission } from '../hooks/usePermission';
+import { handleFormKeyDown } from '../utils/formNavigation';
 
 function CompanyProfilePanel({ canManage }) {
   const queryClient = useQueryClient();
@@ -39,7 +40,7 @@ function CompanyProfilePanel({ canManage }) {
   );
 
   return (
-    <div className="card p-3.5 space-y-2.5">
+    <div data-form-container="true" onKeyDown={handleFormKeyDown} className="card p-3.5 space-y-2.5">
       <div className="font-semibold text-ink text-xs sm:text-sm">Company Profile</div>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
         {field('branch_name', 'Branch name')}
@@ -88,7 +89,7 @@ function PrintSettingsPanel({ canManage }) {
   if (!form) return <p className="text-ink-muted text-xs">Loading…</p>;
 
   return (
-    <div className="card p-3.5 space-y-2.5">
+    <div data-form-container="true" onKeyDown={handleFormKeyDown} className="card p-3.5 space-y-2.5">
       <div className="font-semibold text-ink text-xs sm:text-sm">Thermal Printer Setup</div>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
         <label className="flex flex-col gap-0.5">
@@ -154,7 +155,7 @@ function SequencesPanel({ canManage }) {
   const sequences = sequencesQuery.data || [];
 
   return (
-    <div className="card p-3.5 space-y-2">
+    <div data-form-container="true" onKeyDown={handleFormKeyDown} className="card p-3.5 space-y-2">
       <div className="font-semibold text-ink text-xs sm:text-sm">Invoice Sequence Prefixes</div>
       <p className="text-xs text-ink-muted">Only the prefix can be changed — the running number keeps counting so numbering never repeats.</p>
       <div className="overflow-x-auto">
@@ -228,7 +229,7 @@ function FreeQtySettingsPanel({ canManage }) {
   if (!form) return <p className="text-ink-muted text-xs">Loading…</p>;
 
   return (
-    <div className="card p-3.5 space-y-2.5">
+    <div data-form-container="true" onKeyDown={handleFormKeyDown} className="card p-3.5 space-y-2.5">
       <div>
         <div className="font-semibold text-ink text-xs sm:text-sm">Free Quantity Configuration</div>
         <p className="text-xs text-ink-muted">

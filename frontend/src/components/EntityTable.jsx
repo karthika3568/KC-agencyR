@@ -3,6 +3,7 @@ import { Plus, Pencil, Trash2, Check, X } from 'lucide-react';
 import { Button } from './Button.jsx';
 import { Pagination } from './Pagination.jsx';
 import { useClientPagination } from '../hooks/useClientPagination';
+import { handleFormKeyDown } from '../utils/formNavigation';
 
 function FieldInput({ f, value, onChange }) {
   if (f.type === 'select') {
@@ -91,7 +92,7 @@ export function EntityTable({ title, fields, columns, rows, onCreate, onUpdate, 
       <div className="border-b border-border-soft px-4 py-2.5 font-semibold text-ink text-sm">{title}</div>
 
       {canManage && (
-        <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-2 border-b border-border-soft px-4 py-2.5">
+        <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="flex flex-wrap items-end gap-2 border-b border-border-soft px-4 py-2.5">
           {fields.map((f) => (
             <div key={f.name}>
               <label className="mb-0.5 block text-[11px] font-medium text-ink-muted">{f.label}</label>
@@ -122,7 +123,7 @@ export function EntityTable({ title, fields, columns, rows, onCreate, onUpdate, 
             editingId === row.id ? (
               <tr key={row.id} className="border-b border-border-soft bg-primary-soft/30 last:border-0">
                 <td colSpan={columns.length} className="px-4 py-2.5">
-                  <div className="flex flex-wrap items-end gap-2">
+                  <div data-form-container="true" onKeyDown={handleFormKeyDown} className="flex flex-wrap items-end gap-2">
                     {fields.map((f) => (
                       <div key={f.name}>
                         <label className="mb-1 block text-xs font-medium text-ink-muted">{f.label}</label>

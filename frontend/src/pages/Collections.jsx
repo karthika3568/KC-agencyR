@@ -6,6 +6,7 @@ import { usePermission } from '../hooks/usePermission';
 import { Button } from '../components/Button.jsx';
 import { Pagination } from '../components/Pagination';
 import { useClientPagination } from '../hooks/useClientPagination';
+import { handleFormKeyDown } from '../utils/formNavigation';
 
 function CollectModal({ customer, onClose }) {
   const queryClient = useQueryClient();
@@ -69,7 +70,7 @@ function CollectModal({ customer, onClose }) {
 
   return (
     <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/30 p-4">
-      <div className="w-full max-w-[520px] max-h-[90vh] overflow-y-auto card p-5">
+      <div role="dialog" aria-modal="true" data-form-container="true" onKeyDown={handleFormKeyDown} className="w-full max-w-[520px] max-h-[90vh] overflow-y-auto card p-5">
         <div className="mb-1 text-lg font-semibold text-ink">Collect from {customer.ledger_name}</div>
         <div className="mb-3 text-xs text-ink-muted">
           Credit limit: Rs. {customer.credit_limit} · Outstanding: Rs. {customer.total_due}

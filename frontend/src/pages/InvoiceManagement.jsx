@@ -11,6 +11,7 @@ import { Button } from '../components/Button.jsx';
 import { Pagination } from '../components/Pagination.jsx';
 import { PrintPreviewModal } from '../components/PrintPreviewModal.jsx';
 import { usePermission } from '../hooks/usePermission';
+import { handleFormKeyDown } from '../utils/formNavigation';
 
 const STATUS_VARIANT = {
   paid: 'success', partial: 'warning', credit: 'gold', cancelled: 'danger', returned: 'danger',
@@ -121,15 +122,15 @@ function GstFilingPanel({ invoice, canManage }) {
       )}
 
       {transportOpen && (
-        <div className="mt-2 grid grid-cols-2 gap-2 rounded bg-page p-2">
+        <form onSubmit={(e) => { e.preventDefault(); saveTransport(); }} onKeyDown={handleFormKeyDown} className="mt-2 grid grid-cols-2 gap-2 rounded bg-page p-2">
           <input className="input" placeholder="Transporter name" value={transporterName} onChange={(e) => setTransporterName(e.target.value)} />
           <input className="input" placeholder="Transporter GSTIN" value={transporterGstin} onChange={(e) => setTransporterGstin(e.target.value)} />
           <input className="input" type="number" placeholder="Distance (km)" value={distance} onChange={(e) => setDistance(e.target.value)} />
           <input className="input" placeholder="Vehicle No" value={vehicleNo} onChange={(e) => setVehicleNo(e.target.value)} />
           <div className="col-span-2 flex justify-end">
-            <Button size="sm" disabled={busy === 'transport'} onClick={saveTransport}>{busy === 'transport' ? 'Saving…' : 'Save Transport Details'}</Button>
+            <Button size="sm" type="submit" disabled={busy === 'transport'}>{busy === 'transport' ? 'Saving…' : 'Save Transport Details'}</Button>
           </div>
-        </div>
+        </form>
       )}
 
       {actionError && <div className="mt-2 rounded bg-red-50 px-2 py-1 text-xs text-danger">{actionError}</div>}
@@ -426,7 +427,7 @@ function EditModal({ id, onClose }) {
 
   return (
     <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/30 p-4">
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto card p-5">
+      <div role="dialog" aria-modal="true" data-form-container="true" onKeyDown={handleFormKeyDown} className="max-h-[90vh] w-full max-w-2xl overflow-y-auto card p-5">
         <div className="mb-1 flex items-center justify-between">
           <div className="text-lg font-semibold text-ink">Edit {invoice.invoice_no}</div>
           <Badge variant="warning">Original total: Rs. {invoice.grand_total}</Badge>

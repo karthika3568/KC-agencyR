@@ -7,6 +7,7 @@ import { usePermission } from '../hooks/usePermission';
 import { Button } from '../components/Button.jsx';
 import { Pagination } from '../components/Pagination';
 import { useClientPagination } from '../hooks/useClientPagination';
+import { handleFormKeyDown } from '../utils/formNavigation';
 
 function ExpensesPanel({ canManage }) {
   const queryClient = useQueryClient();
@@ -113,7 +114,7 @@ function ExpensesPanel({ canManage }) {
               </h2>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-2">
+            <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="space-y-2">
               {formError && (
                 <div className="text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{formError}</div>
               )}
@@ -362,7 +363,7 @@ function OtherIncomePanel({ canManage }) {
               </h2>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-2">
+            <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="space-y-2">
               {formError && (
                 <div className="text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{formError}</div>
               )}

@@ -9,6 +9,7 @@ import { usePermission } from '../hooks/usePermission';
 import { downloadReportPdf, downloadReportExcel, NUMERIC_REPORT_KEYS } from '../utils/reportPdf';
 import { Pagination } from '../components/Pagination';
 import { useClientPagination } from '../hooks/useClientPagination';
+import { handleFormKeyDown } from '../utils/formNavigation';
 
 /**
  * Custom hook to manage table row checkbox selection.
@@ -86,11 +87,18 @@ function DateRangeBar({ from, to, setFrom, setTo, onApply, onReset, onExport, pd
         const cols = excelConfig?.columns || pdfConfig?.columns;
         const filename = excelConfig?.filename || pdfConfig?.filename?.replace('.pdf', '.csv') || 'report.csv';
         const title = excelConfig?.title || pdfConfig?.title || 'Report';
+        let selectedTotalsRow = excelConfig?.totalsRow || pdfConfig?.totalsRow;
+        if (selectedTotalsRow) {
+          const totalKeys = Object.keys(selectedTotalsRow);
+          selectedTotalsRow = Object.fromEntries(
+            totalKeys.map((k) => [k, selection.selectedRows.reduce((s, r) => s + (Number(r[k]) || 0), 0)])
+          );
+        }
         downloadReportExcel({
           title,
           columns: cols,
           rows: selection.selectedRows,
-          totalsRow: excelConfig?.totalsRow || pdfConfig?.totalsRow,
+          totalsRow: selectedTotalsRow,
           filename,
         });
       } else {
@@ -135,16 +143,18 @@ function DateRangeBar({ from, to, setFrom, setTo, onApply, onReset, onExport, pd
   return (
     <div className="mb-2 flex flex-col gap-1.5">
       <div className="flex flex-wrap items-end gap-1.5">
-        <div>
-          <label className="block text-xs text-ink-muted">From</label>
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="input w-36 text-xs py-1" />
-        </div>
-        <div>
-          <label className="block text-xs text-ink-muted">To</label>
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="input w-36 text-xs py-1" />
-        </div>
-        <Button size="sm" onClick={onApply}>Apply</Button>
-        <button type="button" onClick={onReset} className="text-xs font-medium text-ink-muted hover:underline">Reset</button>
+        <form onSubmit={(e) => { e.preventDefault(); onApply(); }} onKeyDown={handleFormKeyDown} className="flex flex-wrap items-end gap-1.5">
+          <div>
+            <label className="block text-xs text-ink-muted">From</label>
+            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="input w-36 text-xs py-1" />
+          </div>
+          <div>
+            <label className="block text-xs text-ink-muted">To</label>
+            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="input w-36 text-xs py-1" />
+          </div>
+          <Button size="sm" type="submit">Apply</Button>
+          <button type="button" onClick={onReset} className="text-xs font-medium text-ink-muted hover:underline">Reset</button>
+        </form>
 
         {canExport && (
           <div className="w-full sm:w-auto sm:ml-auto flex flex-wrap items-center gap-1.5 pt-1 sm:pt-0">
@@ -1280,7 +1290,8 @@ export function Reports() {
   const canManagePricing = usePermission('catalog.manage_items');
 
   const tabs = [];
-  if (canGst) tabs.push({ key: 'gst', label: 'GST Sales Register', content: <GstRegisterPanel canExport={canExport} /> });
+  if (canGst) tabs.push({ key: 'gst', label: 'GST', content: <GstRegisterPanel canExport={canExport} /> });
+  if (canNonGst) tabs.push({ key: 'non-gst', label: 'Non-GST', content: <NonGstRegisterPanel canExport={canExport} /> });
   if (canAll) tabs.push({ key: 'purchases', label: 'Purchase Register', content: <PurchaseRegisterPanel canExport={canExport} canViewCost={canViewCost} /> });
   if (canAll) tabs.push({ key: 'sales-reports', label: 'Sales Reports', content: <SalesReportsSection canExport={canExport} /> });
   if (canManagePricing) tabs.push({ key: 'retail-price', label: 'Retail Price', content: <PricingPanel type="retail" label="Retail" canExport={canExport} /> });

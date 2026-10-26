@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { listItems, createItem, updateItem, deleteItem } from '../api/items';
+import { handleFormKeyDown } from '../utils/formNavigation';
 
 const BLANK = { name_ta: '', name_en: '', code: '', unit: 'kg', default_rate: '', is_charge_item: false, active: true };
 
@@ -104,7 +105,7 @@ export default function Items() {
 
       {form && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 no-print">
-          <form onSubmit={handleSave} className="card w-full max-w-md space-y-3">
+          <form onSubmit={handleSave} onKeyDown={handleFormKeyDown} className="card w-full max-w-md space-y-3">
             <h2 className="font-bold text-lg">{form.id ? t('common.edit') : t('common.add')}</h2>
             <div>
               <label className="label">{t('items.name_ta')}</label>

@@ -80,6 +80,17 @@ export function CashHandover() {
                       placeholder={p.cash_amount}
                       value={submittedAmounts[p.employee_id] ?? ''}
                       onChange={(e) => setSubmittedAmounts((prev) => ({ ...prev, [p.employee_id]: e.target.value }))}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          if (canSubmit) {
+                            submitMutation.mutate({
+                              employee_id: p.employee_id,
+                              submitted_amount: Number(submittedAmounts[p.employee_id] ?? p.cash_amount),
+                            });
+                          }
+                        }
+                      }}
                       className="input w-24 text-xs py-1"
                     />
                   </td>
@@ -144,6 +155,14 @@ export function CashHandover() {
                           placeholder="Counted"
                           value={verifyAmounts[h.id] ?? ''}
                           onChange={(e) => setVerifyAmounts((prev) => ({ ...prev, [h.id]: e.target.value }))}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              if (canVerify) {
+                                verifyMutation.mutate({ id: h.id, amount: Number(verifyAmounts[h.id] ?? h.submitted_amount) });
+                              }
+                            }
+                          }}
                           className="input w-20 text-xs py-1"
                         />
                         <button

@@ -6,6 +6,9 @@ import { registerSW } from 'virtual:pwa-register';
 import App from './App.jsx';
 import { AuthProvider } from './hooks/useAuth.jsx';
 import './index.css';
+import { initGlobalFormNavigation } from './utils/formNavigation';
+
+initGlobalFormNavigation();
 
 // Safely register PWA Service Worker with auto-updates without interrupting app bootstrap
 try {

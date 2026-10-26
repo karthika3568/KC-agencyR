@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Sparkles } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth.jsx';
 import { Button } from '../components/Button.jsx';
+import { handleFormKeyDown } from '../utils/formNavigation';
 
 export function Login() {
   const { login } = useAuth();
@@ -33,7 +34,7 @@ export function Login() {
       <div className="pointer-events-none absolute -top-40 -left-40 h-96 w-96 rounded-full bg-primary/10 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-40 -right-40 h-96 w-96 rounded-full bg-[#8244AD]/10 blur-3xl" />
 
-      <form onSubmit={handleSubmit} className="relative z-10 w-full max-w-sm rounded-3xl border border-border-soft bg-white p-6 sm:p-8 shadow-soft-lg">
+      <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="relative z-10 w-full max-w-sm rounded-3xl border border-border-soft bg-white p-6 sm:p-8 shadow-soft-lg">
         {/* Logo and Brand Header */}
         <div className="mb-7 flex flex-col items-center text-center">
           <div className="mb-3.5 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#8244AD] to-[#351442] text-white shadow-soft-md border border-white/20">
