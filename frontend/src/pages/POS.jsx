@@ -165,10 +165,10 @@ export function POS() {
 
   const selectedCustomer = useMemo(() => customers.find((c) => String(c.id) === String(customerId)), [customers, customerId]);
 
-  // Focus Customer Search on initial page load as requested (default cursor in customer field, dropdown closed until search/arrow)
+  // Focus Customer Search on initial page load as requested (default cursor in customer field, dropdown open predefinedly)
   useEffect(() => {
     customerSearchInputRef.current?.focus();
-    setShowCustomerDropdown(false);
+    setShowCustomerDropdown(true);
   }, []);
 
   // Close dropdowns on outside click
@@ -463,11 +463,12 @@ export function POS() {
     setCustomerSearch(customer.ledger_name || customer.name || '');
     setIsQuickSale(false);
     setShowCustomerDropdown(false);
-    // Shift focus to product search field
+    // Shift focus to product search field and automatically show product list
     setTimeout(() => {
       productSearchInputRef.current?.focus();
       productSearchInputRef.current?.select();
-      setShowProductDropdown(false);
+      setShowProductDropdown(true);
+      setProductSelectedIndex(0);
     }, 50);
   };
 
@@ -485,19 +486,26 @@ export function POS() {
       showScanError(`"${item.item_name}" reached available stock limit (${stock})`);
       return false;
     }
+    const exIndex = cart.findIndex((l) => l.item?.id === item.id && l.unit_id === item.base_unit_id);
+    const targetIndex = exIndex >= 0 ? exIndex : cart.length;
+
     setCart((prev) => {
-      const ex = prev.find((l) => l.item?.id === item.id && l.unit_id === item.base_unit_id);
-      if (ex) {
-        return prev.map((l) => (l.key === ex.key ? { ...l, qty: Number(l.qty) + 1 } : l));
+      const idx = prev.findIndex((l) => l.item?.id === item.id && l.unit_id === item.base_unit_id);
+      if (idx >= 0) {
+        return prev.map((l, i) => (i === idx ? { ...l, qty: Number(l.qty) + 1 } : l));
       }
       return [...prev, newLine(item, priceType)];
     });
     setSearch('');
-    if (productSearchInputRef.current) productSearchInputRef.current.value = '';
+    if (productSearchInputRef.current) {
+      productSearchInputRef.current.value = '';
+      productSearchInputRef.current.blur();
+    }
     setScanError('');
     setIsScannerReady(false);
     setShowProductDropdown(false);
-    productSearchInputRef.current?.focus();
+    setProductSelectedIndex(0);
+    focusBillCell(targetIndex, 'qty');
     return true;
   };
 
@@ -632,11 +640,14 @@ export function POS() {
       if (showCustomerDropdown && displayedCustomers.length > 0 && customerSelectedIndex >= 0 && customerSelectedIndex < displayedCustomers.length) {
         selectCustomer(displayedCustomers[customerSelectedIndex]);
       } else {
-        // Walk-in customer: shift focus to product search without opening dropdown
+        // Walk-in customer: shift focus to product search and open product dropdown
         setShowCustomerDropdown(false);
-        productSearchInputRef.current?.focus();
-        productSearchInputRef.current?.select();
-        setShowProductDropdown(false);
+        setTimeout(() => {
+          productSearchInputRef.current?.focus();
+          productSearchInputRef.current?.select();
+          setShowProductDropdown(true);
+          setProductSelectedIndex(0);
+        }, 50);
       }
     } else if (e.key === 'Tab') {
       setShowCustomerDropdown(false);
@@ -707,8 +718,20 @@ export function POS() {
         } catch {
           // ignore
         }
+      } else {
+        setTimeout(() => {
+          const retryEl = document.getElementById(`bill-cell-${rowIndex}-${fieldKey}`);
+          if (retryEl) {
+            retryEl.focus();
+            try {
+              retryEl.select?.();
+            } catch {
+              // ignore
+            }
+          }
+        }, 50);
       }
-    }, 10);
+    }, 50);
   };
 
   const handleCellKeyDown = (e, rowIndex, fieldKey) => {
@@ -1165,12 +1188,17 @@ export function POS() {
               placeholder="Search customer by name, phone or code..."
               value={customerSearch}
               onFocus={() => {
-                if (customerSearch.trim().length > 0) setShowCustomerDropdown(true);
+                setShowCustomerDropdown(true);
+                setShowProductDropdown(false);
+              }}
+              onClick={() => {
+                setShowCustomerDropdown(true);
+                setShowProductDropdown(false);
               }}
               onChange={(e) => {
                 const val = e.target.value;
                 setCustomerSearch(val);
-                setShowCustomerDropdown(val.trim().length > 0);
+                setShowCustomerDropdown(true);
                 setCustomerSelectedIndex(0);
               }}
               onKeyDown={handleCustomerKeyDown}
@@ -1314,12 +1342,17 @@ export function POS() {
               placeholder="Search product by name, code or barcode..."
               value={search}
               onFocus={() => {
-                if (search.trim().length > 0) setShowProductDropdown(true);
+                setShowProductDropdown(true);
+                setShowCustomerDropdown(false);
+              }}
+              onClick={() => {
+                setShowProductDropdown(true);
+                setShowCustomerDropdown(false);
               }}
               onChange={(e) => {
                 const val = e.target.value;
                 setSearch(val);
-                setShowProductDropdown(val.trim().length > 0);
+                setShowProductDropdown(true);
                 setProductSelectedIndex(0);
                 if (scanError) setScanError('');
               }}
@@ -1955,6 +1988,54 @@ function PaymentModal({
 
   const singleMethod = payments[0]?.payment_method || (!hasCustomer ? 'cash' : 'credit');
   const singleAmount = payments[0]?.amount ?? grandTotal;
+  const amountInputRef = useRef(null);
+
+  const handleMethodKeyDown = (e, currentKey) => {
+    const keys = PAYMENT_METHODS.map((m) => m.key);
+    const currentIndex = keys.indexOf(currentKey);
+    if (currentIndex === -1) return;
+
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      e.stopPropagation();
+      const nextIndex = (currentIndex + 1) % keys.length;
+      const nextKey = keys[nextIndex];
+      setPayments((prev) => [{ ...prev[0], payment_method: nextKey }]);
+      setTimeout(() => {
+        document.getElementById(`pay-method-${nextKey}`)?.focus();
+      }, 10);
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      e.stopPropagation();
+      const prevIndex = (currentIndex - 1 + keys.length) % keys.length;
+      const prevKey = keys[prevIndex];
+      setPayments((prev) => [{ ...prev[0], payment_method: prevKey }]);
+      setTimeout(() => {
+        document.getElementById(`pay-method-${prevKey}`)?.focus();
+      }, 10);
+    } else if (e.key === 'ArrowDown' || e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      amountInputRef.current?.focus();
+      amountInputRef.current?.select();
+    }
+  };
+
+  const handleAmountKeyDown = (e) => {
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      e.stopPropagation();
+      document.getElementById(`pay-method-${singleMethod}`)?.focus();
+    }
+  };
+
+  useEffect(() => {
+    if (!splitMode) {
+      setTimeout(() => {
+        document.getElementById(`pay-method-${singleMethod}`)?.focus();
+      }, 60);
+    }
+  }, []);
 
   const setSingleAmount = (raw) => {
     let value = Number(raw);
@@ -2011,13 +2092,18 @@ function PaymentModal({
         {!splitMode ? (
           <>
             <div className="mb-1 text-[11px] font-semibold text-ink-muted">Payment Method</div>
-            <div className="mb-2 grid grid-cols-5 gap-1.5">
+            <div className="mb-2 grid grid-cols-5 gap-1.5" role="radiogroup" aria-label="Payment Method">
               {PAYMENT_METHODS.map((m) => (
                 <button
                   key={m.key}
+                  id={`pay-method-${m.key}`}
                   type="button"
-                  onClick={() => setPayments((prev) => [{ ...prev[0], payment_method: m.key }])}
-                  className={`rounded-lg border px-1 py-1.5 text-xs font-bold transition-all text-center ${
+                  onClick={() => {
+                    setPayments((prev) => [{ ...prev[0], payment_method: m.key }]);
+                    document.getElementById(`pay-method-${m.key}`)?.focus();
+                  }}
+                  onKeyDown={(e) => handleMethodKeyDown(e, m.key)}
+                  className={`rounded-lg border px-1 py-1.5 text-xs font-bold transition-all text-center focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] ${
                     singleMethod === m.key
                       ? 'border-[#6F2DA8] bg-[#EEE5FF] text-[#6F2DA8]'
                       : 'border-border-soft bg-white text-ink-muted hover:bg-page'
@@ -2029,12 +2115,14 @@ function PaymentModal({
             </div>
             <div className="mb-1 text-[11px] font-semibold text-ink-muted">Amount</div>
             <input
+              ref={amountInputRef}
               type="number"
               min="0"
               step="any"
               value={singleAmount}
               onChange={(e) => setSingleAmount(e.target.value)}
-              className="input mb-2 text-base font-bold py-1.5"
+              onKeyDown={handleAmountKeyDown}
+              className="input mb-2 text-base font-bold py-1.5 focus:border-[#6F2DA8] focus:ring-2 focus:ring-[#6F2DA8]/20"
             />
           </>
         ) : (
