@@ -737,15 +737,9 @@ export function VanStockPanel({ canManage }) {
 
       <div className={`grid grid-cols-1 gap-3.5 ${canManage ? 'lg:grid-cols-12' : ''}`}>
         {/* Left Column Form */}
-<<<<<<< HEAD
         {canManage && (
           <div className="lg:col-span-5">
-            <div className="card p-3.5 space-y-2.5 sticky top-3">
-=======
-        <div className="lg:col-span-5">
-          {canManage && (
             <div className="card p-3.5 space-y-2.5 lg:sticky lg:top-3">
->>>>>>> 7fa1e0fda42f46920d1cdbc41a5d67cbf88c39e1
               <div className="border-b border-border-soft pb-2 flex items-center justify-between">
                 <h2 className="font-semibold text-ink text-sm sm:text-base flex items-center gap-2">
                   <Truck className="w-4 h-4 text-indigo-400" />
