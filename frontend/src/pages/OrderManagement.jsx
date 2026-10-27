@@ -569,7 +569,7 @@ function CustomerPrebookingPanel() {
       <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
         {/* Left Column Form */}
         <div className="lg:col-span-5">
-          <div className="card p-3.5 space-y-2.5 sticky top-3">
+          <div className="card p-3.5 space-y-2.5 lg:sticky lg:top-3">
             <div className="border-b border-border-soft pb-2">
               <h2 className="font-semibold text-ink text-sm sm:text-base flex items-center gap-2">
                 <Plus className="w-4 h-4 text-emerald-400" />
@@ -682,8 +682,8 @@ function CustomerPrebookingPanel() {
             <div className="px-3.5 py-2 border-b border-border-soft flex items-center justify-between">
               <h3 className="font-semibold text-ink text-xs sm:text-sm">Customer Pre-Bookings Register</h3>
             </div>
-            <div className="max-h-[calc(100vh-240px)] overflow-y-auto">
-              <table className="w-full text-left text-xs">
+            <div className="max-h-[calc(100vh-240px)] overflow-x-auto overflow-y-auto">
+              <table className="w-full min-w-[650px] text-left text-xs">
                 <thead className="sticky top-0 bg-page z-10">
                   <tr className="border-b border-border-soft uppercase text-ink-muted font-medium">
                     <th className="px-3 py-1.5">Order #</th>
@@ -1197,7 +1197,7 @@ function SupplierRequestPanel() {
       <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
         {/* Left Column Form */}
         <div className="lg:col-span-5">
-          <div className="card p-3.5 space-y-2.5 sticky top-3">
+          <div className="card p-3.5 space-y-2.5 lg:sticky lg:top-3">
             <div className="border-b border-border-soft pb-2">
               <h2 className="font-semibold text-ink text-sm sm:text-base flex items-center gap-2">
                 <Plus className="w-4 h-4 text-emerald-400" />
@@ -1274,8 +1274,8 @@ function SupplierRequestPanel() {
             <div className="px-3.5 py-2 border-b border-border-soft flex items-center justify-between">
               <h3 className="font-semibold text-ink text-xs sm:text-sm">Purchase Indents Register</h3>
             </div>
-            <div className="max-h-[calc(100vh-240px)] overflow-y-auto">
-              <table className="w-full text-left text-xs">
+            <div className="max-h-[calc(100vh-240px)] overflow-x-auto overflow-y-auto">
+              <table className="w-full min-w-[650px] text-left text-xs">
                 <thead className="sticky top-0 bg-page z-10">
                   <tr className="border-b border-border-soft uppercase text-ink-muted font-medium">
                     <th className="px-3 py-1.5">Request #</th>

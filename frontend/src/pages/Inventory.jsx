@@ -96,7 +96,7 @@ export function StockHubPanel() {
       <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
         {/* Left Column Controls */}
         <div className="lg:col-span-4">
-          <div className="card p-3.5 space-y-2.5 sticky top-3">
+          <div className="card p-3.5 space-y-2.5 lg:sticky lg:top-3">
             <div className="border-b border-border-soft pb-2">
               <h2 className="font-semibold text-ink text-sm sm:text-base flex items-center gap-2">
                 <SlidersHorizontal className="w-4 h-4 text-indigo-400" />
@@ -139,7 +139,7 @@ export function StockHubPanel() {
                 className="input pl-8 w-full text-xs"
               />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs text-ink-muted">{filteredRows.length} item(s) in view</span>
               <button onClick={handleExportExcel} disabled={exportingExcel} className="flex items-center gap-1.5 rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
                 <FileSpreadsheet className="h-3.5 w-3.5" />
@@ -157,8 +157,8 @@ export function StockHubPanel() {
             <div className="px-3.5 py-2 border-b border-border-soft flex items-center justify-between">
               <h3 className="font-semibold text-ink text-xs sm:text-sm">Real-time Stock Inventory</h3>
             </div>
-            <div className="max-h-[calc(100vh-230px)] overflow-y-auto">
-              <table className="w-full text-left text-xs">
+            <div className="max-h-[calc(100vh-230px)] overflow-x-auto overflow-y-auto">
+              <table className="w-full min-w-[650px] text-left text-xs">
                 <thead className="sticky top-0 bg-page z-10">
                   <tr className="border-b border-border-soft uppercase text-ink-muted font-medium">
                     <th className="px-3 py-1.5">Item Details</th>
@@ -306,7 +306,7 @@ export function StockAdjustmentPanel({ canManage }) {
       <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
         {/* Left Column Form */}
         <div className="lg:col-span-4">
-          <div className="card p-3.5 space-y-2.5 sticky top-3">
+          <div className="card p-3.5 space-y-2.5 lg:sticky lg:top-3">
             <div className="border-b border-border-soft pb-2">
               <h2 className="font-semibold text-ink text-sm sm:text-base flex items-center gap-2">
                 <Plus className="w-4 h-4 text-emerald-400" />
@@ -417,8 +417,8 @@ export function StockAdjustmentPanel({ canManage }) {
             <div className="px-3.5 py-2 border-b border-border-soft flex items-center justify-between">
               <h3 className="font-semibold text-ink text-xs sm:text-sm">Stock Adjustment History</h3>
             </div>
-            <div className="max-h-[calc(100vh-230px)] overflow-y-auto">
-              <table className="w-full text-left text-xs">
+            <div className="max-h-[calc(100vh-230px)] overflow-x-auto overflow-y-auto">
+              <table className="w-full min-w-[650px] text-left text-xs">
                 <thead className="sticky top-0 bg-page z-10">
                   <tr className="border-b border-border-soft uppercase text-ink-muted font-medium">
                     <th className="px-3 py-1.5">Item</th>
@@ -737,9 +737,15 @@ export function VanStockPanel({ canManage }) {
 
       <div className={`grid grid-cols-1 gap-3.5 ${canManage ? 'lg:grid-cols-12' : ''}`}>
         {/* Left Column Form */}
+<<<<<<< HEAD
         {canManage && (
           <div className="lg:col-span-5">
             <div className="card p-3.5 space-y-2.5 sticky top-3">
+=======
+        <div className="lg:col-span-5">
+          {canManage && (
+            <div className="card p-3.5 space-y-2.5 lg:sticky lg:top-3">
+>>>>>>> 7fa1e0fda42f46920d1cdbc41a5d67cbf88c39e1
               <div className="border-b border-border-soft pb-2 flex items-center justify-between">
                 <h2 className="font-semibold text-ink text-sm sm:text-base flex items-center gap-2">
                   <Truck className="w-4 h-4 text-indigo-400" />
@@ -873,8 +879,8 @@ export function VanStockPanel({ canManage }) {
               </div>
             )}
             {exportError && <div className="mx-3.5 mt-2 text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{exportError}</div>}
-            <div className="max-h-[calc(100vh-320px)] overflow-y-auto">
-              <table className="w-full text-left text-xs">
+            <div className="max-h-[calc(100vh-320px)] overflow-x-auto overflow-y-auto">
+              <table className="w-full min-w-[650px] text-left text-xs">
                 <thead className="sticky top-0 bg-page z-10">
                   <tr className="border-b border-border-soft uppercase text-ink-muted font-medium">
                     <th className="w-8 px-3 py-1.5">
@@ -932,8 +938,8 @@ export function VanStockPanel({ canManage }) {
               {selectedIssueIds.length > 0 && <span className="text-xs text-ink-muted">{selectedIssueIds.length} selected</span>}
             </div>
             {issueExportError && <div className="mx-3.5 mt-2 text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{issueExportError}</div>}
-            <div className="max-h-[calc(100vh-320px)] overflow-y-auto">
-              <table className="w-full text-left text-xs">
+            <div className="max-h-[calc(100vh-320px)] overflow-x-auto overflow-y-auto">
+              <table className="w-full min-w-[650px] text-left text-xs">
                 <thead className="sticky top-0 bg-page z-10">
                   <tr className="border-b border-border-soft uppercase text-ink-muted font-medium">
                     <th className="w-8 px-3 py-1.5">

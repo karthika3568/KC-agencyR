@@ -155,7 +155,7 @@ export function StaffPermissions() {
       <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
         {/* Left Column Form */}
         <div className="lg:col-span-4">
-          <div className="card p-3.5 space-y-2.5 sticky top-3">
+          <div className="card p-3.5 space-y-2.5 lg:sticky lg:top-3">
             <div className="flex items-center justify-between border-b border-border-soft pb-2">
               <h2 className="font-semibold text-ink text-sm flex items-center gap-1.5">
                 {editingId ? <Edit2 className="w-4 h-4 text-cyan-400" /> : <Plus className="w-4 h-4 text-emerald-400" />}
@@ -343,8 +343,8 @@ export function StaffPermissions() {
               <h3 className="font-semibold text-ink text-xs sm:text-sm">Staff Directory</h3>
               <span className="text-xs text-ink-muted">{filteredStaff.length} member(s)</span>
             </div>
-            <div className="max-h-[calc(100vh-230px)] overflow-y-auto">
-              <table className="w-full text-left text-xs">
+            <div className="max-h-[calc(100vh-230px)] overflow-x-auto overflow-y-auto">
+              <table className="w-full min-w-[650px] text-left text-xs">
                 <thead className="sticky top-0 bg-page z-10 shadow-sm">
                   <tr className="border-b border-border-soft bg-surface-subtle/30 text-ink-muted font-medium">
                     <th className="px-3 py-1.5">Staff Member</th>

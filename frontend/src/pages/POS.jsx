@@ -179,10 +179,10 @@ export function POS() {
 
   const selectedCustomer = useMemo(() => customers.find((c) => String(c.id) === String(customerId)), [customers, customerId]);
 
-  // Focus Customer Search on initial page load as requested (default cursor in customer field, dropdown closed until search/arrow)
+  // Focus Customer Search on initial page load as requested (default cursor in customer field, dropdown open predefinedly)
   useEffect(() => {
     customerSearchInputRef.current?.focus();
-    setShowCustomerDropdown(false);
+    setShowCustomerDropdown(true);
   }, []);
 
   // Close dropdowns on outside click
@@ -477,11 +477,12 @@ export function POS() {
     setCustomerSearch(customer.ledger_name || customer.name || '');
     setIsQuickSale(false);
     setShowCustomerDropdown(false);
-    // Shift focus to product search field
+    // Shift focus to product search field and automatically show product list
     setTimeout(() => {
       productSearchInputRef.current?.focus();
       productSearchInputRef.current?.select();
-      setShowProductDropdown(false);
+      setShowProductDropdown(true);
+      setProductSelectedIndex(0);
     }, 50);
   };
 
@@ -499,19 +500,26 @@ export function POS() {
       showScanError(`"${item.item_name}" reached available stock limit (${stock})`);
       return false;
     }
+    const exIndex = cart.findIndex((l) => l.item?.id === item.id && l.unit_id === item.base_unit_id);
+    const targetIndex = exIndex >= 0 ? exIndex : cart.length;
+
     setCart((prev) => {
-      const ex = prev.find((l) => l.item?.id === item.id && l.unit_id === item.base_unit_id);
-      if (ex) {
-        return prev.map((l) => (l.key === ex.key ? { ...l, qty: Number(l.qty) + 1 } : l));
+      const idx = prev.findIndex((l) => l.item?.id === item.id && l.unit_id === item.base_unit_id);
+      if (idx >= 0) {
+        return prev.map((l, i) => (i === idx ? { ...l, qty: Number(l.qty) + 1 } : l));
       }
       return [...prev, newLine(item, priceType)];
     });
     setSearch('');
-    if (productSearchInputRef.current) productSearchInputRef.current.value = '';
+    if (productSearchInputRef.current) {
+      productSearchInputRef.current.value = '';
+      productSearchInputRef.current.blur();
+    }
     setScanError('');
     setIsScannerReady(false);
     setShowProductDropdown(false);
-    productSearchInputRef.current?.focus();
+    setProductSelectedIndex(0);
+    focusBillCell(targetIndex, 'qty');
     return true;
   };
 
@@ -646,11 +654,14 @@ export function POS() {
       if (showCustomerDropdown && displayedCustomers.length > 0 && customerSelectedIndex >= 0 && customerSelectedIndex < displayedCustomers.length) {
         selectCustomer(displayedCustomers[customerSelectedIndex]);
       } else {
-        // Walk-in customer: shift focus to product search without opening dropdown
+        // Walk-in customer: shift focus to product search and open product dropdown
         setShowCustomerDropdown(false);
-        productSearchInputRef.current?.focus();
-        productSearchInputRef.current?.select();
-        setShowProductDropdown(false);
+        setTimeout(() => {
+          productSearchInputRef.current?.focus();
+          productSearchInputRef.current?.select();
+          setShowProductDropdown(true);
+          setProductSelectedIndex(0);
+        }, 50);
       }
     } else if (e.key === 'Tab') {
       setShowCustomerDropdown(false);
@@ -721,8 +732,20 @@ export function POS() {
         } catch {
           // ignore
         }
+      } else {
+        setTimeout(() => {
+          const retryEl = document.getElementById(`bill-cell-${rowIndex}-${fieldKey}`);
+          if (retryEl) {
+            retryEl.focus();
+            try {
+              retryEl.select?.();
+            } catch {
+              // ignore
+            }
+          }
+        }, 50);
       }
-    }, 10);
+    }, 50);
   };
 
   const handleCellKeyDown = (e, rowIndex, fieldKey) => {
@@ -1024,7 +1047,7 @@ export function POS() {
   };
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col justify-between overflow-hidden gap-1.5 font-sans select-none text-ink">
+    <div className="flex-1 min-h-0 flex flex-col justify-between overflow-y-auto lg:overflow-hidden gap-1.5 font-sans select-none text-ink pb-2 lg:pb-0">
       {/* 1. TOP CONTROLS BAR (GST / Non-GST & Normal / Retail / Wholesale) */}
       <div className="flex flex-wrap items-center justify-between gap-2 bg-white px-3 py-1.5 rounded-xl border border-[#E5E7F5] shadow-2xs shrink-0">
         {/* Left: GST Billing vs Non-GST / Estimate */}
@@ -1179,12 +1202,17 @@ export function POS() {
               placeholder="Search customer by name, phone or code..."
               value={customerSearch}
               onFocus={() => {
-                if (customerSearch.trim().length > 0) setShowCustomerDropdown(true);
+                setShowCustomerDropdown(true);
+                setShowProductDropdown(false);
+              }}
+              onClick={() => {
+                setShowCustomerDropdown(true);
+                setShowProductDropdown(false);
               }}
               onChange={(e) => {
                 const val = e.target.value;
                 setCustomerSearch(val);
-                setShowCustomerDropdown(val.trim().length > 0);
+                setShowCustomerDropdown(true);
                 setCustomerSelectedIndex(0);
               }}
               onKeyDown={handleCustomerKeyDown}
@@ -1212,7 +1240,7 @@ export function POS() {
           {showCustomerDropdown && (
             <div
               ref={customerDropdownRef}
-              className="absolute left-3 right-3 top-[calc(100%-4px)] z-40 rounded-xl border border-[#E5E7F5] bg-white shadow-soft-lg overflow-hidden max-h-52 overflow-y-auto scrollbar-thin"
+              className="absolute left-3 right-3 top-[calc(100%-4px)] z-40 rounded-xl border border-[#E5E7F5] bg-white shadow-soft-lg overflow-x-auto max-h-52 overflow-y-auto scrollbar-thin"
             >
               <table className="w-full text-xs text-left">
                 <thead className="sticky top-0 bg-[#F7F5FF] border-b border-[#E5E7F5] z-10">
@@ -1328,12 +1356,17 @@ export function POS() {
               placeholder="Search product by name, code or barcode..."
               value={search}
               onFocus={() => {
-                if (search.trim().length > 0) setShowProductDropdown(true);
+                setShowProductDropdown(true);
+                setShowCustomerDropdown(false);
+              }}
+              onClick={() => {
+                setShowProductDropdown(true);
+                setShowCustomerDropdown(false);
               }}
               onChange={(e) => {
                 const val = e.target.value;
                 setSearch(val);
-                setShowProductDropdown(val.trim().length > 0);
+                setShowProductDropdown(true);
                 setProductSelectedIndex(0);
                 if (scanError) setScanError('');
               }}
@@ -1367,7 +1400,7 @@ export function POS() {
           {showProductDropdown && (
             <div
               ref={productDropdownRef}
-              className="absolute left-3 right-3 top-[calc(100%-4px)] z-40 rounded-xl border border-[#E5E7F5] bg-white shadow-soft-lg overflow-hidden max-h-52 overflow-y-auto scrollbar-thin"
+              className="absolute left-3 right-3 top-[calc(100%-4px)] z-40 rounded-xl border border-[#E5E7F5] bg-white shadow-soft-lg overflow-x-auto max-h-52 overflow-y-auto scrollbar-thin"
             >
               <table className="w-full text-xs text-left">
                 <thead className="sticky top-0 bg-[#F7F5FF] border-b border-[#E5E7F5] z-10">
@@ -1440,8 +1473,8 @@ export function POS() {
         </div>
       </div>
 
-      {/* 3. FULL-WIDTH BILL ITEMS TABLE (INTERNAL SCROLL ONLY) */}
-      <div className="flex-1 min-h-0 rounded-2xl border border-[#E5E7F5] bg-white p-2.5 shadow-2xs flex flex-col overflow-hidden">
+      {/* 3. FULL-WIDTH BILL ITEMS TABLE */}
+      <div className="flex-1 min-h-[260px] lg:min-h-0 rounded-2xl border border-[#E5E7F5] bg-white p-2.5 shadow-2xs flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between mb-2 shrink-0">
           <div className="flex items-center gap-2">
@@ -1754,17 +1787,17 @@ export function POS() {
         </div>
 
         {/* Card 5: Total Amount */}
-        <div className="rounded-xl border border-[#D8CEE2] bg-[#EEE5FF] px-3 py-2 shadow-soft flex flex-col justify-between">
+        <div className="col-span-2 sm:col-span-1 rounded-xl border border-[#D8CEE2] bg-[#EEE5FF] px-3 py-2 shadow-soft flex flex-col justify-between">
           <span className="text-[10px] font-bold text-[#6F2DA8]">Total Amount</span>
-          <span className="text-lg sm:text-xl font-black text-[#351442] mt-0.5">
+          <span className="text-lg sm:text-xl font-black text-[#351442] mt-0.5 truncate">
             ₹ {totals.grandTotal.toFixed(2)}
           </span>
         </div>
       </div>
 
       {/* 5. ACTION BUTTONS: Hold Bill (Left), Proceed to Payment (Center), Clear Cart (Right) */}
-      <div className="flex items-center justify-between gap-3 my-0.5 shrink-0 px-0.5">
-        {/* Left: Hold Bill */}
+      <div className="grid grid-cols-2 sm:flex sm:items-center sm:justify-between gap-2 sm:gap-3 my-1 shrink-0 px-0.5">
+        {/* Hold Bill */}
         <button
           ref={holdBillBtnRef}
           type="button"
@@ -1784,14 +1817,14 @@ export function POS() {
             }
           }}
           disabled={cart.length === 0 || saveMutation.isPending}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-[#D8CEE2] bg-white hover:bg-[#F7F5FF] focus:bg-[#F7F5FF] focus:border-[#6F2DA8] focus:ring-2 focus:ring-[#6F2DA8]/30 text-[#6F2DA8] font-bold text-xs shadow-2xs transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer outline-none"
+          className="col-span-1 order-2 sm:order-1 flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 sm:py-2 rounded-xl border border-[#D8CEE2] bg-white hover:bg-[#F7F5FF] focus:bg-[#F7F5FF] focus:border-[#6F2DA8] focus:ring-2 focus:ring-[#6F2DA8]/30 text-[#6F2DA8] font-bold text-xs shadow-2xs transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer outline-none"
           title="Hold current bill (Left Arrow from Proceed)"
         >
-          <Pause size={14} />
-          <span>{saveMutation.isPending ? 'Holding...' : 'Hold Bill'}</span>
+          <Pause size={14} className="shrink-0" />
+          <span className="truncate">{saveMutation.isPending ? 'Holding...' : 'Hold Bill'}</span>
         </button>
 
-        {/* Center: Proceed to Payment */}
+        {/* Proceed to Payment */}
         <button
           ref={proceedBtnRef}
           type="button"
@@ -1814,14 +1847,14 @@ export function POS() {
             }
           }}
           disabled={cart.length === 0 || !cartValidation.isValid}
-          className="flex items-center justify-center gap-2 px-10 py-2.5 rounded-xl bg-[#6F2DA8] hover:bg-[#5C238C] focus:ring-2 focus:ring-[#6F2DA8]/40 active:scale-95 text-white font-bold text-sm shadow-soft-md transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed outline-none"
+          className="col-span-2 sm:flex-1 order-1 sm:order-2 flex items-center justify-center gap-2 px-6 sm:px-10 py-3 sm:py-2.5 rounded-xl bg-[#6F2DA8] hover:bg-[#5C238C] focus:ring-2 focus:ring-[#6F2DA8]/40 active:scale-95 text-white font-bold text-sm shadow-soft-md transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed outline-none"
         >
-          <CreditCard size={16} />
-          <span>{isQuickSale ? 'Quick Checkout (Pay)' : 'Proceed to Payment'}</span>
-          <ChevronRight size={16} />
+          <CreditCard size={16} className="shrink-0" />
+          <span className="truncate">{isQuickSale ? 'Quick Checkout (Pay)' : 'Proceed to Payment'}</span>
+          <ChevronRight size={16} className="shrink-0" />
         </button>
 
-        {/* Right: Clear Cart */}
+        {/* Clear Cart */}
         <button
           ref={clearCartBtnRef}
           type="button"
@@ -1841,11 +1874,11 @@ export function POS() {
             }
           }}
           disabled={cart.length === 0}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-rose-200 bg-white hover:bg-rose-50 focus:bg-rose-50 focus:border-rose-400 focus:ring-2 focus:ring-rose-300 text-rose-600 font-bold text-xs shadow-2xs transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer outline-none"
+          className="col-span-1 order-3 sm:order-3 flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 sm:py-2 rounded-xl border border-rose-200 bg-white hover:bg-rose-50 focus:bg-rose-50 focus:border-rose-400 focus:ring-2 focus:ring-rose-300 text-rose-600 font-bold text-xs shadow-2xs transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer outline-none"
           title="Clear cart (Right Arrow from Proceed)"
         >
-          <Trash2 size={14} />
-          <span>Clear Cart</span>
+          <Trash2 size={14} className="shrink-0" />
+          <span className="truncate">Clear Cart</span>
         </button>
       </div>
 
@@ -1969,6 +2002,54 @@ function PaymentModal({
 
   const singleMethod = payments[0]?.payment_method || (!hasCustomer ? 'cash' : 'credit');
   const singleAmount = payments[0]?.amount ?? grandTotal;
+  const amountInputRef = useRef(null);
+
+  const handleMethodKeyDown = (e, currentKey) => {
+    const keys = PAYMENT_METHODS.map((m) => m.key);
+    const currentIndex = keys.indexOf(currentKey);
+    if (currentIndex === -1) return;
+
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      e.stopPropagation();
+      const nextIndex = (currentIndex + 1) % keys.length;
+      const nextKey = keys[nextIndex];
+      setPayments((prev) => [{ ...prev[0], payment_method: nextKey }]);
+      setTimeout(() => {
+        document.getElementById(`pay-method-${nextKey}`)?.focus();
+      }, 10);
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      e.stopPropagation();
+      const prevIndex = (currentIndex - 1 + keys.length) % keys.length;
+      const prevKey = keys[prevIndex];
+      setPayments((prev) => [{ ...prev[0], payment_method: prevKey }]);
+      setTimeout(() => {
+        document.getElementById(`pay-method-${prevKey}`)?.focus();
+      }, 10);
+    } else if (e.key === 'ArrowDown' || e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      amountInputRef.current?.focus();
+      amountInputRef.current?.select();
+    }
+  };
+
+  const handleAmountKeyDown = (e) => {
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      e.stopPropagation();
+      document.getElementById(`pay-method-${singleMethod}`)?.focus();
+    }
+  };
+
+  useEffect(() => {
+    if (!splitMode) {
+      setTimeout(() => {
+        document.getElementById(`pay-method-${singleMethod}`)?.focus();
+      }, 60);
+    }
+  }, []);
 
   const setSingleAmount = (raw) => {
     let value = Number(raw);
@@ -1979,16 +2060,16 @@ function PaymentModal({
 
   const blockedNoCustomer = remaining > 0.009 && !hasCustomer;
 
-return (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
-    <div
-      role="dialog"
-      aria-modal="true"
-      data-form-container="true"
-      onKeyDown={handleFormKeyDown}
-      className="max-h-[90vh] w-full max-w-md overflow-y-auto card p-5 shadow-soft-lg"
-    >
-      <div className="mb-3">
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-3 sm:p-4">
+      <div
+        role="dialog"
+        aria-modal="true"
+        data-form-container="true"
+        onKeyDown={handleFormKeyDown}
+        className="w-full max-w-md card p-4 shadow-soft-lg max-h-[92vh] overflow-y-auto"
+      >
+        <div className="mb-2">
           <div className="flex items-center gap-2">
             <div className="text-base font-bold text-ink">{isQuickSale ? 'Quick Sale Payment' : 'Payment'}</div>
             {isQuickSale && (
@@ -2025,13 +2106,18 @@ return (
         {!splitMode ? (
           <>
             <div className="mb-1 text-[11px] font-semibold text-ink-muted">Payment Method</div>
-            <div className="mb-2 grid grid-cols-5 gap-1.5">
+            <div className="mb-2 grid grid-cols-5 gap-1.5" role="radiogroup" aria-label="Payment Method">
               {PAYMENT_METHODS.map((m) => (
                 <button
                   key={m.key}
+                  id={`pay-method-${m.key}`}
                   type="button"
-                  onClick={() => setPayments((prev) => [{ ...prev[0], payment_method: m.key }])}
-                  className={`rounded-lg border px-1 py-1.5 text-xs font-bold transition-all text-center ${
+                  onClick={() => {
+                    setPayments((prev) => [{ ...prev[0], payment_method: m.key }]);
+                    document.getElementById(`pay-method-${m.key}`)?.focus();
+                  }}
+                  onKeyDown={(e) => handleMethodKeyDown(e, m.key)}
+                  className={`rounded-lg border px-1 py-1.5 text-xs font-bold transition-all text-center focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] ${
                     singleMethod === m.key
                       ? 'border-[#6F2DA8] bg-[#EEE5FF] text-[#6F2DA8]'
                       : 'border-border-soft bg-white text-ink-muted hover:bg-page'
@@ -2043,12 +2129,14 @@ return (
             </div>
             <div className="mb-1 text-[11px] font-semibold text-ink-muted">Amount</div>
             <input
+              ref={amountInputRef}
               type="number"
               min="0"
               step="any"
               value={singleAmount}
               onChange={(e) => setSingleAmount(e.target.value)}
-              className="input mb-2 text-base font-bold py-1.5"
+              onKeyDown={handleAmountKeyDown}
+              className="input mb-2 text-base font-bold py-1.5 focus:border-[#6F2DA8] focus:ring-2 focus:ring-[#6F2DA8]/20"
             />
           </>
         ) : (

@@ -74,8 +74,8 @@ export function CollectModal({ customer, onClose }) {
   const canSubmit = mode === 'manual' ? checkedIds.length > 0 : !!amount;
 
   return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/30">
-      <div role="dialog" aria-modal="true" data-form-container="true" onKeyDown={handleFormKeyDown} className="w-[520px] card p-5">
+    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/30 p-4">
+      <div role="dialog" aria-modal="true" data-form-container="true" onKeyDown={handleFormKeyDown} className="w-full max-w-[520px] max-h-[90vh] overflow-y-auto card p-5">
         <div className="mb-1 text-lg font-semibold text-ink">Collect from {customer.ledger_name}</div>
         <div className="mb-3 text-xs text-ink-muted">
           {customer.credit_limit != null && `Credit limit: Rs. ${customer.credit_limit}`}
@@ -235,8 +235,8 @@ export function Collections() {
             <span className="font-semibold text-ink text-xs sm:text-sm">Pending Credit Balances</span>
             <span className="text-xs font-medium text-ink-muted">Total pending: Rs. {pendingTotal.toFixed(2)}</span>
           </div>
-          <div className="max-h-[calc(50vh-90px)] overflow-y-auto">
-            <table className="w-full text-xs">
+          <div className="max-h-[calc(50vh-90px)] overflow-x-auto overflow-y-auto">
+            <table className="w-full min-w-[550px] text-xs">
               <thead className="sticky top-0 bg-page z-10 shadow-sm">
                 <tr className="border-b border-border-soft text-left uppercase text-ink-muted font-medium bg-surface-subtle/30">
                   <th className="px-3 py-2">Customer</th>
@@ -273,8 +273,8 @@ export function Collections() {
           <span className="font-semibold text-ink text-xs sm:text-sm">Past Collection Receipts</span>
           <span className="text-xs font-medium text-ink-muted">Total collected: Rs. {historyTotal.toFixed(2)}</span>
         </div>
-        <div className="max-h-[calc(50vh-90px)] overflow-y-auto">
-          <table className="w-full text-xs">
+        <div className="max-h-[calc(50vh-90px)] overflow-x-auto overflow-y-auto">
+          <table className="w-full min-w-[550px] text-xs">
             <thead className="sticky top-0 bg-page z-10 shadow-sm">
               <tr className="border-b border-border-soft text-left uppercase text-ink-muted font-medium bg-surface-subtle/30">
                 <th className="px-3 py-2">Receipt #</th>

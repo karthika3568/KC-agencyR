@@ -7,12 +7,13 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icon-192.png', 'icon-512.png'],
+      includeAssets: ['icon-192.png', 'icon-512.png', 'screenshot-wide.png', 'screenshot-narrow.png'],
       devOptions: {
         enabled: true, // generate + register the SW under `npm run dev` too, not just build
         type: 'module',
       },
       manifest: {
+        id: '/',
         name: 'KC Agency',
         short_name: 'KC Agency',
         description: 'Multi-branch, role-based POS + distributor billing system',
@@ -28,6 +29,22 @@ export default defineConfig({
           { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'maskable' },
           { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
+        screenshots: [
+          {
+            src: '/screenshot-wide.png',
+            sizes: '1280x720',
+            type: 'image/png',
+            form_factor: 'wide',
+            label: 'KC Agency Dashboard Desktop View'
+          },
+          {
+            src: '/screenshot-narrow.png',
+            sizes: '412x915',
+            type: 'image/png',
+            form_factor: 'narrow',
+            label: 'KC Agency Dashboard Mobile View'
+          }
+        ],
       },
       workbox: {
         // App-shell + static-asset caching only. POS billing is NOT cached
@@ -41,6 +58,27 @@ export default defineConfig({
             urlPattern: /\/api\/.*/,
             handler: 'NetworkOnly',
           },
+          {
+            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'google-fonts-stylesheets',
+            },
+          },
+          {
+            urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'google-fonts-webfonts',
+              expiration: {
+                maxEntries: 20,
+                maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year
+              },
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
+            },
+          },
         ],
       },
     }),
@@ -48,5 +86,11 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 5173,
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:8080',
+        changeOrigin: true,
+      },
+    },
   },
 });

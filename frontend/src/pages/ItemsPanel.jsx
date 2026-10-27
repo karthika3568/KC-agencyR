@@ -236,7 +236,7 @@ function ItemFormModal({ item, onClose }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
           <Field label="Item name *"><input ref={firstInputRef} required value={form.item_name} onChange={(e) => update('item_name', e.target.value)} className="input" /></Field>
           <Field label="Category">
             <select value={form.category_id} onChange={(e) => update('category_id', e.target.value)} className="input">
@@ -482,7 +482,7 @@ export function ItemsPanel({ canManage }) {
       <div className="card overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-soft px-3.5 py-2">
           <span className="font-semibold text-ink text-sm sm:text-base">Items</span>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="flex overflow-hidden rounded-lg border border-border-soft text-xs">
               {[
                 ['active', 'Active'],
@@ -518,8 +518,8 @@ export function ItemsPanel({ canManage }) {
           </div>
         </div>
 
-        <div className="max-h-[calc(100vh-240px)] overflow-y-auto">
-          <table className="w-full text-xs">
+        <div className="max-h-[calc(100vh-240px)] overflow-x-auto overflow-y-auto">
+          <table className="w-full min-w-[750px] text-xs">
             <thead className="sticky top-0 bg-page z-10">
               <tr className="border-b border-border-soft text-left uppercase text-ink-muted">
                 <th className="px-3 py-1.5"></th>

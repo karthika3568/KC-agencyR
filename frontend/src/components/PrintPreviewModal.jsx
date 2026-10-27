@@ -149,7 +149,7 @@ export function PrintPreviewModal({ invoiceId, stockIssue, issueId, onClose }) {
 
   return createPortal(
     <div className="fixed inset-0 z-50 overflow-auto bg-black/40 py-6">
-      <div className="no-print mx-auto mb-4 flex max-w-3xl items-center gap-2 rounded-lg bg-white p-3 shadow-sm">
+      <div className="no-print mx-auto mb-4 flex flex-wrap items-center gap-2 max-w-3xl rounded-lg bg-white p-3 shadow-sm">
         <span className="text-sm font-medium text-gray-600">Format:</span>
         <button
           type="button"
@@ -172,7 +172,7 @@ export function PrintPreviewModal({ invoiceId, stockIssue, issueId, onClose }) {
         >
           A5
         </button>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="w-full sm:w-auto sm:ml-auto flex flex-wrap items-center gap-2 pt-1 sm:pt-0">
           {hasPhone && (
             <a href={whatsappHref()} target="_blank" rel="noreferrer" className="rounded bg-green-600 px-3 py-1 text-sm text-white">
               Share via WhatsApp
@@ -186,17 +186,19 @@ export function PrintPreviewModal({ invoiceId, stockIssue, issueId, onClose }) {
       {error && <div className="mx-auto w-fit rounded-lg bg-white p-6 text-red-600 shadow-sm">{error}</div>}
       {!error && !data && <div className="mx-auto w-fit rounded-lg bg-white p-6 text-gray-500 shadow-sm">Loading…</div>}
       {data && (
-        <div className="mx-auto w-fit rounded-lg bg-white p-6 shadow-sm">
-          {format === 'a5' && <style>{`@page { size: A5 portrait; margin: 3.5mm; }`}</style>}
-          {format === 'a4' && <style>{`@page { size: A4 portrait; margin: 5mm; }`}</style>}
-          {format === 'thermal' && <style>{`@page { size: 80mm auto; margin: 2mm; }`}</style>}
-          {format === 'thermal' ? (
-            <ThermalTemplate data={data} />
-          ) : format === 'a5' ? (
-            <A5Template data={data} />
-          ) : (
-            <A4Template data={data} />
-          )}
+        <div className="overflow-x-auto max-w-full px-2 sm:px-0">
+          <div className="mx-auto w-fit rounded-lg bg-white p-4 sm:p-6 shadow-sm">
+            {format === 'a5' && <style>{`@page { size: A5 portrait; margin: 3.5mm; }`}</style>}
+            {format === 'a4' && <style>{`@page { size: A4 portrait; margin: 5mm; }`}</style>}
+            {format === 'thermal' && <style>{`@page { size: 80mm auto; margin: 2mm; }`}</style>}
+            {format === 'thermal' ? (
+              <ThermalTemplate data={data} />
+            ) : format === 'a5' ? (
+              <A5Template data={data} />
+            ) : (
+              <A4Template data={data} />
+            )}
+          </div>
         </div>
       )}
     </div>,

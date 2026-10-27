@@ -11,9 +11,9 @@ export function AppShell({ children }) {
       {/* Top Header Bar & Sub-Nav */}
       <TopNav />
 
-      {/* Page Canvas - overflow-hidden on POS to prevent whole-page scroll */}
-      <main className={`flex-1 min-h-0 ${isPos ? 'overflow-hidden p-2 sm:p-2.5 flex flex-col' : 'overflow-y-auto p-2.5 sm:p-3 lg:px-5 lg:py-3'}`}>
-        <div className={isPos ? 'flex-1 min-h-0 w-full max-w-[1700px] mx-auto flex flex-col overflow-hidden' : 'mx-auto max-w-[1500px]'}>
+      {/* Page Canvas - on desktop (lg+), POS stays single-screen fixed layout; on mobile/tablet, allow vertical scrolling */}
+      <main className={`flex-1 min-h-0 ${isPos ? 'overflow-y-auto lg:overflow-hidden p-2 sm:p-2.5 flex flex-col' : 'overflow-y-auto p-2.5 sm:p-3 lg:px-5 lg:py-3'}`}>
+        <div className={isPos ? 'flex-1 min-h-0 w-full max-w-[1700px] mx-auto flex flex-col overflow-visible lg:overflow-hidden' : 'mx-auto max-w-[1500px]'}>
           {children}
         </div>
       </main>

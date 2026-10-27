@@ -662,7 +662,7 @@ export function QuickSaleModal({
               )}
             </div>
 
-            <div className="flex-1 overflow-y-auto rounded-xl border border-border-soft bg-white max-h-[220px]">
+            <div className="flex-1 overflow-x-auto overflow-y-auto rounded-xl border border-border-soft bg-white max-h-[220px]">
               {addedItems.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-8 text-center text-ink-muted px-4">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-page mb-2 text-ink-muted">
@@ -674,7 +674,7 @@ export function QuickSaleModal({
                   </p>
                 </div>
               ) : (
-                <table className="w-full text-left text-xs">
+                <table className="w-full min-w-[450px] text-left text-xs">
                   <thead className="sticky top-0 bg-page/90 backdrop-blur-xs text-[10px] uppercase font-semibold text-ink-muted border-b border-border-soft">
                     <tr>
                       <th className="py-2 px-3">Item</th>

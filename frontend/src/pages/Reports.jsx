@@ -157,7 +157,7 @@ function DateRangeBar({ from, to, setFrom, setTo, onApply, onReset, onExport, pd
         </form>
 
         {canExport && (
-          <div className="ml-auto flex items-center gap-1.5">
+          <div className="w-full sm:w-auto sm:ml-auto flex flex-wrap items-center gap-1.5 pt-1 sm:pt-0">
             <button
               onClick={handleExportExcel}
               disabled={exportingExcel}
@@ -243,8 +243,8 @@ function GenericTable({ rows, columns, totalKeys, selection }) {
 
   return (
     <div className="card overflow-hidden">
-      <div className="max-h-[calc(100vh-220px)] overflow-y-auto">
-        <table className="w-full text-xs">
+      <div className="max-h-[calc(100vh-220px)] overflow-x-auto overflow-y-auto">
+        <table className="w-full min-w-[650px] text-xs">
           <thead className="sticky top-0 bg-page z-10 shadow-sm">
             <tr className="border-b border-border-soft text-left uppercase text-ink-muted font-medium bg-surface-subtle/30">
               {selection && (
@@ -629,7 +629,7 @@ function SalesWiseReportPanel({ report, canExport }) {
       </div>
 
       <div className="overflow-x-auto card">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[650px] text-sm">
           <thead>
             <tr className="border-b border-border-soft text-left text-xs uppercase text-ink-muted">
               <th className="w-10 px-3 py-2 text-center">
@@ -1203,7 +1203,7 @@ function PricingPanel({ type, label, canExport }) {
       )}
 
       <div className="overflow-x-auto card">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[650px] text-sm">
           <thead>
             <tr className="border-b border-border-soft text-left text-xs uppercase text-ink-muted">
               <th className="w-10 px-3 py-2 text-center">
