@@ -20,7 +20,18 @@ class VanStockModel
     {
     }
 
-    public function issue(int $branchId, int $employeeId, int $issuedBy, ?string $notes, array $lines): int
+    /**
+     * Returns ['issue_id' => int] on success, or ['warning' => 'insufficient_stock',
+     * 'shortages' => [...]] when a requested quantity exceeds what's actually
+     * on hand at the branch right now — a warning, never a hard block: pass
+     * $confirmInsufficient=true (the caller already showed the user the
+     * shortages and they chose Continue) to issue anyway. Checked fresh
+     * against the locked stock_ledger rows on every call, inside the same
+     * transaction as the write, so a stock change between the warning and
+     * the confirm click is still caught and the issue still can't race
+     * another concurrent issue past the same stock.
+     */
+    public function issue(int $branchId, int $employeeId, int $issuedBy, ?string $notes, array $lines, bool $confirmInsufficient = false): array
     {
         if (empty($lines)) {
             throw new \InvalidArgumentException('At least one item is required for stock issue');
@@ -43,7 +54,8 @@ class VanStockModel
                 $issueQtyByItem[$itemId] = ($issueQtyByItem[$itemId] ?? 0.0) + $qty;
             }
 
-            // 2. Lock & validate branch/warehouse stock_ledger rows FOR UPDATE
+            // 2. Lock branch/warehouse stock_ledger rows FOR UPDATE and collect
+            // (not throw) any shortages — Stock Warning, not a block.
             $stockStmt = $this->pdo->prepare(
                 'SELECT quantity_on_hand FROM stock_ledger
                  WHERE item_id = :item_id AND owner_type = \'branch\' AND owner_id = :branch_id
@@ -52,6 +64,7 @@ class VanStockModel
 
             $itemStmt = $this->pdo->prepare('SELECT item_name FROM items WHERE id = :id');
 
+            $shortages = [];
             foreach ($issueQtyByItem as $itemId => $requiredQty) {
                 $stockStmt->execute(['item_id' => $itemId, 'branch_id' => $branchId]);
                 $stockRow = $stockStmt->fetch();
@@ -60,12 +73,21 @@ class VanStockModel
                 if ($available < $requiredQty) {
                     $itemStmt->execute(['id' => $itemId]);
                     $itemName = $itemStmt->fetchColumn() ?: "Item #{$itemId}";
-                    $availableDisp = round($available, 3);
-                    $requiredDisp = round($requiredQty, 3);
-                    throw new \RuntimeException(
-                        "Cannot issue {$requiredDisp} of \"{$itemName}\". Only {$availableDisp} currently available in warehouse stock."
-                    );
+                    $shortages[] = [
+                        'item_id' => $itemId,
+                        'item_name' => $itemName,
+                        'available' => round($available, 3),
+                        'requested' => round($requiredQty, 3),
+                        'excess' => round($requiredQty - $available, 3),
+                    ];
                 }
+            }
+
+            if (!empty($shortages) && !$confirmInsufficient) {
+                if ($mustCommit) {
+                    $this->pdo->rollBack();
+                }
+                return ['warning' => 'insufficient_stock', 'shortages' => $shortages];
             }
 
             // 3. Create issue note header
@@ -98,7 +120,7 @@ class VanStockModel
             if ($mustCommit) {
                 $this->pdo->commit();
             }
-            return $issueId;
+            return ['issue_id' => $issueId];
         } catch (\Throwable $e) {
             if ($mustCommit && $this->pdo->inTransaction()) {
                 $this->pdo->rollBack();
@@ -176,6 +198,10 @@ class VanStockModel
 
                 $stock->applyMovement($itemId, 'employee', $employeeId, -$qty, 'salesman_return', 'stock_return_notes', $returnId, null, null, $returnedBy);
                 $stock->applyMovement($itemId, 'branch', $branchId, $qty, 'salesman_return', 'stock_return_notes', $returnId, null, null, $returnedBy);
+            }
+
+            if ($sourceType === 'customer_prebooking' && $sourceId !== null) {
+                $this->adjustIssuedQty($sourceType, $sourceId, $lines, -1);
             }
 
             $this->pdo->commit();

@@ -57,17 +57,22 @@ class VanStockController
 
         $branchId = $this->resolveBranchId($claims);
         try {
-            $id = $this->model->issue(
+            $result = $this->model->issue(
                 $branchId,
                 (int) $body['employee_id'],
                 (int) $claims['sub'],
                 $body['notes'] ?? null,
-                $body['items']
+                $body['items'],
+                !empty($body['confirm_insufficient'])
             );
-            Response::json(['issue_id' => $id], 201);
         } catch (\InvalidArgumentException | \RuntimeException $e) {
             Response::error($e->getMessage(), 422);
         }
+
+        if (isset($result['warning'])) {
+            Response::json($result, 409);
+        }
+        Response::json(['issue_id' => $result['issue_id']], 201);
     }
 
     public function returnStock(): void

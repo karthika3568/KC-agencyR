@@ -421,15 +421,26 @@ class CustomerPrebookingController
             }
 
             // warehouse_dispatch mode:
-            // Issue stock from warehouse to van (validates warehouse stock FOR UPDATE)
+            // Issue stock from warehouse to van (validates warehouse stock FOR UPDATE).
+            // This dispatch flow has no "shortage warning, continue anyway" UI of its
+            // own (unlike the standalone Issue Stock to Van form), so a shortage here
+            // is still a hard failure — same as before VanStockModel::issue() was
+            // changed to warn instead of throw for that other, separate entry point.
             $vanStockModel = new \App\Models\VanStockModel($this->pdo);
-            $issueId = $vanStockModel->issue(
+            $result = $vanStockModel->issue(
                 $branchId,
                 $targetEmployeeId,
                 (int) $claims['sub'],
                 $body['notes'] ?? ("Dispatched from Pre-booking #" . ($booking['prebooking_no'] ?? $id)),
                 $items
             );
+            if (isset($result['warning'])) {
+                $first = $result['shortages'][0];
+                throw new \RuntimeException(
+                    "Cannot issue {$first['requested']} of \"{$first['item_name']}\". Only {$first['available']} currently available in warehouse stock."
+                );
+            }
+            $issueId = $result['issue_id'];
 
             $this->model->linkVanIssue((int) $id, $issueId, $targetEmployeeId);
 

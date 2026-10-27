@@ -8,6 +8,7 @@ import { Tabs } from '../components/Tabs';
 import { useAuth } from '../hooks/useAuth.jsx';
 import { usePermission } from '../hooks/usePermission';
 import { Button } from '../components/Button.jsx';
+import { ConfirmDialog } from '../components/ConfirmDialog.jsx';
 import { downloadReportPdf, downloadVanIssuePdf } from '../utils/reportPdf';
 import { Pagination } from '../components/Pagination';
 import { useClientPagination } from '../hooks/useClientPagination';
@@ -238,6 +239,9 @@ export function StockAdjustmentPanel({ canManage }) {
       invalidate();
       resetForm();
       showSuccess('Stock adjustment logged successfully!');
+    },
+    onError: (err) => {
+      setFormError(err?.response?.data?.error || 'Unable to save this stock adjustment. Please try again.');
     },
   });
 
@@ -481,6 +485,7 @@ export function VanStockPanel({ canManage }) {
   const [selectedItemIds, setSelectedItemIds] = useState([]);
   const [exportError, setExportError] = useState('');
   const [exporting, setExporting] = useState(false);
+  const [shortageWarning, setShortageWarning] = useState(null);
 
   useEffect(() => {
     if (isSalesman && user?.id) {
@@ -521,9 +526,28 @@ export function VanStockPanel({ canManage }) {
   const addLine = () => setLines((prev) => [...prev, { item_id: '', qty: 1 }]);
   const removeLine = (idx) => setLines((prev) => prev.filter((_, i) => i !== idx));
 
+  const submitPayload = async (payload) => {
+    try {
+      await mutation.mutateAsync(payload);
+      setShortageWarning(null);
+    } catch (err) {
+      // A stock-insufficiency warning (Issue Stock to Van only) comes back
+      // as 409 with a `shortages` list — not a hard error. Surface it as a
+      // Continue/Cancel confirmation instead of a dead-end error message;
+      // any other failure (validation, server error) still just shows the
+      // inline error banner.
+      if (mode === 'issue' && err?.response?.status === 409 && err?.response?.data?.warning === 'insufficient_stock') {
+        setShortageWarning({ payload, shortages: err.response.data.shortages });
+        return;
+      }
+      setFormError(err?.response?.data?.error || 'Failed to process van stock');
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setFormError('');
+    setShortageWarning(null);
     if (!employeeId) {
       setFormError('Please select a salesman.');
       return;
@@ -534,14 +558,15 @@ export function VanStockPanel({ canManage }) {
       return;
     }
 
-    try {
-      await mutation.mutateAsync({
-        employee_id: Number(employeeId),
-        items: validLines.map((l) => ({ item_id: Number(l.item_id), qty: Number(l.qty) })),
-      });
-    } catch (err) {
-      setFormError(err?.response?.data?.error || 'Failed to process van stock');
-    }
+    await submitPayload({
+      employee_id: Number(employeeId),
+      items: validLines.map((l) => ({ item_id: Number(l.item_id), qty: Number(l.qty) })),
+    });
+  };
+
+  const confirmShortageAndIssue = async () => {
+    if (!shortageWarning) return;
+    await submitPayload({ ...shortageWarning.payload, confirm_insufficient: true });
   };
 
   const users = usersQuery.data || [];
@@ -1100,6 +1125,25 @@ export function VanStockPanel({ canManage }) {
         <PrintPreviewModal
           stockIssue={printingIssue}
           onClose={() => setPrintingIssue(null)}
+        />
+      )}
+
+      {shortageWarning && (
+        <ConfirmDialog
+          variant="warning"
+          title="Stock Warning"
+          message="The requested quantity exceeds available stock for one or more items. Do you want to continue anyway?"
+          details={shortageWarning.shortages.map((s) => (
+            <div key={s.item_id} className="border-b border-[#EAF1FA] last:border-0 pb-1.5 last:pb-0">
+              <span className="font-bold text-[#0B1B45]">{s.item_name}:</span> only {s.available} unit(s) available,
+              but {s.requested} requested — exceeds by {s.excess} unit(s).
+            </div>
+          ))}
+          confirmLabel="Continue"
+          cancelLabel="Cancel"
+          loading={mutation.isPending}
+          onConfirm={confirmShortageAndIssue}
+          onCancel={() => setShortageWarning(null)}
         />
       )}
     </div>

@@ -135,6 +135,7 @@ $router->delete('/api/items/{id}', fn ($id) => $itemController->destroy($id));
 $router->post('/api/items/{id}/image', fn ($id) => $itemController->uploadImage($id));
 $router->delete('/api/items/{id}/image', fn ($id) => $itemController->removeImage($id));
 $router->post('/api/items/image-search', fn () => $itemController->imageSearch());
+$router->get('/api/items/{id}/usage', fn ($id) => $itemController->usage($id));
 
 // ---------------------------------------------------------------
 // Parties — branch-scoped (section 4.2)

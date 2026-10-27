@@ -8,8 +8,9 @@ import { Button } from '../components/Button.jsx';
 import { Pagination } from '../components/Pagination';
 import { useClientPagination } from '../hooks/useClientPagination';
 import { handleFormKeyDown } from '../utils/formNavigation';
+import { Toast } from '../components/Toast.jsx';
 
-export function CollectModal({ customer, onClose }) {
+export function CollectModal({ customer, onClose, onCollected }) {
   const queryClient = useQueryClient();
   const canViewAll = usePermission('credit.view_shopwide_outstanding');
   const [mode, setMode] = useState('fifo'); // 'fifo' | 'manual'
@@ -17,7 +18,6 @@ export function CollectModal({ customer, onClose }) {
   const [checkedIds, setCheckedIds] = useState([]);
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState(null);
 
   const customerId = customer.customer_id || customer.id;
 
@@ -29,10 +29,13 @@ export function CollectModal({ customer, onClose }) {
   const createMutation = useMutation({
     mutationFn: collectionsApi.create,
     onSuccess: (data) => {
-      setSuccess(data);
       queryClient.invalidateQueries({ queryKey: ['collections-pending'] });
       queryClient.invalidateQueries({ queryKey: ['collections'] });
       queryClient.invalidateQueries({ queryKey: ['unpaid-invoices', customerId] });
+      // Close immediately on a confirmed success — never before the
+      // backend has actually responded. The receipt summary is handed to
+      // the page-level toast instead of lingering in the closed modal.
+      onCollected(data);
     },
   });
 
@@ -160,7 +163,6 @@ export function CollectModal({ customer, onClose }) {
         )}
 
         {error && <p className="mb-2 text-sm text-danger">{error}</p>}
-        {success && <p className="mb-2 text-sm text-success">Collected Rs. {success.allocated_total} across {Object.keys(success.allocations).length} invoice(s).</p>}
 
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>Close</Button>
@@ -177,6 +179,7 @@ export function Collections() {
   const [selected, setSelected] = useState(null);
   const [showCustomerSelect, setShowCustomerSelect] = useState(false);
   const [customerSearch, setCustomerSearch] = useState('');
+  const [toastMsg, setToastMsg] = useState('');
 
   const customersQuery = useQuery({
     queryKey: ['customers'],
@@ -191,6 +194,13 @@ export function Collections() {
       (c.phone || '').toLowerCase().includes(q)
     );
   });
+
+  const handleCollected = (data) => {
+    setSelected(null);
+    const invoiceCount = Object.keys(data?.allocations || {}).length;
+    setToastMsg(`Collected ₹${data?.allocated_total} across ${invoiceCount} invoice(s).`);
+    setTimeout(() => setToastMsg(''), 4000);
+  };
 
   const pendingQuery = useQuery({ queryKey: ['collections-pending'], queryFn: () => collectionsApi.pending(), enabled: canViewAll });
   const historyQuery = useQuery({ queryKey: ['collections'], queryFn: collectionsApi.list });
@@ -370,7 +380,8 @@ export function Collections() {
         </div>
       )}
 
-      {selected && <CollectModal customer={selected} onClose={() => setSelected(null)} />}
+      {selected && <CollectModal customer={selected} onClose={() => setSelected(null)} onCollected={handleCollected} />}
+      <Toast message={toastMsg} onClose={() => setToastMsg('')} />
     </div>
   );
 }

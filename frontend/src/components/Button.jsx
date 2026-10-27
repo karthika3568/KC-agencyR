@@ -26,7 +26,8 @@ export function Button({
   return (
     <button
       disabled={disabled || Boolean(loading)}
-      className={`inline-flex items-center justify-center gap-1.5 rounded-xl font-semibold transition-all active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1 ${sizeClasses} ${VARIANT_CLASSES[variant] || VARIANT_CLASSES.primary} ${className}`}
+      aria-busy={loading || undefined}
+      className={`inline-flex items-center justify-center gap-1.5 rounded-xl font-semibold transition-all active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1 disabled:cursor-not-allowed ${sizeClasses} ${VARIANT_CLASSES[variant] || VARIANT_CLASSES.primary} ${className}`}
       {...props}
     >
       {loading ? (
