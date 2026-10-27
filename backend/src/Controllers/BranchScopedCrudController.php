@@ -61,9 +61,35 @@ class BranchScopedCrudController
         return (int) $homeBranch;
     }
 
+    private function authorizeRead(array $claims): void
+    {
+        if ($this->table === 'customers') {
+            PermissionMiddleware::requireAny($claims, [
+                'parties.manage_customers',
+                'pos.access',
+                'orders.create_prebooking',
+                'orders.view_prebooking',
+                'collections.field_collection_entry',
+                'credit.collect_credit_payment',
+            ]);
+        } elseif ($this->table === 'suppliers') {
+            PermissionMiddleware::requireAny($claims, [
+                'parties.manage_suppliers',
+                'purchases.create_grn',
+                'purchases.edit_grn',
+                'purchases.settle_supplier_payment',
+            ]);
+        } elseif ($this->table === 'expenses' || $this->table === 'other_income') {
+            PermissionMiddleware::require($claims, 'expenses.manage');
+        } else {
+            PermissionMiddleware::require($claims, $this->managePermission);
+        }
+    }
+
     public function index(): void
     {
         $claims = JwtAuthMiddleware::authenticate();
+        $this->authorizeRead($claims);
         $branchId = $this->resolveBranchId($claims);
 
         if (isset($_GET['page'])) {
@@ -100,6 +126,7 @@ class BranchScopedCrudController
     public function show(string $id): void
     {
         $claims = JwtAuthMiddleware::authenticate();
+        $this->authorizeRead($claims);
         $row = $this->findScoped($claims, (int) $id);
         Response::json($row);
     }

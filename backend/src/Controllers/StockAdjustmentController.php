@@ -31,6 +31,10 @@ class StockAdjustmentController
     public function index(): void
     {
         $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::requireAny($claims, [
+            'inventory.stock_adjustment',
+            'inventory.view_stock',
+        ]);
         Response::json($this->model->all($this->resolveBranchId($claims)));
     }
 

@@ -33,14 +33,22 @@ class CustomerPrebookingController
     public function index(): void
     {
         $claims = JwtAuthMiddleware::authenticate();
-        PermissionMiddleware::require($claims, 'orders.view_prebooking');
+        PermissionMiddleware::requireAny($claims, [
+            'orders.view_prebooking',
+            'orders.create_prebooking',
+            'orders.manage_prebooking_status',
+        ]);
         Response::json($this->model->all($this->resolveBranchId($claims)));
     }
 
     public function show(string $id): void
     {
         $claims = JwtAuthMiddleware::authenticate();
-        PermissionMiddleware::require($claims, 'orders.view_prebooking');
+        PermissionMiddleware::requireAny($claims, [
+            'orders.view_prebooking',
+            'orders.create_prebooking',
+            'orders.manage_prebooking_status',
+        ]);
         $row = $this->model->find((int) $id);
         if (!$row) {
             Response::error('Not found', 404);

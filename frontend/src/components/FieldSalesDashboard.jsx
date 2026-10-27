@@ -663,9 +663,26 @@ export function FieldSalesDashboard() {
   const [showVanStockModal, setShowVanStockModal] = useState(false);
 
   // Permission checks
-  const canPrebooking = usePermission('orders.create_prebooking');
-  const canViewStock = usePermission('inventory.view_stock');
+  const canManageCustomers = usePermission('parties.manage_customers');
+  const canCreateOrder = usePermission('orders.create_prebooking');
+  const canViewOrders = usePermission([
+    'orders.create_prebooking',
+    'orders.view_prebooking',
+    'orders.manage_prebooking_status',
+  ]);
+  const canManageVans = usePermission(['inventory.issue_van_stock', 'inventory.view_stock']);
+  const canViewVanStock = usePermission(['inventory.view_stock', 'inventory.issue_van_stock']);
   const canIssueStock = usePermission('inventory.issue_van_stock');
+  const canViewStockHistory = usePermission(['inventory.view_stock', 'inventory.issue_van_stock']);
+
+  const hasAnyAction =
+    canManageCustomers ||
+    canCreateOrder ||
+    canViewOrders ||
+    canManageVans ||
+    canViewVanStock ||
+    canIssueStock ||
+    canViewStockHistory;
 
   return (
     <div className="space-y-4 max-w-4xl mx-auto pb-10">
@@ -696,178 +713,201 @@ export function FieldSalesDashboard() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {/* Action 1: Create Customer */}
-          <button
-            type="button"
-            onClick={() => setShowCreateCustomerModal(true)}
-            className="group rounded-2xl border border-border-soft bg-white p-4 shadow-2xs hover:border-[#8244AD]/40 hover:shadow-soft transition-all text-left flex flex-col justify-between min-h-[120px] focus:outline-none focus:ring-2 focus:ring-[#8244AD]"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-50 text-[#8244AD] group-hover:scale-105 transition-transform">
-                <Users size={20} />
+          {canManageCustomers && (
+            <button
+              type="button"
+              onClick={() => setShowCreateCustomerModal(true)}
+              className="group rounded-2xl border border-border-soft bg-white p-4 shadow-2xs hover:border-[#8244AD]/40 hover:shadow-soft transition-all text-left flex flex-col justify-between min-h-[120px] focus:outline-none focus:ring-2 focus:ring-[#8244AD]"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-50 text-[#8244AD] group-hover:scale-105 transition-transform">
+                  <Users size={20} />
+                </div>
+                <Plus size={15} className="text-[#8244AD]" />
               </div>
-              <Plus size={15} className="text-[#8244AD]" />
-            </div>
-            <div className="mt-3">
-              <h3 className="text-sm font-bold text-ink group-hover:text-primary transition-colors">
-                Create Customer
-              </h3>
-              <p className="text-[11px] text-ink-muted leading-tight mt-0.5">
-                Register a new retail or wholesale store
-              </p>
-            </div>
-          </button>
+              <div className="mt-3">
+                <h3 className="text-sm font-bold text-ink group-hover:text-primary transition-colors">
+                  Create Customer
+                </h3>
+                <p className="text-[11px] text-ink-muted leading-tight mt-0.5">
+                  Register a new retail or wholesale store
+                </p>
+              </div>
+            </button>
+          )}
 
           {/* Action 2: New Customer Order */}
-          <button
-            type="button"
-            onClick={() => setShowOrderModal(true)}
-            className="group rounded-2xl border border-[#DDD0FF] bg-gradient-to-br from-white to-[#F9F6FF] p-4 shadow-2xs hover:border-[#8244AD] hover:shadow-soft transition-all text-left flex flex-col justify-between min-h-[120px] focus:outline-none focus:ring-2 focus:ring-[#8244AD]"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EDE5FF] text-[#6F2DA8] group-hover:scale-105 transition-transform">
-                <ClipboardList size={20} />
+          {canCreateOrder && (
+            <button
+              type="button"
+              onClick={() => setShowOrderModal(true)}
+              className="group rounded-2xl border border-[#DDD0FF] bg-gradient-to-br from-white to-[#F9F6FF] p-4 shadow-2xs hover:border-[#8244AD] hover:shadow-soft transition-all text-left flex flex-col justify-between min-h-[120px] focus:outline-none focus:ring-2 focus:ring-[#8244AD]"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EDE5FF] text-[#6F2DA8] group-hover:scale-105 transition-transform">
+                  <ClipboardList size={20} />
+                </div>
+                <span className="rounded-full bg-[#EDE8FF] px-2 py-0.5 text-[9.5px] font-bold text-[#6F2DA8]">
+                  New
+                </span>
               </div>
-              <span className="rounded-full bg-[#EDE8FF] px-2 py-0.5 text-[9.5px] font-bold text-[#6F2DA8]">
-                New
-              </span>
-            </div>
-            <div className="mt-3">
-              <h3 className="text-sm font-bold text-ink group-hover:text-[#6F2DA8] transition-colors">
-                New Customer Order
-              </h3>
-              <p className="text-[11px] text-ink-muted leading-tight mt-0.5">
-                Book pre-booking order for store delivery
-              </p>
-            </div>
-          </button>
+              <div className="mt-3">
+                <h3 className="text-sm font-bold text-ink group-hover:text-[#6F2DA8] transition-colors">
+                  New Customer Order
+                </h3>
+                <p className="text-[11px] text-ink-muted leading-tight mt-0.5">
+                  Book pre-booking order for store delivery
+                </p>
+              </div>
+            </button>
+          )}
 
           {/* Action 3: View Orders */}
-          <Link
-            to="/orders"
-            className="group rounded-2xl border border-border-soft bg-white p-4 shadow-2xs hover:border-indigo-300 hover:shadow-soft transition-all text-left flex flex-col justify-between min-h-[120px] focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 group-hover:scale-105 transition-transform">
-                <FileText size={20} />
+          {canViewOrders && (
+            <Link
+              to="/orders"
+              className="group rounded-2xl border border-border-soft bg-white p-4 shadow-2xs hover:border-indigo-300 hover:shadow-soft transition-all text-left flex flex-col justify-between min-h-[120px] focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 group-hover:scale-105 transition-transform">
+                  <FileText size={20} />
+                </div>
+                <ChevronRight size={15} className="text-ink-muted group-hover:translate-x-1 transition-transform" />
               </div>
-              <ChevronRight size={15} className="text-ink-muted group-hover:translate-x-1 transition-transform" />
-            </div>
-            <div className="mt-3">
-              <h3 className="text-sm font-bold text-ink group-hover:text-indigo-600 transition-colors">
-                View Orders
-              </h3>
-              <p className="text-[11px] text-ink-muted leading-tight mt-0.5">
-                Pre-booking orders &amp; fulfilment register
-              </p>
-            </div>
-          </Link>
+              <div className="mt-3">
+                <h3 className="text-sm font-bold text-ink group-hover:text-indigo-600 transition-colors">
+                  View Orders
+                </h3>
+                <p className="text-[11px] text-ink-muted leading-tight mt-0.5">
+                  Pre-booking orders &amp; fulfilment register
+                </p>
+              </div>
+            </Link>
+          )}
 
           {/* Action 4: Manage Vans */}
-          <Link
-            to="/vans"
-            className="group rounded-2xl border border-border-soft bg-white p-4 shadow-2xs hover:border-amber-300 hover:shadow-soft transition-all text-left flex flex-col justify-between min-h-[120px] focus:outline-none focus:ring-2 focus:ring-amber-500"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600 group-hover:scale-105 transition-transform">
-                <Truck size={20} />
+          {canManageVans && (
+            <Link
+              to="/vans"
+              className="group rounded-2xl border border-border-soft bg-white p-4 shadow-2xs hover:border-amber-300 hover:shadow-soft transition-all text-left flex flex-col justify-between min-h-[120px] focus:outline-none focus:ring-2 focus:ring-amber-500"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600 group-hover:scale-105 transition-transform">
+                  <Truck size={20} />
+                </div>
+                <ChevronRight size={15} className="text-ink-muted group-hover:translate-x-1 transition-transform" />
               </div>
-              <ChevronRight size={15} className="text-ink-muted group-hover:translate-x-1 transition-transform" />
-            </div>
-            <div className="mt-3">
-              <h3 className="text-sm font-bold text-ink group-hover:text-amber-600 transition-colors">
-                Manage Vans
-              </h3>
-              <p className="text-[11px] text-ink-muted leading-tight mt-0.5">
-                Distribution fleet, assigned staff &amp; status
-              </p>
-            </div>
-          </Link>
+              <div className="mt-3">
+                <h3 className="text-sm font-bold text-ink group-hover:text-amber-600 transition-colors">
+                  Manage Vans
+                </h3>
+                <p className="text-[11px] text-ink-muted leading-tight mt-0.5">
+                  Distribution fleet, assigned staff &amp; status
+                </p>
+              </div>
+            </Link>
+          )}
 
           {/* Action 5: View Van Stock */}
-          <div
-            tabIndex={0}
-            role="button"
-            onClick={() => setShowVanStockModal(true)}
-            className="group cursor-pointer rounded-2xl border border-border-soft bg-white p-4 shadow-2xs hover:border-blue-300 hover:shadow-soft transition-all text-left flex flex-col justify-between min-h-[120px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600 group-hover:scale-105 transition-transform">
-                <Package size={20} />
+          {canViewVanStock && (
+            <div
+              tabIndex={0}
+              role="button"
+              onClick={() => setShowVanStockModal(true)}
+              className="group cursor-pointer rounded-2xl border border-border-soft bg-white p-4 shadow-2xs hover:border-blue-300 hover:shadow-soft transition-all text-left flex flex-col justify-between min-h-[120px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600 group-hover:scale-105 transition-transform">
+                  <Package size={20} />
+                </div>
+                <ChevronRight size={15} className="text-ink-muted group-hover:translate-x-1 transition-transform" />
               </div>
-              <ChevronRight size={15} className="text-ink-muted group-hover:translate-x-1 transition-transform" />
+              <div className="mt-3">
+                <h3 className="text-sm font-bold text-ink group-hover:text-blue-600 transition-colors">
+                  View Van Stock
+                </h3>
+                <p className="text-[11px] text-ink-muted leading-tight mt-0.5">
+                  Live quantities on-hand inside your van
+                </p>
+              </div>
             </div>
-            <div className="mt-3">
-              <h3 className="text-sm font-bold text-ink group-hover:text-blue-600 transition-colors">
-                View Van Stock
-              </h3>
-              <p className="text-[11px] text-ink-muted leading-tight mt-0.5">
-                Live quantities on-hand inside your van
-              </p>
-            </div>
-          </div>
+          )}
 
           {/* Action 6: Issue Stock */}
-          <Link
-            to="/van-stock?tab=issue"
-            className="group rounded-2xl border border-border-soft bg-white p-4 shadow-2xs hover:border-emerald-300 hover:shadow-soft transition-all text-left flex flex-col justify-between min-h-[120px] focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 group-hover:scale-105 transition-transform">
-                <ArrowDownLeft size={20} />
+          {canIssueStock && (
+            <Link
+              to="/van-stock?tab=issue"
+              className="group rounded-2xl border border-border-soft bg-white p-4 shadow-2xs hover:border-emerald-300 hover:shadow-soft transition-all text-left flex flex-col justify-between min-h-[120px] focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 group-hover:scale-105 transition-transform">
+                  <ArrowDownLeft size={20} />
+                </div>
+                <ChevronRight size={15} className="text-ink-muted group-hover:translate-x-1 transition-transform" />
               </div>
-              <ChevronRight size={15} className="text-ink-muted group-hover:translate-x-1 transition-transform" />
-            </div>
-            <div className="mt-3">
-              <h3 className="text-sm font-bold text-ink group-hover:text-emerald-600 transition-colors">
-                Issue Stock
-              </h3>
-              <p className="text-[11px] text-ink-muted leading-tight mt-0.5">
-                Transfer branch inventory out to mobile van
-              </p>
-            </div>
-          </Link>
+              <div className="mt-3">
+                <h3 className="text-sm font-bold text-ink group-hover:text-emerald-600 transition-colors">
+                  Issue Stock
+                </h3>
+                <p className="text-[11px] text-ink-muted leading-tight mt-0.5">
+                  Transfer branch inventory out to mobile van
+                </p>
+              </div>
+            </Link>
+          )}
 
           {/* Action 7: Record Stock Return */}
-          <Link
-            to="/van-stock?tab=return"
-            className="group rounded-2xl border border-border-soft bg-white p-4 shadow-2xs hover:border-rose-300 hover:shadow-soft transition-all text-left flex flex-col justify-between min-h-[120px] focus:outline-none focus:ring-2 focus:ring-rose-500"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 text-rose-600 group-hover:scale-105 transition-transform">
-                <RotateCcw size={20} />
+          {canIssueStock && (
+            <Link
+              to="/van-stock?tab=return"
+              className="group rounded-2xl border border-border-soft bg-white p-4 shadow-2xs hover:border-rose-300 hover:shadow-soft transition-all text-left flex flex-col justify-between min-h-[120px] focus:outline-none focus:ring-2 focus:ring-rose-500"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 text-rose-600 group-hover:scale-105 transition-transform">
+                  <RotateCcw size={20} />
+                </div>
+                <ChevronRight size={15} className="text-ink-muted group-hover:translate-x-1 transition-transform" />
               </div>
-              <ChevronRight size={15} className="text-ink-muted group-hover:translate-x-1 transition-transform" />
-            </div>
-            <div className="mt-3">
-              <h3 className="text-sm font-bold text-ink group-hover:text-rose-600 transition-colors">
-                Record Stock Return
-              </h3>
-              <p className="text-[11px] text-ink-muted leading-tight mt-0.5">
-                Process day-end unsold items return
-              </p>
-            </div>
-          </Link>
+              <div className="mt-3">
+                <h3 className="text-sm font-bold text-ink group-hover:text-rose-600 transition-colors">
+                  Record Stock Return
+                </h3>
+                <p className="text-[11px] text-ink-muted leading-tight mt-0.5">
+                  Process day-end unsold items return
+                </p>
+              </div>
+            </Link>
+          )}
 
           {/* Action 8: View Stock History */}
-          <Link
-            to="/stock-history"
-            className="group rounded-2xl border border-border-soft bg-white p-4 shadow-2xs hover:border-[#8244AD]/40 hover:shadow-soft transition-all text-left flex flex-col justify-between min-h-[120px] focus:outline-none focus:ring-2 focus:ring-[#8244AD]"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-50 text-[#8244AD] group-hover:scale-105 transition-transform">
-                <History size={20} />
+          {canViewStockHistory && (
+            <Link
+              to="/stock-history"
+              className="group rounded-2xl border border-border-soft bg-white p-4 shadow-2xs hover:border-[#8244AD]/40 hover:shadow-soft transition-all text-left flex flex-col justify-between min-h-[120px] focus:outline-none focus:ring-2 focus:ring-[#8244AD]"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-50 text-[#8244AD] group-hover:scale-105 transition-transform">
+                  <History size={20} />
+                </div>
+                <ChevronRight size={15} className="text-ink-muted group-hover:translate-x-1 transition-transform" />
               </div>
-              <ChevronRight size={15} className="text-ink-muted group-hover:translate-x-1 transition-transform" />
+              <div className="mt-3">
+                <h3 className="text-sm font-bold text-ink group-hover:text-primary transition-colors">
+                  View Stock History
+                </h3>
+                <p className="text-[11px] text-ink-muted leading-tight mt-0.5">
+                  Stock issues, returns &amp; movement audit log
+                </p>
+              </div>
+            </Link>
+          )}
+
+          {!hasAnyAction && (
+            <div className="col-span-full py-10 text-center rounded-2xl border border-dashed border-border-soft bg-white/60 p-6">
+              <ShieldCheck className="mx-auto h-8 w-8 text-ink-muted/50 mb-2" />
+              <p className="text-xs font-semibold text-ink-muted">No operations are currently assigned to your account. Please contact an administrator.</p>
             </div>
-            <div className="mt-3">
-              <h3 className="text-sm font-bold text-ink group-hover:text-primary transition-colors">
-                View Stock History
-              </h3>
-              <p className="text-[11px] text-ink-muted leading-tight mt-0.5">
-                Stock issues, returns &amp; movement audit log
-              </p>
-            </div>
-          </Link>
+          )}
         </div>
       </div>
 
