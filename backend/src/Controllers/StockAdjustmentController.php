@@ -49,14 +49,34 @@ class StockAdjustmentController
             Response::error('adjustment_type must be addition or deduction', 422);
         }
 
+        $validReasons = ['damage', 'spoilage', 'count_correction', 'other'];
+        $rawReason = strtolower(trim((string) $body['reason']));
+        $reason = $rawReason;
+        if (!in_array($reason, $validReasons, true)) {
+            if (str_contains($rawReason, 'damage')) {
+                $reason = 'damage';
+            } elseif (str_contains($rawReason, 'spoil') || str_contains($rawReason, 'expire')) {
+                $reason = 'spoilage';
+            } elseif (str_contains($rawReason, 'count') || str_contains($rawReason, 'correct')) {
+                $reason = 'count_correction';
+            } else {
+                $reason = 'other';
+            }
+        }
+
+        $remarks = $body['remarks'] ?? null;
+        if ($reason === 'other' && $rawReason !== 'other' && empty($remarks)) {
+            $remarks = $body['reason'];
+        }
+
         $id = $this->model->create(
             (int) $body['item_id'],
             'branch',
             $this->resolveBranchId($claims),
             $body['adjustment_type'],
             (float) $body['qty'],
-            $body['reason'],
-            $body['remarks'] ?? null,
+            $reason,
+            $remarks,
             (int) $claims['sub']
         );
 

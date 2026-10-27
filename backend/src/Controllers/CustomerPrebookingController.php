@@ -21,6 +21,30 @@ class CustomerPrebookingController
         $this->model = new CustomerPrebookingModel($pdo);
     }
 
+    private function isSalesman(array $claims): bool
+    {
+        $role = trim((string) ($claims['role'] ?? ''));
+        return strcasecmp($role, 'Field Sales Executive') === 0
+            || stripos($role, 'Field Sales') !== false;
+    }
+
+    private function assertOrderAccess(array $claims, array $booking): void
+    {
+        $canSwitch = in_array('branches.switch_context', (array) ($claims['permissions'] ?? []), true);
+        if (!$canSwitch && (int) $booking['branch_id'] !== (int) $claims['branch_id']) {
+            Response::error('Forbidden: cross-branch access', 403);
+        }
+
+        if ($this->isSalesman($claims)) {
+            $salesmanId = (int) $claims['sub'];
+            $empId = $booking['employee_id'] !== null ? (int) $booking['employee_id'] : null;
+            $creatorId = (int) $booking['created_by'];
+            if ($empId !== $salesmanId && $creatorId !== $salesmanId) {
+                Response::error('Forbidden: access denied to this order', 403);
+            }
+        }
+    }
+
     private function resolveBranchId(array $claims): int
     {
         $canSwitch = in_array('branches.switch_context', (array) ($claims['permissions'] ?? []), true);
@@ -34,7 +58,17 @@ class CustomerPrebookingController
     {
         $claims = JwtAuthMiddleware::authenticate();
         PermissionMiddleware::require($claims, 'orders.view_prebooking');
-        Response::json($this->model->all($this->resolveBranchId($claims)));
+
+        $branchId = $this->resolveBranchId($claims);
+        $salesmanId = null;
+
+        if ($this->isSalesman($claims)) {
+            $salesmanId = (int) $claims['sub'];
+        } elseif (!empty($_GET['employee_id'])) {
+            $salesmanId = (int) $_GET['employee_id'];
+        }
+
+        Response::json($this->model->all($branchId, $salesmanId));
     }
 
     public function show(string $id): void
@@ -46,10 +80,7 @@ class CustomerPrebookingController
             Response::error('Not found', 404);
         }
 
-        $canSwitch = in_array('branches.switch_context', (array) ($claims['permissions'] ?? []), true);
-        if (!$canSwitch && (int) $row['branch_id'] !== (int) $claims['branch_id']) {
-            Response::error('Forbidden: cross-branch access', 403);
-        }
+        $this->assertOrderAccess($claims, $row);
 
         Response::json($row);
     }
@@ -94,11 +125,21 @@ class CustomerPrebookingController
             ];
         }
 
+        $isSalesman = $this->isSalesman($claims);
+        $employeeId = $isSalesman
+            ? (int) $claims['sub']
+            : (!empty($body['employee_id']) ? (int) $body['employee_id'] : null);
+
+        $bookingSource = $body['booking_source'] ?? ($isSalesman ? 'salesman' : 'direct');
+        if ($isSalesman && ($bookingSource === 'direct' || empty($bookingSource))) {
+            $bookingSource = 'salesman';
+        }
+
         $header = [
             'customer_id' => (int) $body['customer_id'],
             'branch_id' => $branchId,
-            'employee_id' => !empty($body['employee_id']) ? (int) $body['employee_id'] : null,
-            'booking_source' => $body['booking_source'] ?? 'direct',
+            'employee_id' => $employeeId,
+            'booking_source' => $bookingSource,
             'notes' => $body['notes'] ?? null,
             'created_by' => (int) $claims['sub'],
         ];
@@ -134,10 +175,7 @@ class CustomerPrebookingController
         if (!$booking) {
             Response::error('Not found', 404);
         }
-        $canSwitch = in_array('branches.switch_context', (array) ($claims['permissions'] ?? []), true);
-        if (!$canSwitch && (int) $booking['branch_id'] !== (int) $claims['branch_id']) {
-            Response::error('Forbidden: cross-branch access', 403);
-        }
+        $this->assertOrderAccess($claims, $booking);
 
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
         [$header, $lines, $error] = $this->prepare($claims, $body);
@@ -162,10 +200,7 @@ class CustomerPrebookingController
         if (!$booking) {
             Response::error('Not found', 404);
         }
-        $canSwitch = in_array('branches.switch_context', (array) ($claims['permissions'] ?? []), true);
-        if (!$canSwitch && (int) $booking['branch_id'] !== (int) $claims['branch_id']) {
-            Response::error('Forbidden: cross-branch access', 403);
-        }
+        $this->assertOrderAccess($claims, $booking);
 
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
         if (empty($body['status'])) {
@@ -189,10 +224,7 @@ class CustomerPrebookingController
         if (!$booking) {
             Response::error('Not found', 404);
         }
-        $canSwitch = in_array('branches.switch_context', (array) ($claims['permissions'] ?? []), true);
-        if (!$canSwitch && (int) $booking['branch_id'] !== (int) $claims['branch_id']) {
-            Response::error('Forbidden: cross-branch access', 403);
-        }
+        $this->assertOrderAccess($claims, $booking);
 
         try {
             $result = $this->model->updateStatus((int) $id, 'cancelled');
@@ -207,7 +239,16 @@ class CustomerPrebookingController
         $claims = JwtAuthMiddleware::authenticate();
         PermissionMiddleware::require($claims, 'orders.view_prebooking');
 
-        $rows = $this->model->all($this->resolveBranchId($claims));
+        $branchId = $this->resolveBranchId($claims);
+        $salesmanId = null;
+
+        if ($this->isSalesman($claims)) {
+            $salesmanId = (int) $claims['sub'];
+        } elseif (!empty($_GET['employee_id'])) {
+            $salesmanId = (int) $_GET['employee_id'];
+        }
+
+        $rows = $this->model->all($branchId, $salesmanId);
 
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
@@ -272,6 +313,15 @@ class CustomerPrebookingController
 
             if (!$canSwitch && (int) $booking['branch_id'] !== (int) $claims['branch_id']) {
                 throw new \RuntimeException('Forbidden: cross-branch access', 403);
+            }
+
+            if ($this->isSalesman($claims)) {
+                $salesmanId = (int) $claims['sub'];
+                $empId = $booking['employee_id'] !== null ? (int) $booking['employee_id'] : null;
+                $creatorId = (int) $booking['created_by'];
+                if ($empId !== $salesmanId && $creatorId !== $salesmanId) {
+                    throw new \RuntimeException('Forbidden: access denied to this order', 403);
+                }
             }
 
             // Guard against repeated dispatch
@@ -406,10 +456,7 @@ class CustomerPrebookingController
             Response::error('Pre-booking not found', 404);
         }
 
-        $canSwitch = in_array('branches.switch_context', (array) ($claims['permissions'] ?? []), true);
-        if (!$canSwitch && (int) $booking['branch_id'] !== (int) $claims['branch_id']) {
-            Response::error('Forbidden: cross-branch access', 403);
-        }
+        $this->assertOrderAccess($claims, $booking);
 
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
         if (empty($body['invoice_id'])) {

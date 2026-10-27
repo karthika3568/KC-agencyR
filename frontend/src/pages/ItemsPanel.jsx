@@ -530,7 +530,7 @@ export function ItemsPanel({ canManage }) {
                 <th className="px-3 py-1.5">MRP</th>
                 <th className="px-3 py-1.5">NET_SRATE</th>
                 <th className="px-3 py-1.5">NET_PURRATE</th>
-                <th className="px-3 py-1.5">Opening Stock</th>
+                <th className="px-3 py-1.5">Stock</th>
                 <th className="px-3 py-1.5">GST%</th>
                 <th className="px-3 py-1.5">HSN</th>
                 {statusFilter === 'all' && <th className="px-3 py-1.5">Status</th>}
@@ -566,7 +566,7 @@ export function ItemsPanel({ canManage }) {
                   <td className="px-3 py-1 text-ink-muted">{item.mrp}</td>
                   <td className="px-3 py-1 text-ink-muted">{item.net_srate ?? item.retail_price}</td>
                   <td className="px-3 py-1 text-ink-muted">{item.net_purrate ?? item.purchase_price}</td>
-                  <td className="px-3 py-1 font-medium text-ink">{item.opening_stock ?? 0}</td>
+                  <td className="px-3 py-1 font-medium text-ink">{item.stock ?? item.current_stock ?? item.opening_stock ?? 0}</td>
                   <td className="px-3 py-1 text-ink-muted">{item.gst_percent ?? '—'}</td>
                   <td className="px-3 py-1 text-ink-muted">{item.hsn_code || '—'}</td>
                   {statusFilter === 'all' && (

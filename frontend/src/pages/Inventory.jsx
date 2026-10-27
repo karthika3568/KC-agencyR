@@ -229,6 +229,7 @@ export function StockAdjustmentPanel({ canManage }) {
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['stock-adjustments'] });
     queryClient.invalidateQueries({ queryKey: ['stock-hub'] });
+    queryClient.invalidateQueries({ queryKey: ['items'] });
   };
 
   const createMutation = useMutation({
@@ -471,8 +472,9 @@ export function StockAdjustmentPanel({ canManage }) {
 export function VanStockPanel({ canManage }) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const [employeeId, setEmployeeId] = useState(() => (canManage ? '' : (user?.id ? String(user.id) : '')));
-  const [mode, setMode] = useState('issue');
+  const isSalesman = user?.role === 'Field Sales Executive';
+  const [employeeId, setEmployeeId] = useState(() => (isSalesman ? (user?.id ? String(user.id) : '') : (canManage ? '' : (user?.id ? String(user.id) : ''))));
+  const [mode, setMode] = useState(() => (isSalesman ? 'return' : 'issue'));
   const [lines, setLines] = useState([{ item_id: '', qty: 1 }]);
   const [formError, setFormError] = useState('');
   const [message, setMessage] = useState('');
@@ -481,10 +483,13 @@ export function VanStockPanel({ canManage }) {
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
-    if (!canManage && user?.id && String(employeeId) !== String(user.id)) {
+    if (isSalesman && user?.id) {
+      if (String(employeeId) !== String(user.id)) setEmployeeId(String(user.id));
+      if (mode !== 'return') setMode('return');
+    } else if (!canManage && user?.id && String(employeeId) !== String(user.id)) {
       setEmployeeId(String(user.id));
     }
-  }, [canManage, user?.id, employeeId]);
+  }, [isSalesman, canManage, user?.id, employeeId, mode]);
 
   const usersQuery = useQuery({ queryKey: ['users'], queryFn: usersApi.list, enabled: canManage });
   const itemsQuery = useQuery({ queryKey: ['items', ''], queryFn: () => itemsApi.list('') });
@@ -505,6 +510,7 @@ export function VanStockPanel({ canManage }) {
       queryClient.invalidateQueries({ queryKey: ['van-pending', employeeId] });
       queryClient.invalidateQueries({ queryKey: ['van-issues'] });
       queryClient.invalidateQueries({ queryKey: ['stock-hub'] });
+      queryClient.invalidateQueries({ queryKey: ['items'] });
       setLines([{ item_id: '', qty: 1 }]);
       setMessage(mode === 'issue' ? 'Stock issued to salesman successfully!' : 'Van stock return recorded.');
       setTimeout(() => setMessage(''), 3000);
@@ -737,30 +743,26 @@ export function VanStockPanel({ canManage }) {
 
       <div className={`grid grid-cols-1 gap-3.5 ${canManage ? 'lg:grid-cols-12' : ''}`}>
         {/* Left Column Form */}
-<<<<<<< HEAD
         {canManage && (
           <div className="lg:col-span-5">
-            <div className="card p-3.5 space-y-2.5 sticky top-3">
-=======
-        <div className="lg:col-span-5">
-          {canManage && (
             <div className="card p-3.5 space-y-2.5 lg:sticky lg:top-3">
->>>>>>> 7fa1e0fda42f46920d1cdbc41a5d67cbf88c39e1
               <div className="border-b border-border-soft pb-2 flex items-center justify-between">
                 <h2 className="font-semibold text-ink text-sm sm:text-base flex items-center gap-2">
                   <Truck className="w-4 h-4 text-indigo-400" />
                   Van Stock Operations
                 </h2>
                 <div className="flex gap-1 bg-surface-subtle p-0.5 rounded-lg">
-                  <button
-                    type="button"
-                    onClick={() => setMode('issue')}
-                    className={`px-2 py-0.5 rounded text-xs font-semibold transition ${
-                      mode === 'issue' ? 'bg-indigo-500 text-white' : 'text-ink-muted hover:text-ink'
-                    }`}
-                  >
-                    Issue Stock
-                  </button>
+                  {!isSalesman && (
+                    <button
+                      type="button"
+                      onClick={() => setMode('issue')}
+                      className={`px-2 py-0.5 rounded text-xs font-semibold transition ${
+                        mode === 'issue' ? 'bg-indigo-500 text-white' : 'text-ink-muted hover:text-ink'
+                      }`}
+                    >
+                      Issue Stock
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setMode('return')}
@@ -778,19 +780,26 @@ export function VanStockPanel({ canManage }) {
 
                 <div>
                   <label className="text-xs font-medium text-ink-muted block mb-0.5">Salesman *</label>
-                  <select
-                    required
-                    value={employeeId}
-                    onChange={(e) => handleSelectEmployee(e.target.value)}
-                    className="input w-full"
-                  >
-                    <option value="">-- Select Salesman --</option>
-                    {users.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.name} ({u.role_name})
-                      </option>
-                    ))}
-                  </select>
+                  {isSalesman ? (
+                    <div className="input w-full bg-page/70 text-ink text-xs flex items-center justify-between cursor-not-allowed">
+                      <span>{user?.name || 'Logged-in Salesman'}</span>
+                      <span className="text-[10px] text-ink-muted">(You)</span>
+                    </div>
+                  ) : (
+                    <select
+                      required
+                      value={employeeId}
+                      onChange={(e) => handleSelectEmployee(e.target.value)}
+                      className="input w-full"
+                    >
+                      <option value="">-- Select Salesman --</option>
+                      {users.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.name} ({u.role_name})
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
 
                 <div className="space-y-1.5">

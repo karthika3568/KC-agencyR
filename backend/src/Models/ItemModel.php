@@ -91,21 +91,28 @@ class ItemModel
     {
     }
 
-    private const LIST_SELECT = "
-        SELECT i.*,
-               (SELECT COALESCE(SUM(sm.qty_change), 0) FROM stock_movements sm WHERE sm.item_id = i.id AND sm.movement_type = 'opening_stock') AS opening_stock,
-               c.name AS category_name, b.name AS brand_name,
-               s.name AS supplier_name,
-               bu.short_code AS base_unit_code, su.short_code AS secondary_unit_code,
-               tc.code AS tax_code, tc.gst_percent, tc.cess_percent
-        FROM items i
-        LEFT JOIN categories c ON c.id = i.category_id
-        LEFT JOIN brands b ON b.id = i.brand_id
-        LEFT JOIN suppliers s ON s.id = i.supplier_id
-        LEFT JOIN stock_units bu ON bu.id = i.base_unit_id
-        LEFT JOIN stock_units su ON su.id = i.secondary_unit_id
-        LEFT JOIN tax_codes tc ON tc.id = i.tax_code_id
-    ";
+    private function buildListSelect(?int $branchId = null): string
+    {
+        $stockBranchCondition = $branchId !== null ? "AND sl.owner_id = " . (int) $branchId : "";
+        return "
+            SELECT i.*,
+                   (SELECT COALESCE(SUM(sm.qty_change), 0) FROM stock_movements sm WHERE sm.item_id = i.id AND sm.movement_type = 'opening_stock') AS opening_stock,
+                   (SELECT COALESCE(SUM(sl.quantity_on_hand), 0) FROM stock_ledger sl WHERE sl.item_id = i.id AND sl.owner_type = 'branch' {$stockBranchCondition}) AS stock,
+                   (SELECT COALESCE(SUM(sl.quantity_on_hand), 0) FROM stock_ledger sl WHERE sl.item_id = i.id AND sl.owner_type = 'branch' {$stockBranchCondition}) AS current_stock,
+                   (SELECT COALESCE(SUM(sl.quantity_on_hand), 0) FROM stock_ledger sl WHERE sl.item_id = i.id AND sl.owner_type = 'branch' {$stockBranchCondition}) AS quantity_on_hand,
+                   c.name AS category_name, b.name AS brand_name,
+                   s.name AS supplier_name,
+                   bu.short_code AS base_unit_code, su.short_code AS secondary_unit_code,
+                   tc.code AS tax_code, tc.gst_percent, tc.cess_percent
+            FROM items i
+            LEFT JOIN categories c ON c.id = i.category_id
+            LEFT JOIN brands b ON b.id = i.brand_id
+            LEFT JOIN suppliers s ON s.id = i.supplier_id
+            LEFT JOIN stock_units bu ON bu.id = i.base_unit_id
+            LEFT JOIN stock_units su ON su.id = i.secondary_unit_id
+            LEFT JOIN tax_codes tc ON tc.id = i.tax_code_id
+        ";
+    }
 
     /**
      * @param int|null $branchId when given, only items mapped to that
@@ -113,14 +120,14 @@ class ItemModel
      * availability filter rather than a decorative field (section 6).
      * @param string $status 'active' (default — every normal caller,
      * including Billing/POS, gets only sellable items), 'inactive' (the
-     * Items screen's "Deactivated" filter), or 'all' (the Items screen's
+     * Items screen's \"Deactivated\" filter), or 'all' (the Items screen's
      * combined view). Billing/product-search call sites simply never pass
      * anything other than the default, so a deactivated item can never
      * reach the POS product list or search results.
      */
     public function all(?string $search = null, ?int $branchId = null, string $status = 'active'): array
     {
-        $sql = self::LIST_SELECT;
+        $sql = $this->buildListSelect($branchId);
         $joins = [];
         $where = [];
         $params = [];
@@ -141,7 +148,7 @@ class ItemModel
         if ($search !== null && $search !== '') {
             // Three distinct placeholders, not one reused three times — PDO
             // with emulated prepares off rejects a repeated named parameter
-            // ("Invalid parameter number").
+            // (\"Invalid parameter number\").
             $where[] = '(i.item_name LIKE :search_name OR i.item_code LIKE :search_code OR i.barcode LIKE :search_barcode)';
             $params['search_name'] = "%$search%";
             $params['search_code'] = "%$search%";
@@ -161,9 +168,9 @@ class ItemModel
         return $stmt->fetchAll();
     }
 
-    public function find(int $id): ?array
+    public function find(int $id, ?int $branchId = null): ?array
     {
-        $stmt = $this->pdo->prepare(self::LIST_SELECT . ' WHERE i.id = :id');
+        $stmt = $this->pdo->prepare($this->buildListSelect($branchId) . ' WHERE i.id = :id');
         $stmt->execute(['id' => $id]);
         $item = $stmt->fetch();
 

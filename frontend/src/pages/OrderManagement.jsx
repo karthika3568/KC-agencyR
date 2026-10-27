@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -17,6 +17,7 @@ import { Button } from '../components/Button.jsx';
 import { Pagination } from '../components/Pagination.jsx';
 import { useClientPagination } from '../hooks/useClientPagination';
 import { usePermission } from '../hooks/usePermission';
+import { useAuth } from '../hooks/useAuth.jsx';
 import { handleFormKeyDown } from '../utils/formNavigation';
 
 const BOOKING_SOURCES = [
@@ -220,14 +221,16 @@ function PrebookingPrintView({ data, onClose }) {
 }
 
 function PrebookingEditModal({ booking, stockByItemId = {}, onClose }) {
+  const { user } = useAuth();
+  const isSalesman = user?.role === 'Field Sales Executive';
   const queryClient = useQueryClient();
   const customersQuery = useQuery({ queryKey: ['customers'], queryFn: customersApi.list });
   const usersQuery = useQuery({ queryKey: ['users'], queryFn: usersApi.list });
   const itemsQuery = useQuery({ queryKey: ['items', ''], queryFn: () => itemsApi.list('') });
 
   const [customerId, setCustomerId] = useState(booking?.customer_id ?? '');
-  const [employeeId, setEmployeeId] = useState(booking?.employee_id ?? '');
-  const [bookingSource, setBookingSource] = useState(booking?.booking_source ?? 'direct');
+  const [employeeId, setEmployeeId] = useState(isSalesman ? (user?.id || booking?.employee_id || '') : (booking?.employee_id ?? ''));
+  const [bookingSource, setBookingSource] = useState(booking?.booking_source ?? (isSalesman ? 'salesman' : 'direct'));
   const [notes, setNotes] = useState(booking?.notes ?? '');
   const [lines, setLines] = useState(
     booking?.items?.map((l) => ({ item_id: l.item_id, qty: Number(l.qty), rate: Number(l.rate) })) ?? [
@@ -253,8 +256,8 @@ function PrebookingEditModal({ booking, stockByItemId = {}, onClose }) {
     setError('');
     const payload = {
       customer_id: Number(customerId),
-      employee_id: employeeId ? Number(employeeId) : null,
-      booking_source: bookingSource,
+      employee_id: isSalesman ? (user?.id ? Number(user.id) : null) : (employeeId ? Number(employeeId) : null),
+      booking_source: isSalesman ? (bookingSource === 'direct' ? 'salesman' : bookingSource) : bookingSource,
       notes: notes || null,
       items: validLines.map((l) => ({ item_id: Number(l.item_id), qty: Number(l.qty), rate: Number(l.rate) })),
     };
@@ -291,10 +294,17 @@ function PrebookingEditModal({ booking, stockByItemId = {}, onClose }) {
           </label>
           <label className="flex flex-col gap-1 col-span-2">
             <span className="text-xs font-medium text-ink-muted">Salesman / Employee</span>
-            <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className="input">
-              <option value="">--</option>
-              {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-            </select>
+            {isSalesman ? (
+              <div className="input w-full bg-page/70 text-ink text-xs flex items-center justify-between cursor-not-allowed">
+                <span>{user?.name || booking?.employee_name || 'Logged-in Salesman'}</span>
+                <span className="text-[10px] text-ink-muted">(You)</span>
+              </div>
+            ) : (
+              <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className="input">
+                <option value="">--</option>
+                {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </select>
+            )}
           </label>
         </div>
 
@@ -330,8 +340,10 @@ function PrebookingEditModal({ booking, stockByItemId = {}, onClose }) {
 }
 
 function PrebookingDispatchModal({ booking, onClose, onSuccess }) {
+  const { user } = useAuth();
+  const isSalesman = user?.role === 'Field Sales Executive';
   const usersQuery = useQuery({ queryKey: ['users'], queryFn: usersApi.list });
-  const [salesmanId, setSalesmanId] = useState(booking?.employee_id || '');
+  const [salesmanId, setSalesmanId] = useState(isSalesman ? (user?.id || '') : (booking?.employee_id || ''));
   const [notes, setNotes] = useState(`Dispatched order ${booking?.prebooking_no || ''}`);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -339,7 +351,8 @@ function PrebookingDispatchModal({ booking, onClose, onSuccess }) {
   const users = usersQuery.data || [];
 
   const handleDispatch = async () => {
-    if (!salesmanId) {
+    const targetId = isSalesman ? user?.id : salesmanId;
+    if (!targetId) {
       setError('Please select a salesman / van employee');
       return;
     }
@@ -347,7 +360,7 @@ function PrebookingDispatchModal({ booking, onClose, onSuccess }) {
     setIsSubmitting(true);
     try {
       await customerPrebookingsApi.dispatchVan(booking.id, {
-        employee_id: Number(salesmanId),
+        employee_id: Number(targetId),
         notes,
       });
       onSuccess?.();
@@ -376,18 +389,25 @@ function PrebookingDispatchModal({ booking, onClose, onSuccess }) {
 
         <div>
           <label className="text-xs font-medium text-ink-muted block mb-1">Select Salesman / Van Driver *</label>
-          <select
-            value={salesmanId}
-            onChange={(e) => setSalesmanId(e.target.value)}
-            className="input w-full text-xs"
-          >
-            <option value="">-- Select Salesman / Van --</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name} ({u.role || 'Staff'})
-              </option>
-            ))}
-          </select>
+          {isSalesman ? (
+            <div className="input w-full bg-page/70 text-ink text-xs flex items-center justify-between cursor-not-allowed">
+              <span>{user?.name || 'Logged-in Salesman'}</span>
+              <span className="text-[10px] text-ink-muted">(You)</span>
+            </div>
+          ) : (
+            <select
+              value={salesmanId}
+              onChange={(e) => setSalesmanId(e.target.value)}
+              className="input w-full text-xs"
+            >
+              <option value="">-- Select Salesman / Van --</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name} ({u.role || 'Staff'})
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
         <div>
@@ -427,6 +447,8 @@ function PrebookingDispatchModal({ booking, onClose, onSuccess }) {
 }
 
 function CustomerPrebookingPanel() {
+  const { user } = useAuth();
+  const isSalesman = user?.role === 'Field Sales Executive';
   const canCreate = usePermission('orders.create_prebooking');
   const canManageStatus = usePermission('orders.manage_prebooking_status');
   const queryClient = useQueryClient();
@@ -439,12 +461,19 @@ function CustomerPrebookingPanel() {
 
   // Left side form state
   const [customerId, setCustomerId] = useState('');
-  const [employeeId, setEmployeeId] = useState('');
-  const [bookingSource, setBookingSource] = useState('direct');
+  const [employeeId, setEmployeeId] = useState(isSalesman ? (user?.id || '') : '');
+  const [bookingSource, setBookingSource] = useState(isSalesman ? 'salesman' : 'direct');
   const [notes, setNotes] = useState('');
   const [lines, setLines] = useState([{ item_id: '', qty: 1, rate: 0 }]);
   const [formError, setFormError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+
+  useEffect(() => {
+    if (isSalesman && user?.id) {
+      setEmployeeId(user.id);
+      setBookingSource('salesman');
+    }
+  }, [isSalesman, user?.id]);
 
   const listQuery = useQuery({ queryKey: ['customer-prebookings'], queryFn: customerPrebookingsApi.list });
   const customersQuery = useQuery({ queryKey: ['customers'], queryFn: customersApi.list });
@@ -498,8 +527,8 @@ function CustomerPrebookingPanel() {
 
   const resetForm = () => {
     setCustomerId('');
-    setEmployeeId('');
-    setBookingSource('direct');
+    setEmployeeId(isSalesman ? (user?.id || '') : '');
+    setBookingSource(isSalesman ? 'salesman' : 'direct');
     setNotes('');
     setLines([{ item_id: '', qty: 1, rate: 0 }]);
     setFormError('');
@@ -530,8 +559,8 @@ function CustomerPrebookingPanel() {
     try {
       await createMutation.mutateAsync({
         customer_id: Number(customerId),
-        employee_id: employeeId ? Number(employeeId) : null,
-        booking_source: bookingSource,
+        employee_id: isSalesman ? (user?.id ? Number(user.id) : null) : (employeeId ? Number(employeeId) : null),
+        booking_source: isSalesman ? (bookingSource === 'direct' ? 'salesman' : bookingSource) : bookingSource,
         notes: notes || null,
         items: validLines.map((l) => ({ item_id: Number(l.item_id), qty: Number(l.qty), rate: Number(l.rate) })),
       });
@@ -615,18 +644,25 @@ function CustomerPrebookingPanel() {
 
                 <div>
                   <label className="text-xs font-medium text-ink-muted block mb-0.5">Salesman / Employee</label>
-                  <select
-                    value={employeeId}
-                    onChange={(e) => setEmployeeId(e.target.value)}
-                    className="input w-full"
-                  >
-                    <option value="">-- None --</option>
-                    {users.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.name}
-                      </option>
-                    ))}
-                  </select>
+                  {isSalesman ? (
+                    <div className="input w-full bg-page/70 text-ink text-xs flex items-center justify-between cursor-not-allowed">
+                      <span>{user?.name || 'Logged-in Salesman'}</span>
+                      <span className="text-[10px] text-ink-muted">(You)</span>
+                    </div>
+                  ) : (
+                    <select
+                      value={employeeId}
+                      onChange={(e) => setEmployeeId(e.target.value)}
+                      className="input w-full"
+                    >
+                      <option value="">-- None --</option>
+                      {users.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               </div>
 

@@ -28,10 +28,9 @@ class CustomerPrebookingModel
     {
     }
 
-    public function all(int $branchId): array
+    public function all(int $branchId, ?int $salesmanId = null): array
     {
-        $stmt = $this->pdo->prepare(
-            "SELECT cp.*, c.ledger_name AS customer_name, c.phone AS customer_phone,
+        $sql = "SELECT cp.*, c.ledger_name AS customer_name, c.phone AS customer_phone,
                     u.name AS created_by_name, e.name AS employee_name,
                     inv.invoice_no, sin.issue_no,
                     (SELECT COUNT(*) FROM customer_prebooking_items cpi WHERE cpi.prebooking_id = cp.id) AS item_count,
@@ -43,10 +42,20 @@ class CustomerPrebookingModel
              JOIN users u ON u.id = cp.created_by
              LEFT JOIN invoices inv ON inv.id = cp.invoice_id
              LEFT JOIN stock_issue_notes sin ON sin.id = cp.van_issue_id
-             WHERE cp.branch_id = :branch_id
-             ORDER BY cp.id DESC"
-        );
-        $stmt->execute(['branch_id' => $branchId]);
+             WHERE cp.branch_id = :branch_id";
+
+        $params = ['branch_id' => $branchId];
+
+        if ($salesmanId !== null) {
+            $sql .= " AND (cp.employee_id = :salesman_emp_id OR cp.created_by = :salesman_creator_id)";
+            $params['salesman_emp_id'] = $salesmanId;
+            $params['salesman_creator_id'] = $salesmanId;
+        }
+
+        $sql .= " ORDER BY cp.id DESC";
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
         return $stmt->fetchAll();
     }
 
