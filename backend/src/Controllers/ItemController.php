@@ -90,8 +90,9 @@ class ItemController
 
     public function show(string $id): void
     {
-        JwtAuthMiddleware::authenticate();
-        $item = $this->items->find((int) $id);
+        $claims = JwtAuthMiddleware::authenticate();
+        $branchId = $this->resolveBranchId($claims);
+        $item = $this->items->find((int) $id, $branchId);
         if (!$item) {
             Response::error('Not found', 404);
         }

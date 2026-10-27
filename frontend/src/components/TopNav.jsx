@@ -28,6 +28,19 @@ function checkPermission(user, perm, targetPath = null) {
   return Boolean(user.permissions.includes(perm));
 }
 
+// Helper to determine if a section is active
+export function isSectionActive(sec, currentPath) {
+  if (!sec || !currentPath) return false;
+  if (sec.exact) {
+    return currentPath === sec.to;
+  }
+  if (sec.matchPaths) {
+    return sec.matchPaths.some(
+      (p) => currentPath === p || currentPath.startsWith(p + '/')
+    );
+  }
+  return currentPath === sec.to || currentPath.startsWith(sec.to + '/');
+}
 // Module search catalog with permission gating
 const ALL_MODULE_SEARCH = [
   { to: '/', label: 'Dashboard', desc: 'Overview & metrics', perm: 'dashboard.view_financial_summary' },
@@ -550,7 +563,7 @@ export function TopNav({ onToggleSidebar, onToggleMobile } = {}) {
     setMobileDrawerOpen(false);
   }, [location.pathname]);
 
-  const initials = (user?.name || '?')
+  const initials = (user?.name || user?.role || 'A')
     .split(' ')
     .map((p) => p[0])
     .slice(0, 2)
@@ -564,7 +577,7 @@ export function TopNav({ onToggleSidebar, onToggleMobile } = {}) {
           (m.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
           m.desc.toLowerCase().includes(searchQuery.toLowerCase()))
       )
-    : [];
+    : ALL_MODULE_SEARCH.filter((m) => checkPermission(user, m.perm));
 
   const handleSelectModule = (to) => {
     navigate(to);
@@ -573,6 +586,7 @@ export function TopNav({ onToggleSidebar, onToggleMobile } = {}) {
   };
 
   const isFieldSales = user?.role === 'Field Sales Executive';
+  const isPosActive = location.pathname === '/pos';
 
   if (isFieldSales) {
     const FIELD_SALES_NAV = [
@@ -1028,7 +1042,11 @@ export function TopNav({ onToggleSidebar, onToggleMobile } = {}) {
               data-nav-top="true"
               data-nav-id="pos-billing"
               onKeyDown={handleTopNavKeyDown}
-              className="flex items-center gap-1.5 rounded-lg bg-[#8244AD] hover:bg-[#924ebf] px-3 py-1 text-xs font-bold text-white shadow-xs transition-transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-white focus:bg-[#924ebf] focus-visible:ring-2 focus-visible:ring-white focus-visible:bg-[#924ebf]"
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-bold transition-transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-white focus:bg-[#924ebf] focus-visible:ring-2 focus-visible:ring-white focus-visible:bg-[#924ebf] ${
+                isPosActive
+                  ? 'bg-[#924ebf] text-white ring-2 ring-white/30 shadow-sm'
+                  : 'bg-[#8244AD] hover:bg-[#924ebf] text-white shadow-xs'
+              }`}
               title="Open Point of Sale Terminal"
             >
               <ShoppingCart size={13} />

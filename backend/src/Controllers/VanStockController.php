@@ -19,6 +19,13 @@ class VanStockController
         $this->model = new VanStockModel($pdo);
     }
 
+    private function isSalesman(array $claims): bool
+    {
+        $role = trim((string) ($claims['role'] ?? ''));
+        return strcasecmp($role, 'Field Sales Executive') === 0
+            || stripos($role, 'Field Sales') !== false;
+    }
+
     private function resolveBranchId(array $claims): int
     {
         $canSwitch = in_array('branches.switch_context', (array) ($claims['permissions'] ?? []), true);
@@ -32,6 +39,10 @@ class VanStockController
     {
         $claims = JwtAuthMiddleware::authenticate();
         PermissionMiddleware::require($claims, 'inventory.issue_van_stock');
+
+        if ($this->isSalesman($claims)) {
+            Response::error('Forbidden: Field Sales Executives are not authorized to issue warehouse stock', 403);
+        }
 
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
         if (empty($body['employee_id']) || empty($body['items']) || !is_array($body['items'])) {
@@ -67,6 +78,10 @@ class VanStockController
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
         if (empty($body['employee_id']) || empty($body['items']) || !is_array($body['items'])) {
             Response::error('employee_id and items are required', 422);
+        }
+
+        if ($this->isSalesman($claims) && (int) $body['employee_id'] !== (int) $claims['sub']) {
+            Response::error('Forbidden: Field Sales Executives cannot alter another salesman\'s van stock', 403);
         }
 
         foreach ($body['items'] as $it) {
