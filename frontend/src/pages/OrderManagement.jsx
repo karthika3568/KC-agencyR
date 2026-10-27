@@ -739,7 +739,7 @@ function CustomerPrebookingPanel() {
                           >
                             <Printer className="w-3.5 h-3.5" />
                           </button>
-                          {statusKey !== 'completed' && statusKey !== 'cancelled' && !r.invoice_id && (
+                          {statusKey !== 'cancelled' && !r.invoice_id && (
                             <Link
                               to={`/pos?prebooking_id=${r.id}`}
                               title="Convert to Bill in POS"
@@ -873,7 +873,7 @@ function CustomerPrebookingPanel() {
             {viewQuery.data.notes && <p className="mb-3 text-xs text-ink-muted">Notes: {viewQuery.data.notes}</p>}
             <div className="flex items-center justify-between pt-2 border-t border-border-soft">
               <div className="flex items-center gap-2">
-                {viewQuery.data.status !== 'completed' && viewQuery.data.status !== 'cancelled' && !viewQuery.data.invoice_id && (
+                {viewQuery.data.status !== 'cancelled' && !viewQuery.data.invoice_id && (
                   <Link
                     to={`/pos?prebooking_id=${viewQuery.data.id}`}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 text-xs font-semibold hover:bg-emerald-500/25 transition border border-emerald-500/30"
@@ -1368,8 +1368,29 @@ export function OrderManagement() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
 
+  const canPrebooking = usePermission([
+    'orders.create_prebooking',
+    'orders.view_prebooking',
+    'orders.manage_prebooking_status',
+  ]);
+  const canPurchaseIndent = usePermission([
+    'orders.create_purchase_indent',
+    'orders.approve_purchase_request',
+  ]);
+
+  const tabs = [];
+  if (canPrebooking) {
+    tabs.push({ key: 'prebooking', label: 'Customer Pre-Booking Orders', content: <CustomerPrebookingPanel /> });
+  }
+  if (canPurchaseIndent) {
+    tabs.push({ key: 'requests', label: 'Supplier Purchase Requests / Indents', content: <SupplierRequestPanel /> });
+  }
+
   const tabParam = searchParams.get('tab');
-  const activeTab = (tabParam === 'requests' || tabParam === 'indents') ? 'requests' : 'prebooking';
+  const availableKeys = tabs.map((t) => t.key);
+  const activeTab = availableKeys.includes(tabParam)
+    ? tabParam
+    : (availableKeys[0] || 'prebooking');
 
   const handleTabChange = (key) => {
     setSearchParams({ tab: key });
@@ -1392,22 +1413,25 @@ export function OrderManagement() {
           size="sm"
           icon={<RefreshCw size={13} />}
           onClick={() => {
-            queryClient.invalidateQueries({ queryKey: ['customer-prebookings'] });
-            queryClient.invalidateQueries({ queryKey: ['purchase-requests'] });
+            if (canPrebooking) queryClient.invalidateQueries({ queryKey: ['customer-prebookings'] });
+            if (canPurchaseIndent) queryClient.invalidateQueries({ queryKey: ['purchase-requests'] });
           }}
         >
           Refresh
         </Button>
       </div>
 
-      <Tabs
-        activeKey={activeTab}
-        onTabChange={handleTabChange}
-        tabs={[
-          { key: 'prebooking', label: 'Customer Pre-Booking Orders', content: <CustomerPrebookingPanel /> },
-          { key: 'requests', label: 'Supplier Purchase Requests / Indents', content: <SupplierRequestPanel /> },
-        ]}
-      />
+      {tabs.length > 0 ? (
+        <Tabs
+          activeKey={activeTab}
+          onTabChange={handleTabChange}
+          tabs={tabs}
+        />
+      ) : (
+        <div className="card p-6 text-center text-xs text-ink-muted">
+          You do not have permission to view customer pre-bookings or purchase indents.
+        </div>
+      )}
     </div>
   );
 }

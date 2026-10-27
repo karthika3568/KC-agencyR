@@ -45,6 +45,12 @@ class CustomerPrebookingController
         if (!$row) {
             Response::error('Not found', 404);
         }
+
+        $canSwitch = in_array('branches.switch_context', (array) ($claims['permissions'] ?? []), true);
+        if (!$canSwitch && (int) $row['branch_id'] !== (int) $claims['branch_id']) {
+            Response::error('Forbidden: cross-branch access', 403);
+        }
+
         Response::json($row);
     }
 
@@ -124,6 +130,15 @@ class CustomerPrebookingController
         $claims = JwtAuthMiddleware::authenticate();
         PermissionMiddleware::require($claims, 'orders.create_prebooking');
 
+        $booking = $this->model->find((int) $id);
+        if (!$booking) {
+            Response::error('Not found', 404);
+        }
+        $canSwitch = in_array('branches.switch_context', (array) ($claims['permissions'] ?? []), true);
+        if (!$canSwitch && (int) $booking['branch_id'] !== (int) $claims['branch_id']) {
+            Response::error('Forbidden: cross-branch access', 403);
+        }
+
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
         [$header, $lines, $error] = $this->prepare($claims, $body);
         if ($error) {
@@ -143,6 +158,15 @@ class CustomerPrebookingController
         $claims = JwtAuthMiddleware::authenticate();
         PermissionMiddleware::require($claims, 'orders.manage_prebooking_status');
 
+        $booking = $this->model->find((int) $id);
+        if (!$booking) {
+            Response::error('Not found', 404);
+        }
+        $canSwitch = in_array('branches.switch_context', (array) ($claims['permissions'] ?? []), true);
+        if (!$canSwitch && (int) $booking['branch_id'] !== (int) $claims['branch_id']) {
+            Response::error('Forbidden: cross-branch access', 403);
+        }
+
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
         if (empty($body['status'])) {
             Response::error('status is required', 422);
@@ -160,6 +184,15 @@ class CustomerPrebookingController
     {
         $claims = JwtAuthMiddleware::authenticate();
         PermissionMiddleware::require($claims, 'orders.manage_prebooking_status');
+
+        $booking = $this->model->find((int) $id);
+        if (!$booking) {
+            Response::error('Not found', 404);
+        }
+        $canSwitch = in_array('branches.switch_context', (array) ($claims['permissions'] ?? []), true);
+        if (!$canSwitch && (int) $booking['branch_id'] !== (int) $claims['branch_id']) {
+            Response::error('Forbidden: cross-branch access', 403);
+        }
 
         try {
             $result = $this->model->updateStatus((int) $id, 'cancelled');
@@ -207,48 +240,176 @@ class CustomerPrebookingController
         if (empty($body['employee_id'])) {
             Response::error('employee_id is required', 422);
         }
+        $targetEmployeeId = (int) $body['employee_id'];
+        $fulfillmentMode = $body['fulfillment_mode'] ?? 'warehouse_dispatch';
+
+        if (!in_array($fulfillmentMode, ['warehouse_dispatch', 'existing_van_stock'], true)) {
+            Response::error('Invalid fulfillment_mode (must be warehouse_dispatch or existing_van_stock)', 422);
+        }
 
         $branchId = $this->resolveBranchId($claims);
-        $booking = $this->model->find((int) $id);
-        if (!$booking) {
-            Response::error('Pre-booking not found', 404);
+        $canSwitch = in_array('branches.switch_context', (array) ($claims['permissions'] ?? []), true);
+
+        // Verify target employee is in the same branch
+        if (!$canSwitch) {
+            $empStmt = $this->pdo->prepare('SELECT branch_id FROM users WHERE id = :id');
+            $empStmt->execute(['id' => $targetEmployeeId]);
+            $empBranch = $empStmt->fetchColumn();
+            if ($empBranch !== false && (int) $empBranch !== (int) $claims['branch_id']) {
+                Response::error('Forbidden: target employee belongs to a different branch', 403);
+            }
         }
 
-        // Use custom items if provided or booking's own items
-        $items = !empty($body['items']) ? $body['items'] : array_map(function ($it) {
-            return [
-                'item_id' => (int) $it['item_id'],
-                'qty' => (float) $it['qty'],
-            ];
-        }, $booking['items'] ?? []);
+        $this->pdo->beginTransaction();
+        try {
+            // 1. Lock customer_prebookings row FOR UPDATE to prevent concurrent/repeated dispatches
+            $stmt = $this->pdo->prepare('SELECT * FROM customer_prebookings WHERE id = :id FOR UPDATE');
+            $stmt->execute(['id' => (int) $id]);
+            $booking = $stmt->fetch();
+            if (!$booking) {
+                throw new \RuntimeException('Pre-booking not found', 404);
+            }
 
-        if (empty($items)) {
-            Response::error('No items to dispatch', 422);
+            if (!$canSwitch && (int) $booking['branch_id'] !== (int) $claims['branch_id']) {
+                throw new \RuntimeException('Forbidden: cross-branch access', 403);
+            }
+
+            // Guard against repeated dispatch
+            if (!empty($booking['van_issue_id'])) {
+                $sinStmt = $this->pdo->prepare('SELECT issue_no FROM stock_issue_notes WHERE id = :id');
+                $sinStmt->execute(['id' => (int) $booking['van_issue_id']]);
+                $issueNo = $sinStmt->fetchColumn() ?: "ID #{$booking['van_issue_id']}";
+                throw new \RuntimeException("Pre-booking has already been dispatched with Stock Issue Note {$issueNo}", 422);
+            }
+
+            if (!in_array($booking['status'], ['pending', 'confirmed'], true)) {
+                throw new \RuntimeException("Cannot dispatch a pre-booking in '{$booking['status']}' status", 422);
+            }
+
+            // Fetch items
+            $itemStmt = $this->pdo->prepare(
+                'SELECT cpi.*, i.item_name FROM customer_prebooking_items cpi
+                 JOIN items i ON i.id = cpi.item_id
+                 WHERE cpi.prebooking_id = :id'
+            );
+            $itemStmt->execute(['id' => (int) $id]);
+            $bookingItems = $itemStmt->fetchAll();
+
+            $items = !empty($body['items']) ? $body['items'] : array_map(function ($it) {
+                return [
+                    'item_id' => (int) $it['item_id'],
+                    'qty' => (float) $it['qty'],
+                ];
+            }, $bookingItems);
+
+            if (empty($items)) {
+                throw new \RuntimeException('No items to dispatch', 422);
+            }
+
+            // Validate item lines
+            foreach ($items as $line) {
+                if (empty($line['item_id']) || (float) ($line['qty'] ?? 0) <= 0) {
+                    throw new \RuntimeException('Each line must have a valid item_id and quantity greater than zero', 422);
+                }
+            }
+
+            if ($fulfillmentMode === 'existing_van_stock') {
+                // Validate sufficient stock for every booking line against the employee/van owner
+                $stockStmt = $this->pdo->prepare(
+                    'SELECT quantity_on_hand FROM stock_ledger
+                     WHERE item_id = :item_id AND owner_type = \'employee\' AND owner_id = :employee_id
+                     FOR UPDATE'
+                );
+                $itemNameStmt = $this->pdo->prepare('SELECT item_name FROM items WHERE id = :id');
+
+                $requiredQtyByItem = [];
+                foreach ($items as $line) {
+                    $itemId = (int) $line['item_id'];
+                    $qty = (float) $line['qty'];
+                    $requiredQtyByItem[$itemId] = ($requiredQtyByItem[$itemId] ?? 0.0) + $qty;
+                }
+
+                foreach ($requiredQtyByItem as $itemId => $requiredQty) {
+                    $stockStmt->execute(['item_id' => $itemId, 'employee_id' => $targetEmployeeId]);
+                    $stockRow = $stockStmt->fetch();
+                    $available = $stockRow !== false ? (float) $stockRow['quantity_on_hand'] : 0.0;
+
+                    if ($available < $requiredQty) {
+                        $itemNameStmt->execute(['id' => $itemId]);
+                        $itemName = $itemNameStmt->fetchColumn() ?: "Item #{$itemId}";
+                        $availableDisp = round($available, 3);
+                        $requiredDisp = round($requiredQty, 3);
+                        throw new \RuntimeException(
+                            "Cannot assign to van. Insufficient van stock for \"{$itemName}\". Required: {$requiredDisp}, Available in van: {$availableDisp}."
+                        );
+                    }
+                }
+
+                // Update booking status to processing and assign employee (NO duplicate stock issue note)
+                $upStmt = $this->pdo->prepare(
+                    "UPDATE customer_prebookings SET status = 'processing', employee_id = :emp_id WHERE id = :id"
+                );
+                $upStmt->execute(['emp_id' => $targetEmployeeId, 'id' => (int) $id]);
+
+                $this->pdo->commit();
+
+                Response::json([
+                    'message' => 'Assigned to van for fulfillment from existing van stock',
+                    'prebooking_id' => (int) $id,
+                    'status' => 'processing',
+                    'fulfillment_mode' => 'existing_van_stock',
+                ], 200);
+                return;
+            }
+
+            // warehouse_dispatch mode:
+            // Issue stock from warehouse to van (validates warehouse stock FOR UPDATE)
+            $vanStockModel = new \App\Models\VanStockModel($this->pdo);
+            $issueId = $vanStockModel->issue(
+                $branchId,
+                $targetEmployeeId,
+                (int) $claims['sub'],
+                $body['notes'] ?? ("Dispatched from Pre-booking #" . ($booking['prebooking_no'] ?? $id)),
+                $items
+            );
+
+            $this->model->linkVanIssue((int) $id, $issueId, $targetEmployeeId);
+
+            $this->pdo->commit();
+
+            Response::json([
+                'message' => 'Dispatched to van successfully',
+                'issue_id' => $issueId,
+                'prebooking_id' => (int) $id,
+                'status' => 'processing',
+                'fulfillment_mode' => 'warehouse_dispatch',
+            ], 201);
+        } catch (\Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            $code = $e->getCode();
+            if (!is_int($code) || $code < 400 || $code > 599) {
+                $code = 422;
+            }
+            Response::error($e->getMessage(), $code);
         }
-
-        $vanStockModel = new \App\Models\VanStockModel($this->pdo);
-        $issueId = $vanStockModel->issue(
-            $branchId,
-            (int) $body['employee_id'],
-            (int) $claims['sub'],
-            $body['notes'] ?? ("Dispatched from Pre-booking #" . ($booking['prebooking_no'] ?? $id)),
-            $items
-        );
-
-        $this->model->linkVanIssue((int) $id, $issueId, (int) $body['employee_id']);
-
-        Response::json([
-            'message' => 'Dispatched to van successfully',
-            'issue_id' => $issueId,
-            'prebooking_id' => (int) $id,
-            'status' => 'processing',
-        ], 201);
     }
 
     public function linkInvoice(string $id): void
     {
         $claims = JwtAuthMiddleware::authenticate();
         PermissionMiddleware::require($claims, 'orders.manage_prebooking_status');
+
+        $booking = $this->model->find((int) $id);
+        if (!$booking) {
+            Response::error('Pre-booking not found', 404);
+        }
+
+        $canSwitch = in_array('branches.switch_context', (array) ($claims['permissions'] ?? []), true);
+        if (!$canSwitch && (int) $booking['branch_id'] !== (int) $claims['branch_id']) {
+            Response::error('Forbidden: cross-branch access', 403);
+        }
 
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
         if (empty($body['invoice_id'])) {

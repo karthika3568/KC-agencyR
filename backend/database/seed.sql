@@ -122,11 +122,13 @@ INSERT INTO role_permissions (role_id, permission_id)
   )
   ON DUPLICATE KEY UPDATE role_id = role_id;
 
--- Field Sales Executive: pre-booking, van stock visibility, field collections, credit
+-- Field Sales Executive: pre-booking, customer management, van stock visibility, field collections, credit
 INSERT INTO role_permissions (role_id, permission_id)
   SELECT 4, id FROM permissions WHERE code IN (
     'pos.access','pos.non_gst_billing','orders.create_prebooking','inventory.view_stock',
-    'credit.create_credit_sale','credit.collect_credit_payment','collections.field_collection_entry'
+    'credit.create_credit_sale','credit.collect_credit_payment','collections.field_collection_entry',
+    'orders.view_prebooking','orders.manage_prebooking_status','inventory.issue_van_stock',
+    'parties.manage_customers'
   )
   ON DUPLICATE KEY UPDATE role_id = role_id;
 

@@ -34,18 +34,29 @@ class VanStockController
         PermissionMiddleware::require($claims, 'inventory.issue_van_stock');
 
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
-        if (empty($body['employee_id']) || empty($body['items'])) {
+        if (empty($body['employee_id']) || empty($body['items']) || !is_array($body['items'])) {
             Response::error('employee_id and items are required', 422);
         }
 
-        $id = $this->model->issue(
-            $this->resolveBranchId($claims),
-            (int) $body['employee_id'],
-            (int) $claims['sub'],
-            $body['notes'] ?? null,
-            $body['items']
-        );
-        Response::json(['issue_id' => $id], 201);
+        foreach ($body['items'] as $it) {
+            if (empty($it['item_id']) || (float) ($it['qty'] ?? 0) <= 0) {
+                Response::error('Each line must have a valid item_id and quantity greater than zero', 422);
+            }
+        }
+
+        $branchId = $this->resolveBranchId($claims);
+        try {
+            $id = $this->model->issue(
+                $branchId,
+                (int) $body['employee_id'],
+                (int) $claims['sub'],
+                $body['notes'] ?? null,
+                $body['items']
+            );
+            Response::json(['issue_id' => $id], 201);
+        } catch (\InvalidArgumentException | \RuntimeException $e) {
+            Response::error($e->getMessage(), 422);
+        }
     }
 
     public function returnStock(): void
@@ -54,19 +65,30 @@ class VanStockController
         PermissionMiddleware::require($claims, 'inventory.issue_van_stock');
 
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
-        if (empty($body['employee_id']) || empty($body['items'])) {
+        if (empty($body['employee_id']) || empty($body['items']) || !is_array($body['items'])) {
             Response::error('employee_id and items are required', 422);
         }
 
-        $id = $this->model->returnStock(
-            $this->resolveBranchId($claims),
-            (int) $body['employee_id'],
-            !empty($body['issue_id']) ? (int) $body['issue_id'] : null,
-            (int) $claims['sub'],
-            $body['notes'] ?? null,
-            $body['items']
-        );
-        Response::json(['return_id' => $id], 201);
+        foreach ($body['items'] as $it) {
+            if (empty($it['item_id']) || (float) ($it['qty'] ?? 0) <= 0) {
+                Response::error('Each line must have a valid item_id and quantity greater than zero', 422);
+            }
+        }
+
+        $branchId = $this->resolveBranchId($claims);
+        try {
+            $id = $this->model->returnStock(
+                $branchId,
+                (int) $body['employee_id'],
+                !empty($body['issue_id']) ? (int) $body['issue_id'] : null,
+                (int) $claims['sub'],
+                $body['notes'] ?? null,
+                $body['items']
+            );
+            Response::json(['return_id' => $id], 201);
+        } catch (\InvalidArgumentException | \RuntimeException $e) {
+            Response::error($e->getMessage(), 422);
+        }
     }
 
     /**
@@ -80,6 +102,18 @@ class VanStockController
     public function pending(string $employeeId): void
     {
         $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::require($claims, 'inventory.view_stock');
+
+        $canSwitch = in_array('branches.switch_context', (array) ($claims['permissions'] ?? []), true);
+        if (!$canSwitch) {
+            $stmt = $this->pdo->prepare('SELECT branch_id FROM users WHERE id = :id');
+            $stmt->execute(['id' => (int) $employeeId]);
+            $empBranch = $stmt->fetchColumn();
+            if ($empBranch !== false && (int) $empBranch !== (int) $claims['branch_id']) {
+                Response::error('Forbidden: cross-branch access', 403);
+            }
+        }
+
         $rows = $this->model->pendingForEmployee((int) $employeeId);
 
         if (!empty($_GET['item_ids'])) {
@@ -118,6 +152,8 @@ class VanStockController
     public function issues(): void
     {
         $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::require($claims, 'inventory.view_stock');
+
         $branchId = $this->resolveBranchId($claims);
         $employeeId = !empty($_GET['employee_id']) ? (int) $_GET['employee_id'] : null;
         $rows = $this->model->listIssues($branchId, $employeeId);
@@ -143,11 +179,19 @@ class VanStockController
     /** GET /api/van-stock/issues/{id} — one issue transaction with all its item lines. */
     public function showIssue(string $id): void
     {
-        JwtAuthMiddleware::authenticate();
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::require($claims, 'inventory.view_stock');
+
         $issue = $this->model->findIssue((int) $id);
         if (!$issue) {
             Response::error('Not found', 404);
         }
+
+        $canSwitch = in_array('branches.switch_context', (array) ($claims['permissions'] ?? []), true);
+        if (!$canSwitch && (int) $issue['branch_id'] !== (int) $claims['branch_id']) {
+            Response::error('Forbidden: cross-branch access', 403);
+        }
+
         $issue['amount_in_words'] = \App\Helpers\NumberToWords::convert((float) ($issue['total_amount'] ?? 0));
         Response::json($issue);
     }

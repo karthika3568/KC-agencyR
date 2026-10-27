@@ -19,6 +19,10 @@ import { Reports } from './pages/Reports.jsx';
 import { StaffPermissions } from './pages/StaffPermissions.jsx';
 import { Settings } from './pages/Settings.jsx';
 import { PriceAdjustment } from './pages/PriceAdjustment.jsx';
+import { Customers } from './pages/Customers.jsx';
+import { Vans } from './pages/Vans.jsx';
+import { VanStock } from './pages/VanStock.jsx';
+import { StockHistory } from './pages/StockHistory.jsx';
 
 function Protected({ children }) {
   return (
@@ -37,8 +41,12 @@ export default function App() {
       <Route path="/catalog" element={<Protected><Catalog /></Protected>} />
       <Route path="/price-adjustment" element={<Protected><PriceAdjustment /></Protected>} />
       <Route path="/parties" element={<Protected><Parties /></Protected>} />
+      <Route path="/customers" element={<Protected><Customers /></Protected>} />
       <Route path="/purchasing" element={<Protected><Purchasing /></Protected>} />
       <Route path="/orders" element={<Protected><OrderManagement /></Protected>} />
+      <Route path="/vans" element={<Protected><Vans /></Protected>} />
+      <Route path="/van-stock" element={<Protected><VanStock /></Protected>} />
+      <Route path="/stock-history" element={<Protected><StockHistory /></Protected>} />
       <Route path="/inventory" element={<Protected><Inventory /></Protected>} />
       <Route path="/returns" element={<Protected><Returns /></Protected>} />
       <Route path="/invoices" element={<Protected><InvoiceManagement /></Protected>} />

@@ -302,10 +302,57 @@ class InvoiceModel
     // Completion — the one atomic transaction (rule 3, section 4.8).
     // -----------------------------------------------------------------
 
+    public function resolveStockOwner(array $invoice, ?string $stockSource = null): array
+    {
+        $branchId = (int) $invoice['branch_id'];
+        $employeeId = (int) $invoice['employee_id'];
+
+        if ($stockSource === 'van' || $stockSource === 'employee') {
+            return ['employee', $employeeId, 'van'];
+        }
+        if ($stockSource === 'branch' || $stockSource === 'warehouse') {
+            return ['branch', $branchId, 'branch'];
+        }
+
+        // Auto-detect based on employee's role: Field Sales Executive (role_id 4) uses van stock
+        $stmt = $this->pdo->prepare(
+            'SELECT u.id, u.role_id, r.name AS role_name
+             FROM users u
+             JOIN roles r ON r.id = u.role_id
+             WHERE u.id = :id'
+        );
+        $stmt->execute(['id' => $employeeId]);
+        $emp = $stmt->fetch();
+
+        if ($emp) {
+            $roleName = strtolower((string) ($emp['role_name'] ?? ''));
+            if ((int) $emp['role_id'] === 4 || str_contains($roleName, 'field sales') || str_contains($roleName, 'sales executive') || str_contains($roleName, 'van')) {
+                return ['employee', $employeeId, 'van'];
+            }
+        }
+
+        return ['branch', $branchId, 'branch'];
+    }
+
+    private function getInvoiceStockOwner(int $invoiceId, array $invoice): array
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT owner_type, owner_id FROM stock_movements
+             WHERE reference_table = 'invoices' AND reference_id = :id AND movement_type = 'sale'
+             LIMIT 1"
+        );
+        $stmt->execute(['id' => $invoiceId]);
+        $row = $stmt->fetch();
+        if ($row) {
+            return [$row['owner_type'], (int) $row['owner_id'], $row['owner_type'] === 'employee' ? 'van' : 'branch'];
+        }
+        return $this->resolveStockOwner($invoice);
+    }
+
     /**
      * @param array $payments [{payment_method, amount, reference_no}]
      */
-    public function complete(int $id, array $payments, int $employeeId): array
+    public function complete(int $id, array $payments, int $employeeId, ?string $stockSource = null): array
     {
         $this->pdo->beginTransaction();
         try {
@@ -360,8 +407,9 @@ class InvoiceModel
             // ---------------------------------------------------------
             // Mandatory Stock Validation before sale completion
             // Concurrency-safe: locks stock_ledger row FOR UPDATE
+            // Supports both warehouse/branch stock and van stock
             // ---------------------------------------------------------
-            $branchId = (int) $invoice['branch_id'];
+            [$ownerType, $ownerId, $ownerLabel] = $this->resolveStockOwner($invoice, $stockSource);
             $stockService = new StockLedgerService($this->pdo);
 
             $requiredQtyByItem = [];
@@ -378,7 +426,7 @@ class InvoiceModel
 
             $stockStmt = $this->pdo->prepare(
                 'SELECT quantity_on_hand FROM stock_ledger
-                 WHERE item_id = :item_id AND owner_type = \'branch\' AND owner_id = :branch_id
+                 WHERE item_id = :item_id AND owner_type = :owner_type AND owner_id = :owner_id
                  FOR UPDATE'
             );
 
@@ -386,7 +434,11 @@ class InvoiceModel
                 if ($requiredQty <= 0) {
                     continue;
                 }
-                $stockStmt->execute(['item_id' => $itemId, 'branch_id' => $branchId]);
+                $stockStmt->execute([
+                    'item_id' => $itemId,
+                    'owner_type' => $ownerType,
+                    'owner_id' => $ownerId,
+                ]);
                 $stockRow = $stockStmt->fetch();
                 $available = $stockRow !== false ? (float) $stockRow['quantity_on_hand'] : 0.0;
 
@@ -394,7 +446,7 @@ class InvoiceModel
                     $availableDisp = round($available, 3);
                     $requiredDisp = round($requiredQty, 3);
                     throw new \RuntimeException(
-                        "Insufficient stock for \"{$itemNames[$itemId]}\". Requested: {$requiredDisp}, Available in branch: {$availableDisp}."
+                        "Insufficient stock for \"{$itemNames[$itemId]}\". Requested: {$requiredDisp}, Available in {$ownerLabel}: {$availableDisp}."
                     );
                 }
             }
@@ -409,8 +461,8 @@ class InvoiceModel
                 $qtyTotal = (float) $item['qty'] + (float) $item['free_qty'];
                 $stockService->applyMovement(
                     (int) $item['item_id'],
-                    'branch',
-                    (int) $invoice['branch_id'],
+                    $ownerType,
+                    $ownerId,
                     -$qtyTotal,
                     'sale',
                     'invoices',
@@ -513,6 +565,7 @@ class InvoiceModel
             $stmt->execute(['id' => $id]);
             $oldItems = $stmt->fetchAll();
 
+            [$ownerType, $ownerId, $ownerLabel] = $this->getInvoiceStockOwner($id, $invoice);
             $stockService = new StockLedgerService($this->pdo);
 
             // Reverse the original stock effect of every original line...
@@ -522,7 +575,7 @@ class InvoiceModel
                 }
                 $qtyTotal = (float) $item['qty'] + (float) $item['free_qty'];
                 $stockService->applyMovement(
-                    (int) $item['item_id'], 'branch', (int) $invoice['branch_id'], $qtyTotal,
+                    (int) $item['item_id'], $ownerType, $ownerId, $qtyTotal,
                     'sale_return', 'invoices', $id, 'invoice_edited', null, $actorId
                 );
             }
@@ -547,7 +600,7 @@ class InvoiceModel
 
             $stockStmt = $this->pdo->prepare(
                 'SELECT quantity_on_hand FROM stock_ledger
-                 WHERE item_id = :item_id AND owner_type = \'branch\' AND owner_id = :branch_id
+                 WHERE item_id = :item_id AND owner_type = :owner_type AND owner_id = :owner_id
                  FOR UPDATE'
             );
 
@@ -555,7 +608,11 @@ class InvoiceModel
                 if ($requiredQty <= 0) {
                     continue;
                 }
-                $stockStmt->execute(['item_id' => $itemId, 'branch_id' => (int) $invoice['branch_id']]);
+                $stockStmt->execute([
+                    'item_id' => $itemId,
+                    'owner_type' => $ownerType,
+                    'owner_id' => $ownerId,
+                ]);
                 $stockRow = $stockStmt->fetch();
                 $available = $stockRow !== false ? (float) $stockRow['quantity_on_hand'] : 0.0;
 
@@ -563,7 +620,7 @@ class InvoiceModel
                     $availableDisp = round($available, 3);
                     $requiredDisp = round($requiredQty, 3);
                     throw new \RuntimeException(
-                        "Insufficient stock for \"{$itemNames[$itemId]}\". Requested: {$requiredDisp}, Available in branch: {$availableDisp}."
+                        "Insufficient stock for \"{$itemNames[$itemId]}\". Requested: {$requiredDisp}, Available in {$ownerLabel}: {$availableDisp}."
                     );
                 }
             }
@@ -577,7 +634,7 @@ class InvoiceModel
                 }
                 $qtyTotal = (float) $line['qty'] + (float) $line['free_qty'];
                 $stockService->applyMovement(
-                    (int) $line['item_id'], 'branch', (int) $invoice['branch_id'], -$qtyTotal,
+                    (int) $line['item_id'], $ownerType, $ownerId, -$qtyTotal,
                     'sale', 'invoices', $id, null, null, $actorId
                 );
             }
@@ -699,6 +756,7 @@ class InvoiceModel
             $stmt->execute(['id' => $id]);
             $items = $stmt->fetchAll();
 
+            [$ownerType, $ownerId] = $this->getInvoiceStockOwner($id, $invoice);
             $stockService = new StockLedgerService($this->pdo);
             foreach ($items as $item) {
                 if (empty($item['item_id'])) {
@@ -707,8 +765,8 @@ class InvoiceModel
                 $qtyTotal = (float) $item['qty'] + (float) $item['free_qty'];
                 $stockService->applyMovement(
                     (int) $item['item_id'],
-                    'branch',
-                    (int) $invoice['branch_id'],
+                    $ownerType,
+                    $ownerId,
                     $qtyTotal,
                     'sale_return',
                     'invoices',
@@ -785,6 +843,7 @@ class InvoiceModel
             $stmt->execute(['id' => $id]);
             $items = $stmt->fetchAll();
 
+            [$ownerType, $ownerId] = $this->getInvoiceStockOwner($id, $invoice);
             $stockService = new StockLedgerService($this->pdo);
             foreach ($items as $item) {
                 if (empty($item['item_id'])) {
@@ -793,8 +852,8 @@ class InvoiceModel
                 $qtyTotal = (float) $item['qty'] + (float) $item['free_qty'];
                 $stockService->applyMovement(
                     (int) $item['item_id'],
-                    'branch',
-                    (int) $invoice['branch_id'],
+                    $ownerType,
+                    $ownerId,
                     $qtyTotal,
                     'sale_return',
                     'invoices',

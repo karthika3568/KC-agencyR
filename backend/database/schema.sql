@@ -1282,3 +1282,15 @@ INSERT INTO role_permissions (role_id, permission_id)
   WHERE r.id IN (1, 2) AND p.code = 'pos.delete_completed_invoice'
 ON DUPLICATE KEY UPDATE role_id = role_id;
 
+-- Field Sales Executive (role_id = 4): customer pre-booking orders, customer management, and van stock operations
+INSERT INTO role_permissions (role_id, permission_id)
+  SELECT 4, id FROM permissions
+  WHERE code IN (
+    'orders.view_prebooking',
+    'orders.manage_prebooking_status',
+    'inventory.issue_van_stock',
+    'parties.manage_customers'
+  )
+ON DUPLICATE KEY UPDATE role_id = role_id;
+
+

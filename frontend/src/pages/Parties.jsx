@@ -12,7 +12,7 @@ import { usePermission } from '../hooks/usePermission';
 import { handleFormKeyDown } from '../utils/formNavigation';
 
 // CUSTOMERS PANEL (Left Form, Right Directory Table)
-function CustomersPanel({ canManage }) {
+export function CustomersPanel({ canManage }) {
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: ['customers'], queryFn: customersApi.list });
 
