@@ -8,7 +8,7 @@ import {
   BarChart3, ShoppingCart, FileText, Users,
   ClipboardList, RotateCcw, Package, Warehouse,
   Tag, Wallet, Receipt, Banknote, Settings as SettingsIcon,
-  Sparkles
+  Sparkles, Truck, History
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth.jsx';
 import { usePermission } from '../hooks/usePermission';
@@ -16,7 +16,10 @@ import { useBranchStore } from '../store/branchStore';
 import { branchesApi } from '../api/branches';
 
 // Helper to check user permissions
-function checkPermission(user, perm) {
+function checkPermission(user, perm, targetPath = null) {
+  if (user?.role === 'Field Sales Executive' && targetPath === '/pos') {
+    return false;
+  }
   if (!perm) return true;
   if (!user || !user.permissions) return false;
   if (Array.isArray(perm)) {
@@ -25,24 +28,24 @@ function checkPermission(user, perm) {
   return Boolean(user.permissions.includes(perm));
 }
 
-// Module search catalog
+// Module search catalog with permission gating
 const ALL_MODULE_SEARCH = [
-  { to: '/', label: 'Dashboard', desc: 'Overview & metrics' },
-  { to: '/pos', label: 'POS & Billing', desc: 'Counter sales & checkout' },
-  { to: '/catalog', label: 'Products & Catalog', desc: 'Item master & prices' },
-  { to: '/price-adjustment', label: 'Price Adjustment', desc: 'Wholesale & retail pricing' },
-  { to: '/parties', label: 'Parties', desc: 'Customers & suppliers' },
-  { to: '/purchasing', label: 'Purchasing (GRN)', desc: 'Goods receipts & vendor bills' },
-  { to: '/orders', label: 'Orders & Indents', desc: 'Pre-bookings & purchase requests' },
-  { to: '/inventory', label: 'Inventory & Stock', desc: 'Branch stock levels & batches' },
-  { to: '/returns', label: 'Returns', desc: 'Sales & customer returns' },
-  { to: '/invoices', label: 'Invoices', desc: 'Sales invoice history' },
-  { to: '/collections', label: 'Collections', desc: 'Field payment entries' },
-  { to: '/cash-handover', label: 'Cash Handover', desc: 'Shift reconciliation' },
-  { to: '/expenses', label: 'Expenses', desc: 'Operating costs & receipts' },
-  { to: '/reports', label: 'Reports', desc: 'GST, Sales, P&L' },
-  { to: '/staff', label: 'Staff & Roles', desc: 'Team & access permissions' },
-  { to: '/settings', label: 'Settings', desc: 'System configuration' },
+  { to: '/', label: 'Dashboard', desc: 'Overview & metrics', perm: null },
+  { to: '/pos', label: 'POS & Billing', desc: 'Counter sales & checkout', perm: 'pos.access' },
+  { to: '/catalog', label: 'Products & Catalog', desc: 'Item master & prices', perm: 'catalog.manage_items' },
+  { to: '/price-adjustment', label: 'Price Adjustment', desc: 'Wholesale & retail pricing', perm: 'catalog.manage_items' },
+  { to: '/parties', label: 'Parties', desc: 'Customers & suppliers', perm: 'parties.manage_customers' },
+  { to: '/purchasing', label: 'Purchasing (GRN)', desc: 'Goods receipts & vendor bills', perm: 'purchases.create_grn' },
+  { to: '/orders', label: 'Orders & Indents', desc: 'Pre-bookings & purchase requests', perm: ['orders.create_prebooking', 'orders.view_prebooking', 'orders.manage_prebooking_status'] },
+  { to: '/inventory', label: 'Inventory & Stock', desc: 'Branch stock levels & batches', perm: 'inventory.view_stock' },
+  { to: '/returns', label: 'Returns', desc: 'Sales & customer returns', perm: 'returns.sales_return' },
+  { to: '/invoices', label: 'Invoices', desc: 'Sales invoice history', perm: 'pos.access' },
+  { to: '/collections', label: 'Collections', desc: 'Field payment entries', perm: 'collections.field_collection_entry' },
+  { to: '/cash-handover', label: 'Cash Handover', desc: 'Shift reconciliation', perm: 'handover.submit_cash_handover' },
+  { to: '/expenses', label: 'Expenses', desc: 'Operating costs & receipts', perm: 'expenses.manage' },
+  { to: '/reports', label: 'Reports', desc: 'GST, Sales, P&L', perm: 'reports.view_all' },
+  { to: '/staff', label: 'Staff & Roles', desc: 'Team & access permissions', perm: 'staff.manage_permissions' },
+  { to: '/settings', label: 'Settings', desc: 'System configuration', perm: 'settings.manage' },
 ];
 
 // Navigation structure
@@ -51,7 +54,7 @@ const TOP_NAV_GROUPS = [
     id: 'dashboard',
     label: 'Dashboard',
     to: '/',
-    perm: 'dashboard.view_financial_summary',
+    perm: null,
     icon: LayoutDashboard,
     isDirect: true,
   },
@@ -276,6 +279,10 @@ export function TopNav({ onToggleSidebar, onToggleMobile } = {}) {
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, [location.pathname]);
+
+  const handleToggleGroup = (groupId) => {
+    setOpenDropdownId((prev) => (prev === groupId ? null : groupId));
+  };
 
   // Handler for top-level navbar titles
   const handleTopNavKeyDown = (e) => {
@@ -552,8 +559,9 @@ export function TopNav({ onToggleSidebar, onToggleMobile } = {}) {
   const searchResults = searchQuery.trim()
     ? ALL_MODULE_SEARCH.filter(
         (m) =>
-          m.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          m.desc.toLowerCase().includes(searchQuery.toLowerCase())
+          checkPermission(user, m.perm) &&
+          (m.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          m.desc.toLowerCase().includes(searchQuery.toLowerCase()))
       )
     : [];
 
@@ -563,9 +571,122 @@ export function TopNav({ onToggleSidebar, onToggleMobile } = {}) {
     setShowSearchDropdown(false);
   };
 
-  const handleToggleGroup = (groupId) => {
-    setOpenDropdownId((prev) => (prev === groupId ? null : groupId));
-  };
+  const isFieldSales = user?.role === 'Field Sales Executive';
+
+  if (isFieldSales) {
+    const FIELD_SALES_NAV = [
+      { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+      { to: '/customers', label: 'Customers', icon: Users },
+      { to: '/orders', label: 'Orders', icon: ClipboardList },
+      { to: '/vans', label: 'Vans', icon: Truck },
+      { to: '/van-stock', label: 'Van Stock', icon: Package },
+      { to: '/stock-history', label: 'Stock History', icon: History },
+    ];
+
+    return (
+      <header className="sticky top-0 z-40 w-full shrink-0 shadow-md bg-[#351442] text-white">
+        <div className="flex h-14 w-full items-center justify-between px-3 sm:px-5 lg:px-6 gap-2 sm:gap-4">
+          {/* Left: KC Agency Brand Wordmark & Logo */}
+          <Link to="/" className="flex items-center gap-2.5 transition-transform hover:opacity-95 shrink-0 group">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#8244AD] to-[#511E69] text-white shadow-sm border border-white/10 group-hover:scale-105 transition-transform">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                className="h-5 w-5"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M12 3L4 19h5l3-6 3 6h5L12 3z" fill="white" fillOpacity="0.9" stroke="none" />
+                <path d="M12 9l-2.5 5h5L12 9z" fill="#351442" stroke="none" />
+              </svg>
+            </div>
+            <div className="flex flex-col leading-tight min-w-0">
+              <span className="text-base font-extrabold tracking-tight text-white">
+                KC Agency
+              </span>
+              <span className="text-[9.5px] font-semibold uppercase tracking-wider text-[#D8CEE2]">
+                Field Sales
+              </span>
+            </div>
+          </Link>
+
+          {/* Center: Six Direct Links — NO DROPDOWNS, NO EXPANDABLES, NO NESTING */}
+          <nav aria-label="Field Sales Navigation" className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar py-1">
+            {FIELD_SALES_NAV.map((item) => {
+              const Icon = item.icon;
+              const isActive = item.to === '/'
+                ? location.pathname === '/'
+                : location.pathname.startsWith(item.to);
+
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.to === '/'}
+                  className={`flex items-center gap-1.5 rounded-xl px-2.5 sm:px-3 py-1.5 text-xs font-bold transition-all whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-white/40 ${
+                    isActive
+                      ? 'bg-[#8244AD] text-white shadow-xs'
+                      : 'text-[#D8CEE2]/90 hover:bg-white/10 hover:text-white'
+                  }`}
+                >
+                  <Icon size={15} className="shrink-0" />
+                  <span>{item.label}</span>
+                </NavLink>
+              );
+            })}
+          </nav>
+
+          {/* Right: User Profile Area */}
+          <div className="relative shrink-0" ref={profileRef}>
+            <button
+              type="button"
+              onClick={() => setShowProfileMenu(!showProfileMenu)}
+              className="flex items-center gap-2 rounded-full p-1 sm:px-2 sm:py-1 hover:bg-white/10 transition-colors"
+              title="User Account Menu"
+            >
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#8244AD] text-xs font-bold text-white shadow-sm border border-white/20">
+                {initials}
+              </div>
+              <div className="hidden text-left leading-tight sm:block">
+                <div className="text-xs font-bold text-white">{user?.name || 'User'}</div>
+                <div className="text-[10px] font-medium text-[#D8CEE2]">{user?.role}</div>
+              </div>
+              <ChevronDown size={14} className="text-[#D8CEE2]" />
+            </button>
+
+            {showProfileMenu && (
+              <div className="absolute right-0 top-full mt-2 w-56 rounded-2xl border border-border-soft bg-white p-2 shadow-soft-lg z-50 text-ink animate-in fade-in slide-in-from-top-1">
+                <div className="border-b border-border-soft px-3 py-2">
+                  <div className="text-xs font-bold text-ink">{user?.name}</div>
+                  <div className="text-[10px] text-ink-muted">{user?.email || user?.username}</div>
+                  <div className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-primary-soft px-2 py-0.5 text-[10px] font-semibold text-primary">
+                    <ShieldCheck size={11} />
+                    {user?.role}
+                  </div>
+                </div>
+
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowProfileMenu(false);
+                      logout();
+                    }}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors"
+                  >
+                    <LogOut size={15} />
+                    <span>Logout</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </header>
+    );
+  }
 
   return (
     <header className="sticky top-0 z-40 w-full shrink-0 shadow-sm">
@@ -796,7 +917,7 @@ export function TopNav({ onToggleSidebar, onToggleMobile } = {}) {
 
             // Dropdown Group (Sales, Products, Finance, Admin)
             const visibleItems = (group.items || []).filter((item) =>
-              checkPermission(user, item.perm)
+              checkPermission(user, item.perm, item.to)
             );
             if (visibleItems.length === 0) return null;
 
@@ -897,7 +1018,7 @@ export function TopNav({ onToggleSidebar, onToggleMobile } = {}) {
 
         {/* Right: Quick POS Billing Action */}
         <div className="hidden sm:flex items-center pl-2">
-          {checkPermission(user, 'pos.access') && (
+          {checkPermission(user, 'pos.access', '/pos') && (
             <NavLink
               to="/pos"
               data-nav-top="true"
@@ -970,7 +1091,7 @@ export function TopNav({ onToggleSidebar, onToggleMobile } = {}) {
                   );
                 }
 
-                const visibleItems = (group.items || []).filter((item) => checkPermission(user, item.perm));
+                const visibleItems = (group.items || []).filter((item) => checkPermission(user, item.perm, item.to));
                 if (visibleItems.length === 0) return null;
 
                 const GroupIcon = group.icon;

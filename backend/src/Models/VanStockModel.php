@@ -22,8 +22,53 @@ class VanStockModel
 
     public function issue(int $branchId, int $employeeId, int $issuedBy, ?string $notes, array $lines): int
     {
-        $this->pdo->beginTransaction();
+        if (empty($lines)) {
+            throw new \InvalidArgumentException('At least one item is required for stock issue');
+        }
+
+        $mustCommit = false;
+        if (!$this->pdo->inTransaction()) {
+            $this->pdo->beginTransaction();
+            $mustCommit = true;
+        }
         try {
+            // 1. Group & validate issue quantities per item
+            $issueQtyByItem = [];
+            foreach ($lines as $line) {
+                $itemId = (int) ($line['item_id'] ?? 0);
+                $qty = (float) ($line['qty'] ?? 0);
+                if ($itemId <= 0 || $qty <= 0) {
+                    throw new \InvalidArgumentException('Each issue line must have a valid item_id and quantity greater than zero');
+                }
+                $issueQtyByItem[$itemId] = ($issueQtyByItem[$itemId] ?? 0.0) + $qty;
+            }
+
+            // 2. Lock & validate branch/warehouse stock_ledger rows FOR UPDATE
+            $stockStmt = $this->pdo->prepare(
+                'SELECT quantity_on_hand FROM stock_ledger
+                 WHERE item_id = :item_id AND owner_type = \'branch\' AND owner_id = :branch_id
+                 FOR UPDATE'
+            );
+
+            $itemStmt = $this->pdo->prepare('SELECT item_name FROM items WHERE id = :id');
+
+            foreach ($issueQtyByItem as $itemId => $requiredQty) {
+                $stockStmt->execute(['item_id' => $itemId, 'branch_id' => $branchId]);
+                $stockRow = $stockStmt->fetch();
+                $available = $stockRow !== false ? (float) $stockRow['quantity_on_hand'] : 0.0;
+
+                if ($available < $requiredQty) {
+                    $itemStmt->execute(['id' => $itemId]);
+                    $itemName = $itemStmt->fetchColumn() ?: "Item #{$itemId}";
+                    $availableDisp = round($available, 3);
+                    $requiredDisp = round($requiredQty, 3);
+                    throw new \RuntimeException(
+                        "Cannot issue {$requiredDisp} of \"{$itemName}\". Only {$availableDisp} currently available in warehouse stock."
+                    );
+                }
+            }
+
+            // 3. Create issue note header
             $stmt = $this->pdo->prepare(
                 'INSERT INTO stock_issue_notes (branch_id, employee_id, issued_by, notes)
                  VALUES (:branch_id, :employee_id, :issued_by, :notes)'
@@ -36,6 +81,7 @@ class VanStockModel
             $this->pdo->prepare('UPDATE stock_issue_notes SET issue_no = :code WHERE id = :id')
                 ->execute(['code' => CodeGenerator::fromId('ISS', $issueId), 'id' => $issueId]);
 
+            // 4. Create line items and apply movements
             $itemStmt = $this->pdo->prepare(
                 'INSERT INTO stock_issue_items (issue_id, item_id, qty) VALUES (:issue_id, :item_id, :qty)'
             );
@@ -49,18 +95,63 @@ class VanStockModel
                 $stock->applyMovement($itemId, 'employee', $employeeId, $qty, 'issue_to_salesman', 'stock_issue_notes', $issueId, null, null, $issuedBy);
             }
 
-            $this->pdo->commit();
+            if ($mustCommit) {
+                $this->pdo->commit();
+            }
             return $issueId;
         } catch (\Throwable $e) {
-            $this->pdo->rollBack();
+            if ($mustCommit && $this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
             throw $e;
         }
     }
 
     public function returnStock(int $branchId, int $employeeId, ?int $issueId, int $returnedBy, ?string $notes, array $lines): int
     {
+        if (empty($lines)) {
+            throw new \InvalidArgumentException('At least one item is required for stock return');
+        }
+
         $this->pdo->beginTransaction();
         try {
+            // 1. Group & validate return quantities per item
+            $returnQtyByItem = [];
+            foreach ($lines as $line) {
+                $itemId = (int) ($line['item_id'] ?? 0);
+                $qty = (float) ($line['qty'] ?? 0);
+                if ($itemId <= 0 || $qty <= 0) {
+                    throw new \InvalidArgumentException('Each return line must have a valid item_id and quantity greater than zero');
+                }
+                $returnQtyByItem[$itemId] = ($returnQtyByItem[$itemId] ?? 0.0) + $qty;
+            }
+
+            // 2. Lock & validate van stock_ledger rows FOR UPDATE
+            $stockStmt = $this->pdo->prepare(
+                'SELECT quantity_on_hand FROM stock_ledger
+                 WHERE item_id = :item_id AND owner_type = \'employee\' AND owner_id = :employee_id
+                 FOR UPDATE'
+            );
+
+            $itemStmt = $this->pdo->prepare('SELECT item_name FROM items WHERE id = :id');
+
+            foreach ($returnQtyByItem as $itemId => $requiredQty) {
+                $stockStmt->execute(['item_id' => $itemId, 'employee_id' => $employeeId]);
+                $stockRow = $stockStmt->fetch();
+                $available = $stockRow !== false ? (float) $stockRow['quantity_on_hand'] : 0.0;
+
+                if ($available < $requiredQty) {
+                    $itemStmt->execute(['id' => $itemId]);
+                    $itemName = $itemStmt->fetchColumn() ?: "Item #{$itemId}";
+                    $availableDisp = round($available, 3);
+                    $requiredDisp = round($requiredQty, 3);
+                    throw new \RuntimeException(
+                        "Cannot return {$requiredDisp} of \"{$itemName}\". Only {$availableDisp} currently in van stock."
+                    );
+                }
+            }
+
+            // 3. Create return note header
             $stmt = $this->pdo->prepare(
                 'INSERT INTO stock_return_notes (issue_id, branch_id, employee_id, returned_by, notes)
                  VALUES (:issue_id, :branch_id, :employee_id, :returned_by, :notes)'
@@ -73,14 +164,15 @@ class VanStockModel
             $this->pdo->prepare('UPDATE stock_return_notes SET return_no = :code WHERE id = :id')
                 ->execute(['code' => CodeGenerator::fromId('RTN', $returnId), 'id' => $returnId]);
 
-            $itemStmt = $this->pdo->prepare(
+            // 4. Create line items and apply movements
+            $itemInsertStmt = $this->pdo->prepare(
                 'INSERT INTO stock_return_items (return_id, item_id, qty) VALUES (:return_id, :item_id, :qty)'
             );
             $stock = new StockLedgerService($this->pdo);
             foreach ($lines as $line) {
                 $itemId = (int) $line['item_id'];
                 $qty = (float) $line['qty'];
-                $itemStmt->execute(['return_id' => $returnId, 'item_id' => $itemId, 'qty' => $qty]);
+                $itemInsertStmt->execute(['return_id' => $returnId, 'item_id' => $itemId, 'qty' => $qty]);
 
                 $stock->applyMovement($itemId, 'employee', $employeeId, -$qty, 'salesman_return', 'stock_return_notes', $returnId, null, null, $returnedBy);
                 $stock->applyMovement($itemId, 'branch', $branchId, $qty, 'salesman_return', 'stock_return_notes', $returnId, null, null, $returnedBy);

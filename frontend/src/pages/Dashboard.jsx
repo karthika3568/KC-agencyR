@@ -12,6 +12,7 @@ import { useAuth } from '../hooks/useAuth.jsx';
 import { usePermission } from '../hooks/usePermission';
 import { dashboardApi } from '../api/admin';
 import { Card } from '../components/Card.jsx';
+import { FieldSalesDashboard } from '../components/FieldSalesDashboard.jsx';
 
 // Spatial 2D keyboard navigation helper based on DOM geometry
 function findNextNavElement(currentEl, items, dir) {
@@ -283,7 +284,7 @@ const SUMMARY_METRICS = [
   { key: 'extra_income_today', label: 'Extra Income Today' },
 ];
 
-export function Dashboard() {
+function StandardDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const canViewFinancials = usePermission('dashboard.view_financial_summary');
@@ -859,4 +860,14 @@ export function Dashboard() {
       )}
     </div>
   );
+}
+
+export function Dashboard() {
+  const { user } = useAuth();
+
+  if (user?.role === 'Field Sales Executive') {
+    return <FieldSalesDashboard />;
+  }
+
+  return <StandardDashboard />;
 }

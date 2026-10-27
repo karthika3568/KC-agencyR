@@ -149,6 +149,7 @@ class InvoiceController
 
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
         $payments = $body['payments'] ?? [];
+        $stockSource = $body['stock_source'] ?? null;
 
         $hasCredit = array_reduce($payments, fn ($c, $p) => $c || ($p['payment_method'] ?? '') === 'credit', false);
         $sumPayments = array_sum(array_column($payments, 'amount'));
@@ -159,7 +160,7 @@ class InvoiceController
         }
 
         try {
-            $result = $this->invoices->complete((int) $id, $payments, (int) $claims['sub']);
+            $result = $this->invoices->complete((int) $id, $payments, (int) $claims['sub'], $stockSource);
         } catch (\RuntimeException $e) {
             Response::error($e->getMessage(), 422);
         }
@@ -593,10 +594,24 @@ class InvoiceController
             $lines[] = $this->invoices->priceLine($item, $line, $billType, $priceType);
         }
 
+        $employeeId = (int) $claims['sub'];
+        if (!empty($body['employee_id']) || !empty($body['salesman_id'])) {
+            $candidateEmpId = !empty($body['employee_id']) ? (int) $body['employee_id'] : (int) $body['salesman_id'];
+            $canSwitch = in_array('branches.switch_context', (array) ($claims['permissions'] ?? []), true);
+            $empStmt = $this->pdo->prepare('SELECT id, branch_id FROM users WHERE id = :id');
+            $empStmt->execute(['id' => $candidateEmpId]);
+            $candidate = $empStmt->fetch();
+            if ($candidate) {
+                if ($canSwitch || (int) $candidate['branch_id'] === $branchId) {
+                    $employeeId = $candidateEmpId;
+                }
+            }
+        }
+
         $header = [
             'branch_id' => $branchId,
             'customer_id' => $customerId,
-            'employee_id' => (int) $claims['sub'],
+            'employee_id' => $employeeId,
             'bill_type' => $billType,
             'price_type' => $priceType,
             'invoice_format' => $invoiceFormat,

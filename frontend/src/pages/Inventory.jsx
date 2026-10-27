@@ -1,10 +1,11 @@
-import { useState, Fragment } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Package, Search, Plus, Trash2, CheckCircle2, AlertTriangle, Truck, SlidersHorizontal, X, FileSpreadsheet, FileDown, Printer, ChevronDown, ChevronRight } from 'lucide-react';
 import { itemsApi } from '../api/catalog';
 import { usersApi } from '../api/users';
 import { stockAdjustmentsApi, stockHubApi, vanStockApi, vanStockIssuesApi } from '../api/purchasing';
 import { Tabs } from '../components/Tabs';
+import { useAuth } from '../hooks/useAuth.jsx';
 import { usePermission } from '../hooks/usePermission';
 import { Button } from '../components/Button.jsx';
 import { downloadReportPdf, downloadVanIssuePdf } from '../utils/reportPdf';
@@ -13,7 +14,7 @@ import { useClientPagination } from '../hooks/useClientPagination';
 import { PrintPreviewModal } from '../components/PrintPreviewModal';
 import { handleFormKeyDown } from '../utils/formNavigation';
 
-function StockHubPanel() {
+export function StockHubPanel() {
   const [ownerType, setOwnerType] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -211,7 +212,7 @@ function StockHubPanel() {
   );
 }
 
-function StockAdjustmentPanel({ canManage }) {
+export function StockAdjustmentPanel({ canManage }) {
   const queryClient = useQueryClient();
   const [itemId, setItemId] = useState('');
   const [adjustmentType, setAdjustmentType] = useState('deduction');
@@ -467,9 +468,10 @@ function StockAdjustmentPanel({ canManage }) {
   );
 }
 
-function VanStockPanel({ canManage }) {
+export function VanStockPanel({ canManage }) {
   const queryClient = useQueryClient();
-  const [employeeId, setEmployeeId] = useState('');
+  const { user } = useAuth();
+  const [employeeId, setEmployeeId] = useState(() => (canManage ? '' : (user?.id ? String(user.id) : '')));
   const [mode, setMode] = useState('issue');
   const [lines, setLines] = useState([{ item_id: '', qty: 1 }]);
   const [formError, setFormError] = useState('');
@@ -478,7 +480,13 @@ function VanStockPanel({ canManage }) {
   const [exportError, setExportError] = useState('');
   const [exporting, setExporting] = useState(false);
 
-  const usersQuery = useQuery({ queryKey: ['users'], queryFn: usersApi.list });
+  useEffect(() => {
+    if (!canManage && user?.id && String(employeeId) !== String(user.id)) {
+      setEmployeeId(String(user.id));
+    }
+  }, [canManage, user?.id, employeeId]);
+
+  const usersQuery = useQuery({ queryKey: ['users'], queryFn: usersApi.list, enabled: canManage });
   const itemsQuery = useQuery({ queryKey: ['items', ''], queryFn: () => itemsApi.list('') });
   const pendingQuery = useQuery({
     queryKey: ['van-pending', employeeId],
@@ -488,6 +496,7 @@ function VanStockPanel({ canManage }) {
   const issuesQuery = useQuery({
     queryKey: ['van-issues', employeeId],
     queryFn: () => vanStockIssuesApi.list(employeeId || undefined),
+    enabled: !!employeeId || canManage,
   });
 
   const mutation = useMutation({
@@ -533,7 +542,9 @@ function VanStockPanel({ canManage }) {
   const items = itemsQuery.data || [];
   const pending = pendingQuery.data || [];
   const issues = issuesQuery.data || [];
-  const selectedEmployee = users.find((u) => String(u.id) === String(employeeId));
+  const selectedEmployee = canManage
+    ? users.find((u) => String(u.id) === String(employeeId))
+    : user;
 
   const {
     page: pendingPage,
@@ -724,10 +735,10 @@ function VanStockPanel({ canManage }) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
+      <div className={`grid grid-cols-1 gap-3.5 ${canManage ? 'lg:grid-cols-12' : ''}`}>
         {/* Left Column Form */}
-        <div className="lg:col-span-5">
-          {canManage && (
+        {canManage && (
+          <div className="lg:col-span-5">
             <div className="card p-3.5 space-y-2.5 sticky top-3">
               <div className="border-b border-border-soft pb-2 flex items-center justify-between">
                 <h2 className="font-semibold text-ink text-sm sm:text-base flex items-center gap-2">
@@ -834,16 +845,16 @@ function VanStockPanel({ canManage }) {
                 </div>
               </form>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Right Column Table */}
-        <div className="lg:col-span-7 space-y-2.5">
+        <div className={canManage ? 'lg:col-span-7 space-y-2.5' : 'space-y-2.5'}>
           <div className="card overflow-hidden">
             <div className="px-3.5 py-2 border-b border-border-soft flex flex-wrap items-center justify-between gap-2">
               <h3 className="font-semibold text-ink text-xs sm:text-sm">Salesman Active Van Stock</h3>
               <span className="text-xs text-ink-muted">
-                {selectedEmployee ? `Salesman: ${selectedEmployee.name}` : 'Select salesman to view live balance'}
+                {selectedEmployee ? `Salesman: ${selectedEmployee.name}` : (employeeId ? `Salesman ID: ${employeeId}` : 'Select salesman to view live balance')}
               </span>
             </div>
             {employeeId && (
@@ -892,7 +903,7 @@ function VanStockPanel({ canManage }) {
                   {(!employeeId || pending.length === 0) && (
                     <tr>
                       <td colSpan={5} className="px-4 py-8 text-center text-ink-muted text-xs">
-                        {employeeId ? 'No active van stock assigned to this salesman.' : 'Select a salesman on the left form.'}
+                        {employeeId ? 'No active van stock assigned to this salesman.' : (canManage ? 'Select a salesman on the left form.' : 'No van stock found.')}
                       </td>
                     </tr>
                   )}
@@ -906,7 +917,7 @@ function VanStockPanel({ canManage }) {
             <div className="px-3.5 py-2 border-b border-border-soft flex flex-wrap items-center justify-between gap-2">
               <h3 className="font-semibold text-ink text-xs sm:text-sm">Issue Transactions</h3>
               <span className="text-xs text-ink-muted">
-                {selectedEmployee ? `Salesman: ${selectedEmployee.name}` : 'All salesmen'}
+                {selectedEmployee ? `Salesman: ${selectedEmployee.name}` : (canManage ? 'All salesmen' : '')}
               </span>
             </div>
             <div className="px-3.5 py-1.5 border-b border-border-soft flex flex-wrap items-center gap-1.5 bg-surface-subtle/20">
@@ -1085,6 +1096,17 @@ export function Inventory() {
   const canAdjust = usePermission('inventory.stock_adjustment');
   const canIssue = usePermission('inventory.issue_van_stock');
 
+  const tabs = [];
+  if (canView) {
+    tabs.push({ key: 'hub', label: 'Stock Hub', content: <StockHubPanel /> });
+  }
+  if (canAdjust) {
+    tabs.push({ key: 'adjust', label: 'Stock Adjustment', content: <StockAdjustmentPanel canManage={canAdjust} /> });
+  }
+  if (canView || canIssue) {
+    tabs.push({ key: 'van', label: 'Van / Salesman Stock', content: <VanStockPanel canManage={canIssue} /> });
+  }
+
   return (
     <div className="space-y-3">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border-soft/40 pb-2">
@@ -1097,13 +1119,13 @@ export function Inventory() {
         </div>
       </div>
 
-      <Tabs
-        tabs={[
-          { key: 'hub', label: 'Stock Hub', content: canView ? <StockHubPanel /> : <p className="text-ink-muted">No access.</p> },
-          { key: 'adjust', label: 'Stock Adjustment', content: <StockAdjustmentPanel canManage={canAdjust} /> },
-          { key: 'van', label: 'Van / Salesman Stock', content: <VanStockPanel canManage={canIssue} /> },
-        ]}
-      />
+      {tabs.length > 0 ? (
+        <Tabs tabs={tabs} />
+      ) : (
+        <div className="card p-6 text-center text-xs text-ink-muted">
+          You do not have permission to view inventory or van stock.
+        </div>
+      )}
     </div>
   );
 }

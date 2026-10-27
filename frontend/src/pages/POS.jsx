@@ -85,11 +85,25 @@ export function POS() {
   const canVoidHold = usePermission('pos.void_hold_bill');
   const canViewStock = usePermission('inventory.view_stock');
 
-  const [billType, setBillType] = useState(canGst ? 'gst' : 'non_gst');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedType = searchParams.get('type');
+  const [billType, setBillType] = useState(() => {
+    if (requestedType === 'non_gst' && canNonGst) return 'non_gst';
+    if (requestedType === 'gst' && canGst) return 'gst';
+    return canGst ? 'gst' : (canNonGst ? 'non_gst' : 'gst');
+  });
+
+  useEffect(() => {
+    if (requestedType === 'non_gst' && canNonGst && billType !== 'non_gst') {
+      setBillType('non_gst');
+    } else if (!canGst && canNonGst && billType !== 'non_gst') {
+      setBillType('non_gst');
+    }
+  }, [requestedType, canGst, canNonGst, billType]);
+
   const [billingFormat, setBillingFormat] = useState('local');
   const [priceType, setPriceType] = useState('normal');
   const [customerId, setCustomerId] = useState('');
-  const [searchParams, setSearchParams] = useSearchParams();
   const prebookingId = searchParams.get('prebooking_id');
   const [linkedPrebooking, setLinkedPrebooking] = useState(null);
   const [isQuickSale, setIsQuickSale] = useState(false);

@@ -1,15 +1,17 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckSquare, Square } from 'lucide-react';
+import { CheckSquare, Square, Plus, Search, X } from 'lucide-react';
 import { collectionsApi } from '../api/postsale';
+import { customersApi } from '../api/parties';
 import { usePermission } from '../hooks/usePermission';
 import { Button } from '../components/Button.jsx';
 import { Pagination } from '../components/Pagination';
 import { useClientPagination } from '../hooks/useClientPagination';
 import { handleFormKeyDown } from '../utils/formNavigation';
 
-function CollectModal({ customer, onClose }) {
+export function CollectModal({ customer, onClose }) {
   const queryClient = useQueryClient();
+  const canViewAll = usePermission('credit.view_shopwide_outstanding');
   const [mode, setMode] = useState('fifo'); // 'fifo' | 'manual'
   const [amount, setAmount] = useState('');
   const [checkedIds, setCheckedIds] = useState([]);
@@ -17,9 +19,12 @@ function CollectModal({ customer, onClose }) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(null);
 
+  const customerId = customer.customer_id || customer.id;
+
   const unpaidQuery = useQuery({
-    queryKey: ['unpaid-invoices', customer.customer_id],
-    queryFn: () => collectionsApi.unpaidInvoices(customer.customer_id),
+    queryKey: ['unpaid-invoices', customerId],
+    queryFn: () => collectionsApi.unpaidInvoices(customerId),
+    enabled: !!customerId,
   });
   const createMutation = useMutation({
     mutationFn: collectionsApi.create,
@@ -27,7 +32,7 @@ function CollectModal({ customer, onClose }) {
       setSuccess(data);
       queryClient.invalidateQueries({ queryKey: ['collections-pending'] });
       queryClient.invalidateQueries({ queryKey: ['collections'] });
-      queryClient.invalidateQueries({ queryKey: ['unpaid-invoices', customer.customer_id] });
+      queryClient.invalidateQueries({ queryKey: ['unpaid-invoices', customerId] });
     },
   });
 
@@ -53,13 +58,13 @@ function CollectModal({ customer, onClose }) {
           .filter((inv) => checkedIds.includes(inv.id))
           .map((inv) => ({ invoice_id: inv.id, allocated_amount: Number(inv.balance_due) }));
         await createMutation.mutateAsync({
-          customer_id: customer.customer_id,
+          customer_id: customerId,
           amount: checkedTotal,
           payment_method: paymentMethod,
           allocations,
         });
       } else {
-        await createMutation.mutateAsync({ customer_id: customer.customer_id, amount: Number(amount), payment_method: paymentMethod });
+        await createMutation.mutateAsync({ customer_id: customerId, amount: Number(amount), payment_method: paymentMethod });
       }
     } catch (err) {
       setError(err?.response?.data?.error || 'Failed to save');
@@ -73,7 +78,8 @@ function CollectModal({ customer, onClose }) {
       <div role="dialog" aria-modal="true" data-form-container="true" onKeyDown={handleFormKeyDown} className="w-[520px] card p-5">
         <div className="mb-1 text-lg font-semibold text-ink">Collect from {customer.ledger_name}</div>
         <div className="mb-3 text-xs text-ink-muted">
-          Credit limit: Rs. {customer.credit_limit} · Outstanding: Rs. {customer.total_due}
+          {customer.credit_limit != null && `Credit limit: Rs. ${customer.credit_limit}`}
+          {canViewAll && customer.total_due != null ? ` · Outstanding: Rs. ${customer.total_due}` : ''}
         </div>
 
         <div className="mb-3 flex gap-1 rounded-lg border border-border-soft bg-page p-1 text-sm">
@@ -169,6 +175,22 @@ export function Collections() {
   const canCollect = usePermission('collections.field_collection_entry');
   const canViewAll = usePermission('credit.view_shopwide_outstanding');
   const [selected, setSelected] = useState(null);
+  const [showCustomerSelect, setShowCustomerSelect] = useState(false);
+  const [customerSearch, setCustomerSearch] = useState('');
+
+  const customersQuery = useQuery({
+    queryKey: ['customers'],
+    queryFn: customersApi.list,
+    enabled: canCollect,
+  });
+  const customers = customersQuery.data || [];
+  const filteredCustomers = customers.filter((c) => {
+    const q = customerSearch.toLowerCase();
+    return (
+      (c.ledger_name || '').toLowerCase().includes(q) ||
+      (c.phone || '').toLowerCase().includes(q)
+    );
+  });
 
   const pendingQuery = useQuery({ queryKey: ['collections-pending'], queryFn: () => collectionsApi.pending(), enabled: canViewAll });
   const historyQuery = useQuery({ queryKey: ['collections'], queryFn: collectionsApi.list });
@@ -194,9 +216,17 @@ export function Collections() {
 
   return (
     <div className="space-y-2.5">
-      <div className="border-b border-border-soft pb-2">
-        <h1 className="text-xl font-bold text-ink">Credit Management</h1>
-        <p className="text-xs text-ink-muted">Customer credit balances and collections.</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border-soft pb-2">
+        <div>
+          <h1 className="text-xl font-bold text-ink">Credit Management</h1>
+          <p className="text-xs text-ink-muted">Customer credit balances and collections.</p>
+        </div>
+        {canCollect && (
+          <Button onClick={() => setShowCustomerSelect(true)} className="self-start sm:self-auto flex items-center gap-1.5">
+            <Plus size={14} />
+            <span>New Collection</span>
+          </Button>
+        )}
       </div>
 
       {canViewAll && (
@@ -272,6 +302,73 @@ export function Collections() {
         </div>
         <Pagination page={historyPage} pageSize={10} total={historyCount} onPageChange={setHistoryPage} />
       </div>
+
+      {showCustomerSelect && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md card p-4 space-y-3">
+            <div className="flex items-center justify-between border-b border-border-soft pb-2">
+              <span className="font-semibold text-ink text-sm">Select Customer for Collection</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCustomerSelect(false);
+                  setCustomerSearch('');
+                }}
+                className="text-ink-muted hover:text-ink"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="relative">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
+              <input
+                type="text"
+                autoFocus
+                placeholder="Search customer by name or phone..."
+                value={customerSearch}
+                onChange={(e) => setCustomerSearch(e.target.value)}
+                className="input pl-8 w-full text-xs"
+              />
+            </div>
+            <div className="max-h-60 overflow-y-auto space-y-1">
+              {filteredCustomers.length === 0 ? (
+                <div className="p-4 text-center text-xs text-ink-muted">No customers found</div>
+              ) : (
+                filteredCustomers.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => {
+                      setSelected(c);
+                      setShowCustomerSelect(false);
+                      setCustomerSearch('');
+                    }}
+                    className="w-full flex items-center justify-between p-2 rounded-lg hover:bg-page text-left transition"
+                  >
+                    <div>
+                      <div className="text-xs font-semibold text-ink">{c.ledger_name}</div>
+                      <div className="text-[10px] text-ink-muted">{c.phone || 'No phone'}</div>
+                    </div>
+                    <span className="text-xs font-semibold text-indigo-600">Select →</span>
+                  </button>
+                ))
+              )}
+            </div>
+            <div className="flex justify-end pt-2 border-t border-border-soft">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setShowCustomerSelect(false);
+                  setCustomerSearch('');
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {selected && <CollectModal customer={selected} onClose={() => setSelected(null)} />}
     </div>
