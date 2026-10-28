@@ -20,7 +20,27 @@ class VanStockModel
     {
     }
 
-    public function issue(int $branchId, int $employeeId, int $issuedBy, ?string $notes, array $lines): int
+    /**
+     * Returns ['issue_id' => int] on success, or ['warning' => 'insufficient_stock',
+     * 'shortages' => [...]] when a requested quantity exceeds what's actually
+     * on hand at the branch right now — a warning, never a hard block: pass
+     * $confirmInsufficient=true (the caller already showed the user the
+     * shortages and they chose Continue) to issue anyway. Checked fresh
+     * against the locked stock_ledger rows on every call, inside the same
+     * transaction as the write, so a stock change between the warning and
+     * the confirm click is still caught and the issue still can't race
+     * another concurrent issue past the same stock.
+     */
+    public function issue(
+        int $branchId,
+        int $employeeId,
+        int $issuedBy,
+        ?string $notes,
+        array $lines,
+        bool $confirmInsufficient = false,
+        ?int $customerId = null,
+        ?int $prebookingId = null
+    ): array
     {
         if (empty($lines)) {
             throw new \InvalidArgumentException('At least one item is required for stock issue');
@@ -43,7 +63,8 @@ class VanStockModel
                 $issueQtyByItem[$itemId] = ($issueQtyByItem[$itemId] ?? 0.0) + $qty;
             }
 
-            // 2. Lock & validate branch/warehouse stock_ledger rows FOR UPDATE
+            // 2. Lock branch/warehouse stock_ledger rows FOR UPDATE and collect
+            // (not throw) any shortages — Stock Warning, not a block.
             $stockStmt = $this->pdo->prepare(
                 'SELECT quantity_on_hand FROM stock_ledger
                  WHERE item_id = :item_id AND owner_type = \'branch\' AND owner_id = :branch_id
@@ -52,6 +73,7 @@ class VanStockModel
 
             $itemStmt = $this->pdo->prepare('SELECT item_name FROM items WHERE id = :id');
 
+            $shortages = [];
             foreach ($issueQtyByItem as $itemId => $requiredQty) {
                 $stockStmt->execute(['item_id' => $itemId, 'branch_id' => $branchId]);
                 $stockRow = $stockStmt->fetch();
@@ -60,26 +82,53 @@ class VanStockModel
                 if ($available < $requiredQty) {
                     $itemStmt->execute(['id' => $itemId]);
                     $itemName = $itemStmt->fetchColumn() ?: "Item #{$itemId}";
-                    $availableDisp = round($available, 3);
-                    $requiredDisp = round($requiredQty, 3);
-                    throw new \RuntimeException(
-                        "Cannot issue {$requiredDisp} of \"{$itemName}\". Only {$availableDisp} currently available in warehouse stock."
-                    );
+                    $shortages[] = [
+                        'item_id' => $itemId,
+                        'item_name' => $itemName,
+                        'available' => round($available, 3),
+                        'requested' => round($requiredQty, 3),
+                        'excess' => round($requiredQty - $available, 3),
+                    ];
                 }
+            }
+
+            if (!empty($shortages) && !$confirmInsufficient) {
+                if ($mustCommit) {
+                    $this->pdo->rollBack();
+                }
+                return ['warning' => 'insufficient_stock', 'shortages' => $shortages];
             }
 
             // 3. Create issue note header
             $stmt = $this->pdo->prepare(
-                'INSERT INTO stock_issue_notes (branch_id, employee_id, issued_by, notes)
-                 VALUES (:branch_id, :employee_id, :issued_by, :notes)'
+                'INSERT INTO stock_issue_notes (branch_id, employee_id, issued_by, notes, customer_id, prebooking_id)
+                 VALUES (:branch_id, :employee_id, :issued_by, :notes, :customer_id, :prebooking_id)'
             );
             $stmt->execute([
-                'branch_id' => $branchId, 'employee_id' => $employeeId,
-                'issued_by' => $issuedBy, 'notes' => $notes,
+                'branch_id' => $branchId,
+                'employee_id' => $employeeId,
+                'issued_by' => $issuedBy,
+                'notes' => $notes,
+                'customer_id' => $customerId,
+                'prebooking_id' => $prebookingId,
             ]);
             $issueId = (int) $this->pdo->lastInsertId();
             $this->pdo->prepare('UPDATE stock_issue_notes SET issue_no = :code WHERE id = :id')
                 ->execute(['code' => CodeGenerator::fromId('ISS', $issueId), 'id' => $issueId]);
+
+            // Link prebooking to this issue if prebookingId was provided
+            if ($prebookingId !== null) {
+                $upStmt = $this->pdo->prepare(
+                    "UPDATE customer_prebookings 
+                     SET van_issue_id = :issue_id, status = 'processing', employee_id = :employee_id 
+                     WHERE id = :prebooking_id AND van_issue_id IS NULL"
+                );
+                $upStmt->execute([
+                    'issue_id' => $issueId,
+                    'employee_id' => $employeeId,
+                    'prebooking_id' => $prebookingId,
+                ]);
+            }
 
             // 4. Create line items and apply movements
             $itemStmt = $this->pdo->prepare(
@@ -98,7 +147,7 @@ class VanStockModel
             if ($mustCommit) {
                 $this->pdo->commit();
             }
-            return $issueId;
+            return ['issue_id' => $issueId];
         } catch (\Throwable $e) {
             if ($mustCommit && $this->pdo->inTransaction()) {
                 $this->pdo->rollBack();
@@ -187,6 +236,65 @@ class VanStockModel
     }
 
     /**
+     * Fetch active customer pre-bookings that have not yet been dispatched to a van,
+     * along with customer details and line items for auto-population in Van Stock.
+     */
+    public function getEligibleCustomerOrders(int $branchId): array
+    {
+        $sql = "SELECT cpb.id, cpb.prebooking_no, cpb.customer_id, cpb.branch_id,
+                       cpb.employee_id, cpb.status, cpb.created_at,
+                       c.ledger_name AS customer_name, c.phone AS customer_phone,
+                       u.name AS employee_name,
+                       COUNT(cpi.id) AS item_count,
+                       COALESCE(SUM(cpi.qty * cpi.rate), 0) AS estimated_total
+                FROM customer_prebookings cpb
+                JOIN customers c ON c.id = cpb.customer_id
+                LEFT JOIN users u ON u.id = cpb.employee_id
+                LEFT JOIN customer_prebooking_items cpi ON cpi.prebooking_id = cpb.id
+                WHERE cpb.branch_id = :branch_id
+                  AND cpb.van_issue_id IS NULL
+                  AND cpb.status IN ('pending', 'confirmed')
+                GROUP BY cpb.id
+                ORDER BY cpb.id DESC";
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute(['branch_id' => $branchId]);
+        $orders = $stmt->fetchAll();
+
+        if (!empty($orders)) {
+            $orderIds = array_column($orders, 'id');
+            $placeholders = implode(',', array_fill(0, count($orderIds), '?'));
+            $itemSql = "SELECT cpi.id, cpi.prebooking_id, cpi.item_id, cpi.qty, cpi.rate,
+                               i.item_name, i.item_code, su.short_code AS unit_code,
+                               COALESCE(sl.quantity_on_hand, 0) AS available_stock
+                        FROM customer_prebooking_items cpi
+                        JOIN items i ON i.id = cpi.item_id
+                        LEFT JOIN stock_units su ON su.id = i.base_unit_id
+                        LEFT JOIN stock_ledger sl ON sl.item_id = i.id AND sl.owner_type = 'branch' AND sl.owner_id = ?
+                        WHERE cpi.prebooking_id IN ($placeholders)
+                        ORDER BY cpi.id";
+            $itemStmt = $this->pdo->prepare($itemSql);
+            $itemStmt->execute(array_merge([$branchId], $orderIds));
+            $allItems = $itemStmt->fetchAll();
+
+            $itemsByOrder = [];
+            foreach ($allItems as $it) {
+                $it['qty'] = (float) $it['qty'];
+                $it['rate'] = (float) $it['rate'];
+                $it['available_stock'] = (float) $it['available_stock'];
+                $itemsByOrder[$it['prebooking_id']][] = $it;
+            }
+
+            foreach ($orders as &$ord) {
+                $ord['items'] = $itemsByOrder[$ord['id']] ?? [];
+                $ord['estimated_total'] = (float) round((float) $ord['estimated_total'], 2);
+            }
+            unset($ord);
+        }
+
+        return $orders;
+    }
+
+    /**
      * Issue TRANSACTIONS (headers) for a branch — one row per Issue Stock
      * action, however many items it contained (section 19/21: the issue
      * reference, not the per-item balance). item_count/total_qty are a
@@ -198,22 +306,28 @@ class VanStockModel
                        sin.branch_id, sin.employee_id, u.name AS employee_name,
                        ub.name AS issued_by_name,
                        b.branch_name, b.print_name AS branch_print_name,
-                       COUNT(sii.id) AS item_count,
-                       COALESCE(SUM(sii.qty), 0) AS total_qty,
-                       COALESCE(SUM(sii.qty * COALESCE(i.net_srate, i.retail_price, 0)), 0) AS total_amount
+                       sin.customer_id, sin.prebooking_id,
+                       COALESCE(c.ledger_name, c_pb.ledger_name) AS customer_name,
+                       COALESCE(c.phone, c_pb.phone) AS customer_phone,
+                       COALESCE(cpb_direct.prebooking_no, cpb.prebooking_no) AS prebooking_no
                 FROM stock_issue_notes sin
-                JOIN users u ON u.id = sin.employee_id
+                LEFT JOIN users u ON u.id = sin.employee_id
                 LEFT JOIN users ub ON ub.id = sin.issued_by
                 LEFT JOIN branches b ON b.id = sin.branch_id
-                LEFT JOIN stock_issue_items sii ON sii.issue_id = sin.id
-                LEFT JOIN items i ON i.id = sii.item_id
+                LEFT JOIN customers c ON c.id = sin.customer_id
+                LEFT JOIN customer_prebookings cpb_direct ON cpb_direct.id = sin.prebooking_id
+                LEFT JOIN customer_prebookings cpb ON cpb.van_issue_id = sin.id
+                LEFT JOIN customers c_pb ON c_pb.id = COALESCE(cpb_direct.customer_id, cpb.customer_id)
                 WHERE sin.branch_id = :branch_id";
         $params = ['branch_id' => $branchId];
         if ($employeeId !== null) {
             $sql .= ' AND sin.employee_id = :employee_id';
             $params['employee_id'] = $employeeId;
         }
-        $sql .= ' GROUP BY sin.id ORDER BY sin.id DESC LIMIT 200';
+        $sql .= ' GROUP BY sin.id, sin.issue_no, sin.issued_at, sin.notes, sin.branch_id, sin.employee_id,
+                           u.name, ub.name, b.branch_name, b.print_name, sin.customer_id, sin.prebooking_id,
+                           c.ledger_name, c_pb.ledger_name, c.phone, c_pb.phone, cpb_direct.prebooking_no, cpb.prebooking_no
+                  ORDER BY sin.id DESC LIMIT 200';
 
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
@@ -284,12 +398,19 @@ class VanStockModel
             'SELECT sin.*, u.name AS employee_name, ub.name AS issued_by_name,
                     b.branch_name, b.print_name AS branch_print_name,
                     b.address_line1, b.city, b.state, b.pincode, b.phone AS branch_phone, b.gstin AS branch_gstin,
-                    c.name AS company_name
+                    comp.name AS company_name,
+                    COALESCE(cust.ledger_name, c_pb.ledger_name) AS customer_name,
+                    COALESCE(cust.phone, c_pb.phone) AS customer_phone,
+                    COALESCE(cpb_direct.prebooking_no, cpb.prebooking_no) AS prebooking_no
              FROM stock_issue_notes sin
-             JOIN users u ON u.id = sin.employee_id
+             LEFT JOIN users u ON u.id = sin.employee_id
              LEFT JOIN users ub ON ub.id = sin.issued_by
              LEFT JOIN branches b ON b.id = sin.branch_id
-             LEFT JOIN company c ON c.id = b.company_id
+             LEFT JOIN company comp ON comp.id = b.company_id
+             LEFT JOIN customers cust ON cust.id = sin.customer_id
+             LEFT JOIN customer_prebookings cpb_direct ON cpb_direct.id = sin.prebooking_id
+             LEFT JOIN customer_prebookings cpb ON cpb.van_issue_id = sin.id
+             LEFT JOIN customers c_pb ON c_pb.id = COALESCE(cpb_direct.customer_id, cpb.customer_id)
              WHERE sin.id = :id'
         );
         $stmt->execute(['id' => $issueId]);

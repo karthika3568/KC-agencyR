@@ -40,6 +40,13 @@ class PurchaseController
     public function index(): void
     {
         $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::requireAny($claims, [
+            'purchases.create_grn',
+            'purchases.edit_grn',
+            'purchases.delete_grn',
+            'purchases.view_purchase_cost',
+            'purchases.settle_supplier_payment',
+        ]);
         $rows = $this->model->all($this->resolveBranchId($claims));
 
         // ?ids=1,2,3 narrows to exactly those GRNs (the "Export Selected"
@@ -173,6 +180,13 @@ class PurchaseController
     public function show(string $id): void
     {
         $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::requireAny($claims, [
+            'purchases.create_grn',
+            'purchases.edit_grn',
+            'purchases.delete_grn',
+            'purchases.view_purchase_cost',
+            'purchases.settle_supplier_payment',
+        ]);
         $row = $this->model->find((int) $id);
         if (!$row) {
             Response::error('Not found', 404);

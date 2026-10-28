@@ -83,11 +83,20 @@ export function StaffPermissions() {
       setError('Name, email, and role are required.');
       return;
     }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+    if (form.phone && !/^[6-9]\d{9}$/.test(form.phone.trim())) {
+      setError('Phone number must be a valid 10-digit Indian mobile number.');
+      return;
+    }
 
     try {
       if (editingId) {
         const payload = {
           name: form.name.trim(),
+          email: form.email.trim(),
           phone: form.phone || null,
           role_id: Number(form.role_id),
           branch_id: form.branch_id ? Number(form.branch_id) : null,
@@ -172,32 +181,31 @@ export function StaffPermissions() {
               {error && <div className="text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{error}</div>}
 
               <div>
-                <label className="text-xs font-medium text-ink-muted block mb-0.5">Full Name *</label>
+                <label className="text-xs font-bold text-slate-800 block mb-1">Full Name *</label>
                 <input
                   required
                   type="text"
                   placeholder="John Doe"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="input w-full"
+                  className="input w-full text-slate-900 font-medium"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-medium text-ink-muted block mb-0.5">Email Address *</label>
+                <label className="text-xs font-bold text-slate-800 block mb-1">Email Address *</label>
                 <input
                   required
-                  disabled={Boolean(editingId)}
                   type="email"
                   placeholder="john@store.com"
                   value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  className="input w-full disabled:opacity-50"
+                  className="input w-full text-slate-900 font-medium disabled:opacity-50"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-medium text-ink-muted block mb-0.5">
+                <label className="text-xs font-bold text-slate-800 block mb-1">
                   {editingId ? 'New Password (leave empty to keep current)' : 'Password *'}
                 </label>
                 <input
@@ -205,18 +213,18 @@ export function StaffPermissions() {
                   placeholder="••••••••"
                   value={form.password}
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  className="input w-full"
+                  className="input w-full text-slate-900 font-medium"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-xs font-medium text-ink-muted block mb-0.5">Role *</label>
+                  <label className="text-xs font-bold text-slate-800 block mb-1">Role *</label>
                   <select
                     required
                     value={form.role_id}
                     onChange={(e) => setForm({ ...form, role_id: e.target.value })}
-                    className="input w-full"
+                    className="input w-full text-slate-900 font-medium"
                   >
                     <option value="">Select Role</option>
                     {roles.map((r) => (
@@ -227,11 +235,11 @@ export function StaffPermissions() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-ink-muted block mb-0.5">Branch</label>
+                  <label className="text-xs font-bold text-slate-800 block mb-1">Branch</label>
                   <select
                     value={form.branch_id}
                     onChange={(e) => setForm({ ...form, branch_id: e.target.value })}
-                    className="input w-full"
+                    className="input w-full text-slate-900 font-medium"
                   >
                     <option value="">All / No Branch</option>
                     {branches.map((b) => (
@@ -244,20 +252,20 @@ export function StaffPermissions() {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-ink-muted block mb-0.5">Phone Number</label>
+                <label className="text-xs font-bold text-slate-800 block mb-1">Phone Number</label>
                 <input
                   type="text"
                   placeholder="+91 9876543210"
                   value={form.phone}
                   onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                  className="input w-full"
+                  className="input w-full text-slate-900 font-medium"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-medium text-ink-muted block mb-1">Status</label>
+                <label className="text-xs font-bold text-slate-800 block mb-1">Status</label>
                 <div className="flex items-center gap-4">
-                  <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs text-ink">
+                  <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs font-bold text-slate-800">
                     <input
                       type="radio"
                       name="staffStatus"
@@ -270,7 +278,7 @@ export function StaffPermissions() {
                       Active
                     </span>
                   </label>
-                  <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs text-ink">
+                  <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs font-bold text-slate-800">
                     <input
                       type="radio"
                       name="staffStatus"
@@ -466,25 +474,45 @@ export function StaffPermissions() {
 function PermissionsPanel({ user, onClose }) {
   const queryClient = useQueryClient();
   const [pending, setPending] = useState({});
-  const permsQuery = useQuery({ queryKey: ['staff-permissions', user.id], queryFn: () => staffApi.getPermissions(user.id) });
+  const [searchTerm, setSearchTerm] = useState('');
+  const [savedBanner, setSavedBanner] = useState(false);
+
+  const permsQuery = useQuery({
+    queryKey: ['staff-permissions', user.id],
+    queryFn: () => staffApi.getPermissions(user.id),
+  });
 
   const saveMutation = useMutation({
     mutationFn: (overrides) => staffApi.setPermissions(user.id, overrides),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['staff-permissions', user.id] });
       setPending({});
+      setSavedBanner(true);
+      setTimeout(() => setSavedBanner(false), 3000);
     },
   });
 
   const rows = permsQuery.data || [];
+
+  const filteredRows = useMemo(() => {
+    if (!searchTerm.trim()) return rows;
+    const q = searchTerm.toLowerCase();
+    return rows.filter(
+      (r) =>
+        r.label.toLowerCase().includes(q) ||
+        r.code.toLowerCase().includes(q) ||
+        r.module.toLowerCase().includes(q)
+    );
+  }, [rows, searchTerm]);
+
   const grouped = useMemo(() => {
     const g = {};
-    for (const r of rows) {
+    for (const r of filteredRows) {
       g[r.module] ??= [];
       g[r.module].push(r);
     }
     return g;
-  }, [rows]);
+  }, [filteredRows]);
 
   const currentOverride = (row) => (row.id in pending ? pending[row.id] : row.override);
 
@@ -492,6 +520,22 @@ function PermissionsPanel({ user, onClose }) {
     const current = currentOverride(row);
     const next = current === null ? true : current === true ? false : null;
     setPending((prev) => ({ ...prev, [row.id]: next }));
+  };
+
+  const setModulePermissions = (perms, value) => {
+    const updates = {};
+    for (const r of perms) {
+      updates[r.id] = value;
+    }
+    setPending((prev) => ({ ...prev, ...updates }));
+  };
+
+  const setAllPermissions = (value) => {
+    const updates = {};
+    for (const r of rows) {
+      updates[r.id] = value;
+    }
+    setPending((prev) => ({ ...prev, ...updates }));
   };
 
   const save = () => {
@@ -502,72 +546,201 @@ function PermissionsPanel({ user, onClose }) {
     saveMutation.mutate(overrides);
   };
 
+  const pendingCount = Object.keys(pending).length;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="max-h-[85vh] w-full max-w-2xl overflow-hidden card flex flex-col space-y-0">
-        <div className="p-5 border-b border-border-soft flex items-center justify-between">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4">
+      <div className="max-h-[90vh] w-full max-w-3xl overflow-hidden bg-white border border-slate-300 flex flex-col space-y-0 rounded-2xl shadow-2xl">
+        {/* Header */}
+        <div className="p-4 sm:p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50/70">
           <div>
-            <h3 className="text-base font-semibold text-ink flex items-center gap-2">
-              <Lock className="w-4 h-4 text-amber-400" />
-              Granular Permissions — {user.name}
+            <h3 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2">
+              <Lock className="w-5 h-5 text-amber-600" />
+              <span>Dynamic Permissions &amp; Overrides — {user.name}</span>
             </h3>
-            <p className="text-xs text-ink-muted mt-0.5">
-              Click badge to cycle: <span className="text-ink">Role default</span> → <span className="text-emerald-400">Force allow</span> → <span className="text-red-400">Force deny</span>
+            <p className="text-xs text-slate-700 font-medium mt-1">
+              Derived from <span className="font-bold text-[#511E69] bg-purple-100 border border-purple-200 px-2 py-0.5 rounded-md">{user.role_name}</span>. Click badge or use quick actions to configure module access.
             </p>
           </div>
-          <button onClick={onClose} className="text-ink-muted hover:text-ink text-sm font-semibold">✕</button>
-        </div>
-
-        <div className="p-5 overflow-y-auto space-y-4 flex-1">
-          {Object.entries(grouped).map(([module, perms]) => (
-            <div key={module} className="space-y-2">
-              <div className="text-xs font-bold uppercase tracking-wider text-indigo-400">{module}</div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {perms.map((row) => {
-                  const override = currentOverride(row);
-                  const effective = override === null ? row.role_grants : override;
-                  let badgeLabel = 'Role Default';
-                  let badgeClass = 'bg-surface-subtle text-ink-muted border-border-soft';
-                  if (override === true) {
-                    badgeLabel = 'Force Allow';
-                    badgeClass = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
-                  }
-                  if (override === false) {
-                    badgeLabel = 'Force Deny';
-                    badgeClass = 'bg-red-500/20 text-red-300 border-red-500/40';
-                  }
-
-                  return (
-                    <div
-                      key={row.id}
-                      onClick={() => cycle(row)}
-                      className="p-2.5 rounded-lg border border-border-soft/60 hover:border-indigo-500/30 bg-surface-subtle/20 cursor-pointer flex items-center justify-between gap-2 transition"
-                    >
-                      <span className={`text-xs ${effective ? 'text-ink font-medium' : 'text-ink-muted'}`}>{row.label}</span>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${badgeClass}`}>
-                        {badgeLabel}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="p-4 border-t border-border-soft flex justify-end gap-2 bg-surface-subtle/30">
-          <Button type="button" variant="secondary" onClick={onClose}>
-            Close
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            onClick={save}
-            loading={saveMutation.isPending}
-            disabled={Object.keys(pending).length === 0}
+          <button
+            onClick={onClose}
+            className="text-slate-600 hover:text-slate-900 text-sm font-bold p-1.5 rounded-lg hover:bg-slate-200 transition"
           >
-            Save Overrides
-          </Button>
+            ✕
+          </button>
+        </div>
+
+        {/* Success Banner */}
+        {savedBanner && (
+          <div className="bg-emerald-50 border-b border-emerald-300 text-emerald-900 text-xs px-4 py-2 font-bold flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
+            <span>Permissions saved to MySQL database successfully. New access policy is now active.</span>
+          </div>
+        )}
+
+        {/* Toolbar: Search & Global Bulk Actions */}
+        <div className="p-3 sm:px-5 border-b border-slate-200 bg-slate-100/70 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            <input
+              type="text"
+              placeholder="Search permissions or modules..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full rounded-xl border border-slate-300 bg-white pl-9 pr-3 py-1.5 text-xs font-bold text-slate-900 placeholder:text-slate-500 focus:border-[#8244AD] focus:outline-none focus:ring-2 focus:ring-[#8244AD]/20 shadow-2xs"
+            />
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-wrap text-xs">
+            <span className="text-slate-800 text-[11px] uppercase font-black mr-1">Global:</span>
+            <button
+              type="button"
+              onClick={() => setAllPermissions(true)}
+              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold transition shadow-2xs"
+            >
+              Grant All
+            </button>
+            <button
+              type="button"
+              onClick={() => setAllPermissions(false)}
+              className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-extrabold transition shadow-2xs"
+            >
+              Deny All
+            </button>
+            <button
+              type="button"
+              onClick={() => setAllPermissions(null)}
+              className="px-2.5 py-1 rounded-lg bg-white hover:bg-slate-200 text-slate-900 border border-slate-300 font-bold transition shadow-2xs"
+            >
+              Reset to Role Defaults
+            </button>
+          </div>
+        </div>
+
+        {/* Permission List Grouped by Module */}
+        <div className="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1 bg-slate-50/30">
+          {permsQuery.isLoading && (
+            <div className="py-12 text-center text-xs font-bold text-slate-700 flex items-center justify-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin text-primary" />
+              Loading database permissions…
+            </div>
+          )}
+
+          {!permsQuery.isLoading && Object.keys(grouped).length === 0 && (
+            <div className="py-12 text-center text-xs font-bold text-slate-700">
+              No permissions found matching &quot;{searchTerm}&quot;.
+            </div>
+          )}
+
+          {!permsQuery.isLoading &&
+            Object.entries(grouped).map(([module, perms]) => (
+              <div key={module} className="rounded-xl border border-slate-200 bg-white p-3.5 space-y-3 shadow-2xs">
+                <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-2">
+                  <div className="text-xs font-black uppercase tracking-wider text-[#351442] flex items-center gap-2">
+                    <span className="text-sm font-black">{module}</span>
+                    <span className="text-xs text-slate-600 font-bold lowercase">({perms.length} actions)</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setModulePermissions(perms, true)}
+                      className="px-2 py-0.5 rounded text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-300 hover:bg-emerald-100 transition shadow-2xs"
+                      title="Grant all permissions in this module"
+                    >
+                      Allow Module
+                    </button>
+                    <span className="text-slate-300">•</span>
+                    <button
+                      type="button"
+                      onClick={() => setModulePermissions(perms, false)}
+                      className="px-2 py-0.5 rounded text-xs font-bold text-rose-800 bg-rose-50 border border-rose-300 hover:bg-rose-100 transition shadow-2xs"
+                      title="Deny all permissions in this module"
+                    >
+                      Deny Module
+                    </button>
+                    <span className="text-slate-300">•</span>
+                    <button
+                      type="button"
+                      onClick={() => setModulePermissions(perms, null)}
+                      className="px-2 py-0.5 rounded text-xs font-bold text-slate-800 bg-slate-100 border border-slate-300 hover:bg-slate-200 transition shadow-2xs"
+                      title="Reset module to role defaults"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {perms.map((row) => {
+                    const override = currentOverride(row);
+                    const effective = override === null ? row.role_grants : override;
+                    let badgeLabel = 'Role Default';
+                    let badgeClass = 'bg-slate-200 text-slate-900 border-slate-400 font-black';
+                    if (override === true) {
+                      badgeLabel = 'Force Allow';
+                      badgeClass = 'bg-emerald-600 text-white border-emerald-700 font-black';
+                    }
+                    if (override === false) {
+                      badgeLabel = 'Force Deny';
+                      badgeClass = 'bg-rose-600 text-white border-rose-700 font-black';
+                    }
+
+                    return (
+                      <div
+                        key={row.id}
+                        onClick={() => cycle(row)}
+                        className={`p-3 rounded-xl border cursor-pointer flex items-center justify-between gap-3 transition shadow-2xs ${
+                          effective
+                            ? 'border-purple-300 bg-purple-50/30 hover:border-[#8244AD] hover:bg-purple-50/50'
+                            : 'border-slate-300 bg-slate-50/80 hover:border-slate-400 hover:bg-white'
+                        }`}
+                        title="Click to toggle: Role Default → Force Allow → Force Deny"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs sm:text-[13px] font-black text-slate-900 truncate leading-snug">
+                            {row.label}
+                          </div>
+                          <div className="text-[10px] font-mono font-bold text-slate-600 truncate mt-0.5">
+                            {row.code}
+                          </div>
+                        </div>
+                        <span className={`px-2.5 py-1 rounded-lg text-xs border shrink-0 transition-all shadow-2xs ${badgeClass}`}>
+                          {badgeLabel}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 border-t border-slate-200 flex items-center justify-between gap-2 bg-slate-50/80">
+          <div className="text-xs">
+            {pendingCount > 0 ? (
+              <span className="font-black text-amber-900 bg-amber-100 border border-amber-300 px-2.5 py-1 rounded-md">
+                {pendingCount} uncommitted change(s)
+              </span>
+            ) : (
+              <span className="font-bold text-slate-700">All changes saved to database</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="secondary" onClick={onClose} className="font-bold text-slate-800 border-slate-300">
+              Close
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              onClick={save}
+              loading={saveMutation.isPending}
+              disabled={pendingCount === 0}
+              className="font-extrabold"
+            >
+              {pendingCount > 0 ? `Save Overrides (${pendingCount})` : 'Save Overrides'}
+            </Button>
+          </div>
         </div>
       </div>
     </div>

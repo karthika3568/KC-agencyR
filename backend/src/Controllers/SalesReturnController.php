@@ -31,12 +31,20 @@ class SalesReturnController
     public function index(): void
     {
         $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::requireAny($claims, [
+            'returns.sales_return',
+            'returns.approve_untraceable_return',
+        ]);
         Response::json($this->model->all($this->resolveBranchId($claims)));
     }
 
     public function show(string $id): void
     {
-        JwtAuthMiddleware::authenticate();
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::requireAny($claims, [
+            'returns.sales_return',
+            'returns.approve_untraceable_return',
+        ]);
         $row = $this->model->find((int) $id);
         if (!$row) {
             Response::error('Not found', 404);

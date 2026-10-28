@@ -47,10 +47,13 @@ export function adaptStockIssueToPrintData(issue) {
 
   const issueNo = issue.issue_no || (`VSI-${String(issue.id || '').padStart(5, '0')}`);
   const issueDate = issue.issued_at || issue.created_at || new Date().toISOString();
-  const salesmanName = issue.salesman_name || issue.salesman?.name || 'Salesman';
+  const salesmanName = issue.salesman_name || issue.salesman?.name || issue.employee_name || 'Salesman';
   const salesmanCode = issue.salesman_code || issue.salesman?.code || '';
   const salesmanPhone = issue.salesman_phone || issue.salesman?.phone || '';
   const branchName = issue.branch_name || issue.branch?.name || 'Main Branch';
+  const customerName = issue.customer_name || '';
+  const customerPhone = issue.customer_phone || '';
+  const prebookingNo = issue.prebooking_no || '';
   const notes = issue.notes || '';
 
   return {
@@ -62,6 +65,9 @@ export function adaptStockIssueToPrintData(issue) {
       salesman_name: salesmanName,
       salesman_code: salesmanCode,
       salesman_phone: salesmanPhone,
+      customer_name: customerName,
+      customer_phone: customerPhone,
+      prebooking_no: prebookingNo,
       branch_name: branchName,
       notes: notes,
       items: items,
@@ -69,6 +75,7 @@ export function adaptStockIssueToPrintData(issue) {
       subtotal: totalAmount,
       taxable_value: totalAmount,
     },
+    customer: customerName ? { ledger_name: customerName, name: customerName, phone: customerPhone } : null,
     branch: {
       name: branchName,
       print_name: 'KC AGENCY',
@@ -139,8 +146,9 @@ export function PrintPreviewModal({ invoiceId, stockIssue, issueId, onClose }) {
       return `https://wa.me/${phone ? '91' + phone : ''}?text=${text}`;
     }
     const phone = (data.invoice.customer_phone || '').replace(/\D/g, '');
+    const agencyName = (data.branch?.print_name || 'KC AGENCY').replace(/AJ\s*AGENCY/gi, 'KC AGENCY');
     const text = encodeURIComponent(
-      `Hi! Your invoice ${data.invoice.invoice_no || ''} from ${data.branch?.print_name || 'KC AGENCY'} — Total: Rs. ${data.invoice.grand_total}. Thank you for your business!`
+      `Hi! Your invoice ${data.invoice.invoice_no || ''} from ${agencyName} — Total: Rs. ${data.invoice.grand_total}. Thank you for your business!`
     );
     return `https://wa.me/${phone ? '91' + phone : ''}?text=${text}`;
   };
@@ -178,7 +186,7 @@ export function PrintPreviewModal({ invoiceId, stockIssue, issueId, onClose }) {
               Share via WhatsApp
             </a>
           )}
-          <Button icon={<Printer size={14} />} onClick={() => window.print()}>Print</Button>
+          <Button variant="success" icon={<Printer size={14} />} onClick={() => window.print()}>Print</Button>
           <Button variant="secondary" icon={<X size={14} />} onClick={onClose}>Close</Button>
         </div>
       </div>

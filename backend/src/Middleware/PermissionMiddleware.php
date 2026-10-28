@@ -23,4 +23,41 @@ class PermissionMiddleware
             Response::error("Forbidden: missing permission '{$permissionCode}'", 403);
         }
     }
+
+    /**
+     * Checks that AT LEAST ONE of the required permission codes is present.
+     *
+     * @param array<string, mixed> $claims
+     * @param string[] $permissionCodes
+     */
+    public static function requireAny(array $claims, array $permissionCodes): void
+    {
+        $permissions = (array) ($claims['permissions'] ?? []);
+
+        foreach ($permissionCodes as $code) {
+            if (in_array($code, $permissions, true)) {
+                return;
+            }
+        }
+
+        $codesStr = implode(', ', $permissionCodes);
+        Response::error("Forbidden: missing one of required permissions [{$codesStr}]", 403);
+    }
+
+    public static function has(array $claims, string $permissionCode): bool
+    {
+        $permissions = (array) ($claims['permissions'] ?? []);
+        return in_array($permissionCode, $permissions, true);
+    }
+
+    public static function hasAny(array $claims, array $permissionCodes): bool
+    {
+        $permissions = (array) ($claims['permissions'] ?? []);
+        foreach ($permissionCodes as $code) {
+            if (in_array($code, $permissions, true)) {
+                return true;
+            }
+        }
+        return false;
+    }
 }

@@ -85,7 +85,7 @@ function StockIssuesTab() {
 
         <div className="flex items-center gap-2">
           <Button
-            variant="secondary"
+            variant="success"
             size="sm"
             onClick={handleExportExcel}
             loading={exporting}
@@ -166,7 +166,7 @@ function StockIssuesTab() {
                         <button
                           type="button"
                           onClick={() => handlePrint(issue)}
-                          className="rounded-lg p-1 text-ink-muted hover:bg-lavender-100 hover:text-primary transition-colors"
+                          className="rounded-lg p-1 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 transition-colors"
                           title="Print Issue Slip"
                         >
                           <Printer size={15} />
@@ -174,7 +174,7 @@ function StockIssuesTab() {
                         <button
                           type="button"
                           onClick={() => handleDownloadPdf(issue)}
-                          className="rounded-lg p-1 text-ink-muted hover:bg-lavender-100 hover:text-primary transition-colors"
+                          className="rounded-lg p-1 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 transition-colors"
                           title="Download PDF"
                         >
                           <Download size={15} />

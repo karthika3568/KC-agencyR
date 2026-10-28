@@ -31,12 +31,20 @@ class CashHandoverController
     public function index(): void
     {
         $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::requireAny($claims, [
+            'handover.submit_cash_handover',
+            'handover.verify_reconcile',
+        ]);
         Response::json($this->model->all($this->resolveBranchId($claims)));
     }
 
     public function pending(): void
     {
         $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::requireAny($claims, [
+            'handover.submit_cash_handover',
+            'handover.verify_reconcile',
+        ]);
         Response::json($this->model->pendingByEmployee($this->resolveBranchId($claims)));
     }
 

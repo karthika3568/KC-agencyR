@@ -31,12 +31,22 @@ class PurchaseRequestController
     public function index(): void
     {
         $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::requireAny($claims, [
+            'orders.create_purchase_indent',
+            'orders.approve_purchase_request',
+            'purchases.create_grn',
+        ]);
         Response::json($this->model->all($this->resolveBranchId($claims)));
     }
 
     public function show(string $id): void
     {
-        JwtAuthMiddleware::authenticate();
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::requireAny($claims, [
+            'orders.create_purchase_indent',
+            'orders.approve_purchase_request',
+            'purchases.create_grn',
+        ]);
         $row = $this->model->find((int) $id);
         if (!$row) {
             Response::error('Not found', 404);

@@ -31,6 +31,11 @@ class CollectionController
     public function index(): void
     {
         $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::requireAny($claims, [
+            'collections.field_collection_entry',
+            'credit.collect_credit_payment',
+            'credit.view_shopwide_outstanding',
+        ]);
         Response::json($this->model->all($this->resolveBranchId($claims)));
     }
 
@@ -45,7 +50,12 @@ class CollectionController
     /** GET /api/customers/{id}/unpaid-invoices — feeds the FIFO preview in the Collect modal. */
     public function unpaidInvoices(string $customerId): void
     {
-        JwtAuthMiddleware::authenticate();
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::requireAny($claims, [
+            'collections.field_collection_entry',
+            'credit.collect_credit_payment',
+            'credit.view_shopwide_outstanding',
+        ]);
         Response::json($this->model->unpaidInvoicesForCustomer((int) $customerId));
     }
 

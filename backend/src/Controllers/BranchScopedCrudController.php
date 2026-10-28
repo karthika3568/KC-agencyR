@@ -6,6 +6,7 @@ namespace App\Controllers;
 
 use App\Helpers\CodeGenerator;
 use App\Helpers\Response;
+use App\Helpers\Validator;
 use App\Middleware\JwtAuthMiddleware;
 use App\Middleware\PermissionMiddleware;
 use App\Models\SimpleCrudModel;
@@ -61,9 +62,35 @@ class BranchScopedCrudController
         return (int) $homeBranch;
     }
 
+    private function authorizeRead(array $claims): void
+    {
+        if ($this->table === 'customers') {
+            PermissionMiddleware::requireAny($claims, [
+                'parties.manage_customers',
+                'pos.access',
+                'orders.create_prebooking',
+                'orders.view_prebooking',
+                'collections.field_collection_entry',
+                'credit.collect_credit_payment',
+            ]);
+        } elseif ($this->table === 'suppliers') {
+            PermissionMiddleware::requireAny($claims, [
+                'parties.manage_suppliers',
+                'purchases.create_grn',
+                'purchases.edit_grn',
+                'purchases.settle_supplier_payment',
+            ]);
+        } elseif ($this->table === 'expenses' || $this->table === 'other_income') {
+            PermissionMiddleware::require($claims, 'expenses.manage');
+        } else {
+            PermissionMiddleware::require($claims, $this->managePermission);
+        }
+    }
+
     public function index(): void
     {
         $claims = JwtAuthMiddleware::authenticate();
+        $this->authorizeRead($claims);
         $branchId = $this->resolveBranchId($claims);
 
         if (isset($_GET['page'])) {
@@ -100,8 +127,38 @@ class BranchScopedCrudController
     public function show(string $id): void
     {
         $claims = JwtAuthMiddleware::authenticate();
+        $this->authorizeRead($claims);
         $row = $this->findScoped($claims, (int) $id);
         Response::json($row);
+    }
+
+    /**
+     * Phone/pincode/GSTIN format checks, applied only to whichever of
+     * these columns this entity's table actually has — same validator the
+     * staff and item forms use, so customers/suppliers/routes never need
+     * their own copy. Normalizes in place (trim, GSTIN uppercased) so the
+     * value that gets saved is the cleaned one, not raw user input.
+     */
+    private function validateCommonFields(array &$data): void
+    {
+        if (array_key_exists('phone', $data) && $data['phone'] !== null) {
+            $data['phone'] = trim((string) $data['phone']);
+            if (!Validator::isValidPhone($data['phone'])) {
+                Response::error('Phone number must be a valid 10-digit Indian mobile number', 422);
+            }
+        }
+        if (array_key_exists('pincode', $data) && $data['pincode'] !== null) {
+            $data['pincode'] = trim((string) $data['pincode']);
+            if (!Validator::isValidPincode($data['pincode'])) {
+                Response::error('Pincode must be exactly 6 digits', 422);
+            }
+        }
+        if (array_key_exists('gstin', $data) && $data['gstin'] !== null) {
+            $data['gstin'] = strtoupper(trim((string) $data['gstin']));
+            if (!Validator::isValidGstin($data['gstin'])) {
+                Response::error('GSTIN format is invalid — expected 15 characters, e.g. 27AAPFU0939F1ZV', 422);
+            }
+        }
     }
 
     public function store(): void
@@ -110,6 +167,7 @@ class BranchScopedCrudController
         PermissionMiddleware::require($claims, $this->managePermission);
 
         $data = json_decode(file_get_contents('php://input'), true) ?? [];
+        $this->validateCommonFields($data);
         $data['branch_id'] = $this->resolveBranchId($claims);
         foreach ($this->autoDefaults as $column => $default) {
             if (!isset($data[$column]) || $data[$column] === '') {
@@ -140,6 +198,7 @@ class BranchScopedCrudController
         $row = $this->findScoped($claims, (int) $id);
         $data = json_decode(file_get_contents('php://input'), true) ?? [];
         unset($data['branch_id']); // branch is fixed at creation, never reassigned via update
+        $this->validateCommonFields($data);
 
         $this->model()->update((int) $row['id'], $data);
         Response::json($this->model()->find((int) $row['id']));

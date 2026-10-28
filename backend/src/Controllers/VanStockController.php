@@ -35,6 +35,21 @@ class VanStockController
         return (int) $claims['branch_id'];
     }
 
+    public function eligibleOrders(): void
+    {
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::require($claims, 'inventory.issue_van_stock');
+
+        $branchId = $this->resolveBranchId($claims);
+        $type = $_GET['type'] ?? 'customer';
+
+        if ($type === 'customer') {
+            Response::json($this->model->getEligibleCustomerOrders($branchId));
+        } else {
+            Response::json([]);
+        }
+    }
+
     public function issue(): void
     {
         $claims = JwtAuthMiddleware::authenticate();
@@ -63,17 +78,24 @@ class VanStockController
 
         $branchId = $this->resolveBranchId($claims);
         try {
-            $id = $this->model->issue(
+            $result = $this->model->issue(
                 $branchId,
                 (int) $body['employee_id'],
                 (int) $claims['sub'],
                 $body['notes'] ?? null,
-                $body['items']
+                $body['items'],
+                !empty($body['confirm_insufficient']),
+                !empty($body['customer_id']) ? (int) $body['customer_id'] : null,
+                !empty($body['prebooking_id']) ? (int) $body['prebooking_id'] : null
             );
-            Response::json(['issue_id' => $id], 201);
         } catch (\InvalidArgumentException | \RuntimeException $e) {
             Response::error($e->getMessage(), 422);
         }
+
+        if (isset($result['warning'])) {
+            Response::json($result, 409);
+        }
+        Response::json(['issue_id' => $result['issue_id']], 201);
     }
 
     public function returnStock(): void
@@ -239,6 +261,9 @@ class VanStockController
                     'employee_name' => $issue['employee_name'],
                     'issued_by_name' => $issue['issued_by_name'],
                     'branch_name' => $issue['branch_print_name'] ?? $issue['branch_name'] ?? null,
+                    'customer_name' => $issue['customer_name'] ?? null,
+                    'customer_phone' => $issue['customer_phone'] ?? null,
+                    'prebooking_no' => $issue['prebooking_no'] ?? null,
                     'notes' => $issue['notes'],
                     'item_name' => $line['item_name'],
                     'item_code' => $line['item_code'],
@@ -263,7 +288,11 @@ class VanStockController
 
         $rows = $this->flattenedIssueLines($issues);
         $columns = [
-            'issue_no' => 'Issue Number', 'issued_at' => 'Issue Date', 'employee_name' => 'Salesman',
+            'issue_no' => 'Issue Number',
+            'prebooking_no' => 'Order / Pre-booking #',
+            'customer_name' => 'Customer Name',
+            'issued_at' => 'Issue Date',
+            'employee_name' => 'Salesman',
             'branch_name' => 'Branch',
             'item_code' => 'SKU', 'item_name' => 'Item Name',
             'qty' => 'Qty', 'unit_code' => 'Unit',

@@ -641,12 +641,12 @@ function GrnPanel({ canManage, canEdit, canViewCost, canDelete }) {
           <div className="px-3.5 py-2 border-b border-border-soft flex flex-wrap items-center justify-between gap-2">
             <h3 className="font-semibold text-ink text-xs sm:text-sm">GRN Register</h3>
             <div className="flex flex-wrap items-center gap-1.5">
-              <button onClick={handlePrint} className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200">Print</button>
-              <button onClick={handleExportPdf} className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200">Download PDF</button>
-              <button onClick={handleExportExcel} disabled={exporting} className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
+              <button onClick={handlePrint} className="rounded bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors">Print</button>
+              <button onClick={handleExportPdf} className="rounded bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors">Download PDF</button>
+              <button onClick={handleExportExcel} disabled={exporting} className="rounded bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors disabled:opacity-60">
                 {exporting ? 'Exporting…' : 'Export Excel'}
               </button>
-              <button onClick={handleExportSelectedExcel} disabled={exporting} className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
+              <button onClick={handleExportSelectedExcel} disabled={exporting} className="rounded bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors disabled:opacity-60">
                 Export Selected
               </button>
               {selectedIds.length > 0 && <span className="text-xs text-ink-muted">{selectedIds.length} selected</span>}
@@ -1069,12 +1069,12 @@ function SupplierPaymentsPanel({ canManage }) {
           <div className="px-3.5 py-2 border-b border-border-soft flex flex-wrap items-center justify-between gap-2">
             <h3 className="font-semibold text-ink text-xs sm:text-sm">Supplier Payment Register</h3>
             <div className="flex flex-wrap items-center gap-1.5">
-              <button onClick={handlePaymentsPrint} className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200">Print</button>
-              <button onClick={handlePaymentsExportPdf} className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200">Download PDF</button>
-              <button onClick={handlePaymentsExportExcel} disabled={exporting} className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
+              <button onClick={handlePaymentsPrint} className="rounded bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors">Print</button>
+              <button onClick={handlePaymentsExportPdf} className="rounded bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors">Download PDF</button>
+              <button onClick={handlePaymentsExportExcel} disabled={exporting} className="rounded bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors disabled:opacity-60">
                 {exporting ? 'Exporting…' : 'Export Excel'}
               </button>
-              <button onClick={handlePaymentsExportSelectedExcel} disabled={exporting} className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
+              <button onClick={handlePaymentsExportSelectedExcel} disabled={exporting} className="rounded bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors disabled:opacity-60">
                 Export Selected
               </button>
               {selectedPaymentIds.length > 0 && <span className="text-xs text-ink-muted">{selectedPaymentIds.length} selected</span>}

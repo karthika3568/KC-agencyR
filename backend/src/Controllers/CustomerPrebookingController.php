@@ -57,7 +57,11 @@ class CustomerPrebookingController
     public function index(): void
     {
         $claims = JwtAuthMiddleware::authenticate();
-        PermissionMiddleware::require($claims, 'orders.view_prebooking');
+        PermissionMiddleware::requireAny($claims, [
+            'orders.view_prebooking',
+            'orders.create_prebooking',
+            'orders.manage_prebooking_status',
+        ]);
 
         $branchId = $this->resolveBranchId($claims);
         $salesmanId = null;
@@ -74,7 +78,11 @@ class CustomerPrebookingController
     public function show(string $id): void
     {
         $claims = JwtAuthMiddleware::authenticate();
-        PermissionMiddleware::require($claims, 'orders.view_prebooking');
+        PermissionMiddleware::requireAny($claims, [
+            'orders.view_prebooking',
+            'orders.create_prebooking',
+            'orders.manage_prebooking_status',
+        ]);
         $row = $this->model->find((int) $id);
         if (!$row) {
             Response::error('Not found', 404);
@@ -413,15 +421,29 @@ class CustomerPrebookingController
             }
 
             // warehouse_dispatch mode:
-            // Issue stock from warehouse to van (validates warehouse stock FOR UPDATE)
+            // Issue stock from warehouse to van (validates warehouse stock FOR UPDATE).
+            // This dispatch flow has no "shortage warning, continue anyway" UI of its
+            // own (unlike the standalone Issue Stock to Van form), so a shortage here
+            // is still a hard failure — same as before VanStockModel::issue() was
+            // changed to warn instead of throw for that other, separate entry point.
             $vanStockModel = new \App\Models\VanStockModel($this->pdo);
-            $issueId = $vanStockModel->issue(
+            $result = $vanStockModel->issue(
                 $branchId,
                 $targetEmployeeId,
                 (int) $claims['sub'],
                 $body['notes'] ?? ("Dispatched from Pre-booking #" . ($booking['prebooking_no'] ?? $id)),
-                $items
+                $items,
+                false,
+                (int) $booking['customer_id'],
+                (int) $id
             );
+            if (isset($result['warning'])) {
+                $first = $result['shortages'][0];
+                throw new \RuntimeException(
+                    "Cannot issue {$first['requested']} of \"{$first['item_name']}\". Only {$first['available']} currently available in warehouse stock."
+                );
+            }
+            $issueId = $result['issue_id'];
 
             $this->model->linkVanIssue((int) $id, $issueId, $targetEmployeeId);
 

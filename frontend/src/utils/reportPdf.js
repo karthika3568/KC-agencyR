@@ -221,6 +221,8 @@ export function downloadVanIssuePdf(detailRows, filename, { print = false } = {}
 
     const meta = [
       ['Issue No', issueNo],
+      ['Order / Pre-booking', h.prebooking_no],
+      ['Customer', h.customer_name ? `${h.customer_name}${h.customer_phone ? ` (${h.customer_phone})` : ''}` : null],
       ['Salesman', h.employee_name],
       ['Branch', h.branch_name],
       ['Date', h.issued_at],

@@ -9,7 +9,7 @@ import {
   ArrowRight, LayoutGrid, IndianRupee, PieChart
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth.jsx';
-import { usePermission } from '../hooks/usePermission';
+import { usePermission, hasPermission } from '../hooks/usePermission';
 import { dashboardApi } from '../api/admin';
 import { Card } from '../components/Card.jsx';
 import { FieldSalesDashboard } from '../components/FieldSalesDashboard.jsx';
@@ -135,7 +135,7 @@ const MODULES = [
     to: '/price-adjustment',
     label: 'Price Adjustment',
     subtitle: 'Wholesale & Retail',
-    perm: 'catalog.manage_items',
+    perm: ['catalog.manage_price_lists', 'catalog.manage_price_rules', 'catalog.manage_items'],
     icon: Tag,
     category: 'stock',
     iconColor: 'text-purple-600 bg-purple-50 border-purple-100',
@@ -145,7 +145,7 @@ const MODULES = [
     to: '/inventory',
     label: 'Stock',
     subtitle: 'Branch Inventory',
-    perm: 'inventory.view_stock',
+    perm: ['inventory.view_stock', 'inventory.stock_adjustment', 'inventory.issue_van_stock'],
     icon: Warehouse,
     category: 'stock',
     iconColor: 'text-emerald-600 bg-emerald-50 border-emerald-100',
@@ -155,7 +155,7 @@ const MODULES = [
     to: '/parties',
     label: 'Parties',
     subtitle: 'Customers & Vendors',
-    perm: 'parties.manage_customers',
+    perm: ['parties.manage_customers', 'parties.manage_suppliers'],
     icon: Users,
     category: 'sales',
     iconColor: 'text-pink-600 bg-pink-50 border-pink-100',
@@ -165,7 +165,7 @@ const MODULES = [
     to: '/purchasing',
     label: 'Purchasing',
     subtitle: 'Goods Receipt (GRN)',
-    perm: 'purchases.create_grn',
+    perm: ['purchases.create_grn', 'purchases.edit_grn', 'purchases.view_purchase_cost', 'purchases.settle_supplier_payment'],
     icon: Truck,
     category: 'stock',
     iconColor: 'text-cyan-600 bg-cyan-50 border-cyan-100',
@@ -175,7 +175,13 @@ const MODULES = [
     to: '/orders',
     label: 'Orders',
     subtitle: 'Pre-bookings & Sales',
-    perm: 'orders.create_prebooking',
+    perm: [
+      'orders.create_prebooking',
+      'orders.create_purchase_indent',
+      'orders.approve_purchase_request',
+      'orders.manage_prebooking_status',
+      'orders.view_prebooking',
+    ],
     icon: ClipboardList,
     category: 'sales',
     iconColor: 'text-amber-600 bg-amber-50 border-amber-100',
@@ -195,7 +201,7 @@ const MODULES = [
     to: '/collections',
     label: 'Collections',
     subtitle: 'Field Payments',
-    perm: 'collections.field_collection_entry',
+    perm: ['collections.field_collection_entry', 'credit.collect_credit_payment', 'credit.view_shopwide_outstanding'],
     icon: Wallet,
     category: 'finance',
     iconColor: 'text-sky-600 bg-sky-50 border-sky-100',
@@ -205,7 +211,7 @@ const MODULES = [
     to: '/cash-handover',
     label: 'Handover',
     subtitle: 'Cash Reconciliation',
-    perm: 'handover.submit_cash_handover',
+    perm: ['handover.submit_cash_handover', 'handover.verify_reconcile'],
     icon: Banknote,
     category: 'finance',
     iconColor: 'text-teal-600 bg-teal-50 border-teal-100',
@@ -225,7 +231,7 @@ const MODULES = [
     to: '/returns',
     label: 'Returns',
     subtitle: 'Sales Return Slips',
-    perm: 'returns.sales_return',
+    perm: ['returns.sales_return', 'returns.purchase_return', 'returns.approve_untraceable_return'],
     icon: RotateCcw,
     category: 'sales',
     iconColor: 'text-orange-600 bg-orange-50 border-orange-100',
@@ -235,7 +241,7 @@ const MODULES = [
     to: '/reports',
     label: 'Reports',
     subtitle: 'GST, Sales & P&L',
-    perm: 'reports.view_all',
+    perm: ['reports.view_all', 'reports.view_gst_register', 'reports.view_non_gst_register', 'reports.view_profit', 'reports.export_excel'],
     icon: BarChart3,
     category: 'finance',
     iconColor: 'text-indigo-600 bg-indigo-50 border-indigo-100',
@@ -245,7 +251,7 @@ const MODULES = [
     to: '/staff',
     label: 'Staff',
     subtitle: 'Permissions & Roles',
-    perm: 'staff.manage_permissions',
+    perm: ['staff.manage_accounts', 'staff.manage_permissions'],
     icon: ShieldCheck,
     category: 'admin',
     iconColor: 'text-violet-600 bg-violet-50 border-violet-100',
@@ -255,7 +261,7 @@ const MODULES = [
     to: '/settings',
     label: 'Settings',
     subtitle: 'System Config',
-    perm: 'settings.manage',
+    perm: ['settings.manage', 'branches.manage'],
     icon: SettingsIcon,
     category: 'admin',
     iconColor: 'text-slate-600 bg-slate-100 border-slate-200',
@@ -300,16 +306,33 @@ function StandardDashboard() {
   });
   const summary = summaryQuery.data;
 
-  // Filter modules based on search & category
+  // Filter categories to only those containing modules authorized for this user
+  const visibleCategories = useMemo(() => {
+    const permittedModules = MODULES.filter((m) => hasPermission(user, m.perm));
+    return CATEGORIES.filter((cat) => {
+      if (cat.id === 'all') return permittedModules.length > 0;
+      return permittedModules.some((m) => m.category === cat.id);
+    });
+  }, [user]);
+
+  // Keep selected category valid if permissions change
+  useEffect(() => {
+    if (visibleCategories.length > 0 && !visibleCategories.some((c) => c.id === selectedCategory)) {
+      setSelectedCategory(visibleCategories[0]?.id || 'all');
+    }
+  }, [visibleCategories, selectedCategory]);
+
+  // Filter modules based on user authorization, search & category
   const filteredModules = useMemo(() => {
     return MODULES.filter((m) => {
+      if (!hasPermission(user, m.perm)) return false;
       const matchesSearch =
         m.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
         m.subtitle.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesCategory = selectedCategory === 'all' || m.category === selectedCategory;
       return matchesSearch && matchesCategory;
     });
-  }, [searchQuery, selectedCategory]);
+  }, [user, searchQuery, selectedCategory]);
 
   const containerRef = useRef(null);
 
@@ -625,7 +648,7 @@ function StandardDashboard() {
 
       {/* 2. Category Filter Pills Bar */}
       <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-0.5 text-xs">
-        {CATEGORIES.map((cat) => {
+        {visibleCategories.map((cat) => {
           const Icon = cat.icon;
           const isActive = selectedCategory === cat.id;
           return (
@@ -650,8 +673,6 @@ function StandardDashboard() {
       {/* 3. Responsive Module Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
         {filteredModules.map((item) => {
-          const allowed = usePermission(item.perm);
-          if (!allowed) return null;
           const Icon = item.icon;
 
           // Hero POS & Billing Card (Wide prominent card matching reference)
@@ -776,6 +797,13 @@ function StandardDashboard() {
             </div>
           );
         })}
+
+        {filteredModules.length === 0 && (
+          <div className="col-span-full py-12 text-center rounded-2xl border border-dashed border-border-soft bg-white/60 p-6">
+            <LayoutGrid className="mx-auto h-8 w-8 text-ink-muted/50 mb-2" />
+            <p className="text-xs font-semibold text-ink-muted">No modules authorized in this view.</p>
+          </div>
+        )}
       </div>
 
       {/* Totals Report Modal */}

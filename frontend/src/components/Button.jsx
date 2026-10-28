@@ -4,6 +4,7 @@ const VARIANT_CLASSES = {
   danger: 'bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100 disabled:opacity-40',
   ghost: 'text-[#697797] hover:text-[#17233D] hover:bg-[#EEE5FF]/60 disabled:opacity-40',
   gold: 'bg-[#6F2DA8] text-white hover:bg-[#5C238C] shadow-sm disabled:opacity-40',
+  success: 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm disabled:opacity-40',
 };
 
 /**
@@ -26,7 +27,8 @@ export function Button({
   return (
     <button
       disabled={disabled || Boolean(loading)}
-      className={`inline-flex items-center justify-center gap-1.5 rounded-xl font-semibold transition-all active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1 ${sizeClasses} ${VARIANT_CLASSES[variant] || VARIANT_CLASSES.primary} ${className}`}
+      aria-busy={loading || undefined}
+      className={`inline-flex items-center justify-center gap-1.5 rounded-xl font-semibold transition-all active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1 disabled:cursor-not-allowed ${sizeClasses} ${VARIANT_CLASSES[variant] || VARIANT_CLASSES.primary} ${className}`}
       {...props}
     >
       {loading ? (

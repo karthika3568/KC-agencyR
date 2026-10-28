@@ -701,7 +701,7 @@ export function InvoiceManagement() {
                       <button title="View" onClick={() => setViewingId(inv.id)} className="p-1 text-ink-muted hover:text-ink">
                         <Eye size={15} />
                       </button>
-                      <button title="Print" onClick={() => setPrintingId(inv.id)} className="p-1 text-ink-muted hover:text-ink">
+                      <button title="Print" onClick={() => setPrintingId(inv.id)} className="p-1 rounded text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 transition">
                         <Printer size={15} />
                       </button>
                       {canEdit && inv.status === 'completed' && (

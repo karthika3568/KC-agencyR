@@ -24,6 +24,20 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('pos_token');
+      localStorage.removeItem('pos_user');
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 /**
  * Resolves request options from either a plain params object or a TanStack Query context.
  * Prevents TanStack Query internals (queryKey, pageParam, meta) from leaking into URL search params

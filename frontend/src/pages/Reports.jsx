@@ -161,11 +161,7 @@ function DateRangeBar({ from, to, setFrom, setTo, onApply, onReset, onExport, pd
             <button
               onClick={handleExportExcel}
               disabled={exportingExcel}
-              className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-60 ${
-                selectedCount > 0
-                  ? 'bg-gold text-white hover:bg-gold-soft shadow-sm'
-                  : 'bg-gray-100 text-ink hover:bg-gray-200'
-              }`}
+              className="flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm transition-colors disabled:opacity-60"
             >
               <FileSpreadsheet className="h-3.5 w-3.5" />
               {exportingExcel ? 'Exporting…' : selectedCount > 0 ? `Export Excel (${selectedCount} selected)` : 'Export Excel'}
@@ -173,11 +169,7 @@ function DateRangeBar({ from, to, setFrom, setTo, onApply, onReset, onExport, pd
             <button
               onClick={handleExportPdf}
               disabled={exportingPdf || (!pdfConfig?.rows?.length && !selectedCount)}
-              className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-60 ${
-                selectedCount > 0
-                  ? 'bg-gold text-white hover:bg-gold-soft shadow-sm'
-                  : 'bg-gray-100 text-ink hover:bg-gray-200'
-              }`}
+              className="flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm transition-colors disabled:opacity-60"
             >
               <FileDown className="h-3.5 w-3.5" />
               {exportingPdf ? 'Exporting…' : selectedCount > 0 ? `Export PDF (${selectedCount} selected)` : 'Export PDF'}
@@ -585,11 +577,7 @@ function SalesWiseReportPanel({ report, canExport }) {
               <button
                 onClick={handleExportExcel}
                 disabled={exportingExcel}
-                className={`flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-60 ${
-                  selectedCount > 0
-                    ? 'bg-gold text-white hover:bg-gold-soft shadow-sm'
-                    : 'bg-gray-100 text-ink hover:bg-gray-200'
-                }`}
+                className="flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm transition-colors disabled:opacity-60"
               >
                 <FileSpreadsheet className="h-4 w-4" />
                 {exportingExcel ? 'Exporting…' : selectedCount > 0 ? `Export Excel (${selectedCount} selected)` : 'Export Excel'}
@@ -597,11 +585,7 @@ function SalesWiseReportPanel({ report, canExport }) {
               <button
                 onClick={handleExportPdf}
                 disabled={exportingPdf || filteredRows.length === 0}
-                className={`flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-60 ${
-                  selectedCount > 0
-                    ? 'bg-gold text-white hover:bg-gold-soft shadow-sm'
-                    : 'bg-gray-100 text-ink hover:bg-gray-200'
-                }`}
+                className="flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm transition-colors disabled:opacity-60"
               >
                 <FileDown className="h-4 w-4" />
                 {exportingPdf ? 'Exporting…' : selectedCount > 0 ? `Export PDF (${selectedCount} selected)` : 'Export PDF'}
@@ -791,11 +775,7 @@ function SnapshotExportBar({ canExport, onExport, pdfConfig, excelConfig, select
         <button
           onClick={handleExportExcel}
           disabled={exportingExcel}
-          className={`flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-60 ${
-            selectedCount > 0
-              ? 'bg-gold text-white hover:bg-gold-soft shadow-sm'
-              : 'bg-gray-100 text-ink hover:bg-gray-200'
-          }`}
+          className="flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm transition-colors disabled:opacity-60"
         >
           <FileSpreadsheet className="h-4 w-4" />
           {exportingExcel ? 'Exporting…' : selectedCount > 0 ? `Export Excel (${selectedCount} selected)` : 'Export Excel'}
@@ -803,11 +783,7 @@ function SnapshotExportBar({ canExport, onExport, pdfConfig, excelConfig, select
         <button
           onClick={handleExportPdf}
           disabled={exportingPdf || (!pdfConfig?.rows?.length && !selectedCount)}
-          className={`flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-60 ${
-            selectedCount > 0
-              ? 'bg-gold text-white hover:bg-gold-soft shadow-sm'
-              : 'bg-gray-100 text-ink hover:bg-gray-200'
-          }`}
+          className="flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm transition-colors disabled:opacity-60"
         >
           <FileDown className="h-4 w-4" />
           {exportingPdf ? 'Exporting…' : selectedCount > 0 ? `Export PDF (${selectedCount} selected)` : 'Export PDF'}
@@ -983,11 +959,11 @@ function ProfitSummaryPanel({ canExport }) {
         <button type="button" onClick={resetFilters} className="text-sm font-medium text-ink-muted hover:underline">Reset</button>
         {canExport && (
           <div className="ml-auto flex gap-2">
-            <button onClick={handleExportExcel} disabled={exportingExcel} className="flex items-center gap-1.5 rounded bg-gray-100 px-3 py-1.5 text-sm font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
+            <button onClick={handleExportExcel} disabled={exportingExcel} className="flex items-center gap-1.5 rounded bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors disabled:opacity-60">
               <FileSpreadsheet className="h-4 w-4" />
               {exportingExcel ? 'Exporting…' : 'Export Excel'}
             </button>
-            <button onClick={handleExportPdf} disabled={!p} className="flex items-center gap-1.5 rounded bg-gray-100 px-3 py-1.5 text-sm font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
+            <button onClick={handleExportPdf} disabled={!p} className="flex items-center gap-1.5 rounded bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors disabled:opacity-60">
               <FileDown className="h-4 w-4" />
               Export PDF
             </button>
@@ -1160,11 +1136,7 @@ function PricingPanel({ type, label, canExport }) {
             <button
               onClick={handleExportExcel}
               disabled={rows.length === 0}
-              className={`flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-60 ${
-                selectedCount > 0
-                  ? 'bg-gold text-white hover:bg-gold-soft shadow-sm'
-                  : 'bg-gray-100 text-ink hover:bg-gray-200'
-              }`}
+              className="flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm transition-colors disabled:opacity-60"
             >
               <FileSpreadsheet className="h-4 w-4" />
               {selectedCount > 0 ? `Export Excel (${selectedCount} selected)` : 'Export Excel'}
@@ -1172,11 +1144,7 @@ function PricingPanel({ type, label, canExport }) {
             <button
               onClick={handleExportPdf}
               disabled={rows.length === 0}
-              className={`flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-60 ${
-                selectedCount > 0
-                  ? 'bg-gold text-white hover:bg-gold-soft shadow-sm'
-                  : 'bg-gray-100 text-ink hover:bg-gray-200'
-              }`}
+              className="flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm transition-colors disabled:opacity-60"
             >
               <FileDown className="h-4 w-4" />
               {selectedCount > 0 ? `Export PDF (${selectedCount} selected)` : 'Export PDF'}

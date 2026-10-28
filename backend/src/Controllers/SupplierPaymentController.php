@@ -34,6 +34,11 @@ class SupplierPaymentController
     public function index(): void
     {
         $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::requireAny($claims, [
+            'purchases.settle_supplier_payment',
+            'purchases.create_grn',
+            'purchases.view_purchase_cost',
+        ]);
         $rows = $this->model->all($this->resolveBranchId($claims));
 
         // ?ids=1,2,3 narrows to exactly those payments (the "Export
@@ -89,7 +94,12 @@ class SupplierPaymentController
     /** GET /api/suppliers/{id}/unpaid-grns — the "Unpaid Purchase GRNs Breakdown" panel. */
     public function unpaidGrns(string $supplierId): void
     {
-        JwtAuthMiddleware::authenticate();
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::requireAny($claims, [
+            'purchases.settle_supplier_payment',
+            'purchases.create_grn',
+            'purchases.view_purchase_cost',
+        ]);
         Response::json($this->purchases->unpaidForSupplier((int) $supplierId));
     }
 

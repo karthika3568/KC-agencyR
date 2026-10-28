@@ -59,6 +59,7 @@ class CustomerController
     public function exportExcel(): void
     {
         $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::requireAny($claims, ['parties.manage_customers', 'reports.export_excel']);
         $branchId = $this->resolveBranchId($claims);
 
         $stmt = $this->pdo->prepare(

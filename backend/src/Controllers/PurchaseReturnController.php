@@ -31,12 +31,14 @@ class PurchaseReturnController
     public function index(): void
     {
         $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::require($claims, 'returns.purchase_return');
         Response::json($this->model->all($this->resolveBranchId($claims)));
     }
 
     public function show(string $id): void
     {
-        JwtAuthMiddleware::authenticate();
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::require($claims, 'returns.purchase_return');
         $row = $this->model->find((int) $id);
         if (!$row) {
             Response::error('Not found', 404);

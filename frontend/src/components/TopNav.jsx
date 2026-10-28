@@ -20,7 +20,7 @@ function checkPermission(user, perm, targetPath = null) {
   if (user?.role === 'Field Sales Executive' && targetPath === '/pos') {
     return false;
   }
-  if (!perm) return true;
+  if (!perm) return false;
   if (!user || !user.permissions) return false;
   if (Array.isArray(perm)) {
     return perm.some((p) => user.permissions.includes(p));
@@ -41,25 +41,24 @@ export function isSectionActive(sec, currentPath) {
   }
   return currentPath === sec.to || currentPath.startsWith(sec.to + '/');
 }
-
 // Module search catalog with permission gating
 const ALL_MODULE_SEARCH = [
-  { to: '/', label: 'Dashboard', desc: 'Overview & metrics', perm: null },
+  { to: '/', label: 'Dashboard', desc: 'Overview & metrics', perm: 'dashboard.view_financial_summary' },
   { to: '/pos', label: 'POS & Billing', desc: 'Counter sales & checkout', perm: 'pos.access' },
   { to: '/catalog', label: 'Products & Catalog', desc: 'Item master & prices', perm: 'catalog.manage_items' },
-  { to: '/price-adjustment', label: 'Price Adjustment', desc: 'Wholesale & retail pricing', perm: 'catalog.manage_items' },
-  { to: '/parties', label: 'Parties', desc: 'Customers & suppliers', perm: 'parties.manage_customers' },
-  { to: '/purchasing', label: 'Purchasing (GRN)', desc: 'Goods receipts & vendor bills', perm: 'purchases.create_grn' },
-  { to: '/orders', label: 'Orders & Indents', desc: 'Pre-bookings & purchase requests', perm: ['orders.create_prebooking', 'orders.view_prebooking', 'orders.manage_prebooking_status'] },
-  { to: '/inventory', label: 'Inventory & Stock', desc: 'Branch stock levels & batches', perm: 'inventory.view_stock' },
-  { to: '/returns', label: 'Returns', desc: 'Sales & customer returns', perm: 'returns.sales_return' },
+  { to: '/price-adjustment', label: 'Price Adjustment', desc: 'Wholesale & retail pricing', perm: ['catalog.manage_price_lists', 'catalog.manage_price_rules', 'catalog.manage_items'] },
+  { to: '/parties', label: 'Parties', desc: 'Customers & suppliers', perm: ['parties.manage_customers', 'parties.manage_suppliers'] },
+  { to: '/purchasing', label: 'Purchasing (GRN)', desc: 'Goods receipts & vendor bills', perm: ['purchases.create_grn', 'purchases.edit_grn', 'purchases.view_purchase_cost', 'purchases.settle_supplier_payment'] },
+  { to: '/orders', label: 'Orders & Indents', desc: 'Pre-bookings & purchase requests', perm: ['orders.create_prebooking', 'orders.create_purchase_indent', 'orders.approve_purchase_request', 'orders.manage_prebooking_status', 'orders.view_prebooking'] },
+  { to: '/inventory', label: 'Inventory & Stock', desc: 'Branch stock levels & batches', perm: ['inventory.view_stock', 'inventory.stock_adjustment', 'inventory.issue_van_stock'] },
+  { to: '/returns', label: 'Returns', desc: 'Sales & customer returns', perm: ['returns.sales_return', 'returns.purchase_return', 'returns.approve_untraceable_return'] },
   { to: '/invoices', label: 'Invoices', desc: 'Sales invoice history', perm: 'pos.access' },
-  { to: '/collections', label: 'Collections', desc: 'Field payment entries', perm: 'collections.field_collection_entry' },
-  { to: '/cash-handover', label: 'Cash Handover', desc: 'Shift reconciliation', perm: 'handover.submit_cash_handover' },
+  { to: '/collections', label: 'Collections', desc: 'Field payment entries', perm: ['collections.field_collection_entry', 'credit.collect_credit_payment', 'credit.view_shopwide_outstanding'] },
+  { to: '/cash-handover', label: 'Cash Handover', desc: 'Shift reconciliation', perm: ['handover.submit_cash_handover', 'handover.verify_reconcile'] },
   { to: '/expenses', label: 'Expenses', desc: 'Operating costs & receipts', perm: 'expenses.manage' },
-  { to: '/reports', label: 'Reports', desc: 'GST, Sales, P&L', perm: 'reports.view_all' },
-  { to: '/staff', label: 'Staff & Roles', desc: 'Team & access permissions', perm: 'staff.manage_permissions' },
-  { to: '/settings', label: 'Settings', desc: 'System configuration', perm: 'settings.manage' },
+  { to: '/reports', label: 'Reports', desc: 'GST, Sales, P&L', perm: ['reports.view_all', 'reports.view_gst_register', 'reports.view_non_gst_register', 'reports.view_profit', 'reports.export_excel'] },
+  { to: '/staff', label: 'Staff & Roles', desc: 'Team & access permissions', perm: ['staff.manage_accounts', 'staff.manage_permissions'] },
+  { to: '/settings', label: 'Settings', desc: 'System configuration', perm: ['settings.manage', 'branches.manage'] },
 ];
 
 // Navigation structure
@@ -68,7 +67,7 @@ const TOP_NAV_GROUPS = [
     id: 'dashboard',
     label: 'Dashboard',
     to: '/',
-    perm: null,
+    perm: 'dashboard.view_financial_summary',
     icon: LayoutDashboard,
     isDirect: true,
   },
@@ -78,7 +77,7 @@ const TOP_NAV_GROUPS = [
     icon: ShoppingBag,
     items: [
       { to: '/pos', label: 'Billing / POS', desc: 'Counter sales & instant checkout', perm: 'pos.access', icon: FileText },
-      { to: '/parties', label: 'Parties', desc: 'Customers & supplier directory', perm: 'parties.manage_customers', icon: Users },
+      { to: '/parties', label: 'Parties', desc: 'Customers & supplier directory', perm: ['parties.manage_customers', 'parties.manage_suppliers'], icon: Users },
       {
         to: '/orders',
         label: 'Orders & Indents',
@@ -88,10 +87,11 @@ const TOP_NAV_GROUPS = [
           'orders.create_purchase_indent',
           'orders.approve_purchase_request',
           'orders.manage_prebooking_status',
+          'orders.view_prebooking',
         ],
         icon: ClipboardList,
       },
-      { to: '/returns', label: 'Returns', desc: 'Sales & customer return slips', perm: 'returns.sales_return', icon: RotateCcw },
+      { to: '/returns', label: 'Returns', desc: 'Sales & customer return slips', perm: ['returns.sales_return', 'returns.purchase_return', 'returns.approve_untraceable_return'], icon: RotateCcw },
     ],
   },
   {
@@ -100,9 +100,9 @@ const TOP_NAV_GROUPS = [
     icon: Boxes,
     items: [
       { to: '/catalog', label: 'Catalog', desc: 'Item master, rates & barcodes', perm: 'catalog.manage_items', icon: Package },
-      { to: '/inventory', label: 'Stock & Inventory', desc: 'Branch stock levels & batches', perm: 'inventory.view_stock', icon: Warehouse },
-      { to: '/purchasing', label: 'Purchasing (GRN)', desc: 'Goods receipts & vendor bills', perm: 'purchases.create_grn', icon: ShoppingCart },
-      { to: '/price-adjustment', label: 'Price Adjustment', desc: 'Wholesale & retail price changes', perm: 'catalog.manage_items', icon: Tag },
+      { to: '/inventory', label: 'Stock & Inventory', desc: 'Branch stock levels & batches', perm: ['inventory.view_stock', 'inventory.stock_adjustment', 'inventory.issue_van_stock'], icon: Warehouse },
+      { to: '/purchasing', label: 'Purchasing (GRN)', desc: 'Goods receipts & vendor bills', perm: ['purchases.create_grn', 'purchases.edit_grn', 'purchases.view_purchase_cost', 'purchases.settle_supplier_payment'], icon: ShoppingCart },
+      { to: '/price-adjustment', label: 'Price Adjustment', desc: 'Wholesale & retail price changes', perm: ['catalog.manage_price_lists', 'catalog.manage_price_rules', 'catalog.manage_items'], icon: Tag },
     ],
   },
   {
@@ -111,16 +111,16 @@ const TOP_NAV_GROUPS = [
     icon: Landmark,
     items: [
       { to: '/invoices', label: 'Invoices', desc: 'Sales invoice history & print', perm: 'pos.access', icon: FileText },
-      { to: '/collections', label: 'Collections', desc: 'Field payment collections', perm: 'collections.field_collection_entry', icon: Wallet },
+      { to: '/collections', label: 'Collections', desc: 'Field payment collections', perm: ['collections.field_collection_entry', 'credit.collect_credit_payment', 'credit.view_shopwide_outstanding'], icon: Wallet },
       { to: '/expenses', label: 'Expenses', desc: 'Store operational expense vouchers', perm: 'expenses.manage', icon: Receipt },
-      { to: '/cash-handover', label: 'Cash Handover', desc: 'Shift cash drawer reconciliation', perm: 'handover.submit_cash_handover', icon: Banknote },
+      { to: '/cash-handover', label: 'Cash Handover', desc: 'Shift cash drawer reconciliation', perm: ['handover.submit_cash_handover', 'handover.verify_reconcile'], icon: Banknote },
     ],
   },
   {
     id: 'reports',
     label: 'Reports',
     to: '/reports',
-    perm: 'reports.view_all',
+    perm: ['reports.view_all', 'reports.view_gst_register', 'reports.view_non_gst_register', 'reports.view_profit', 'reports.export_excel'],
     icon: BarChart3,
     isDirect: true,
   },
@@ -129,8 +129,8 @@ const TOP_NAV_GROUPS = [
     label: 'Administration',
     icon: SlidersHorizontal,
     items: [
-      { to: '/staff', label: 'Staff & Roles', desc: 'Team users & access permissions', perm: 'staff.manage_permissions', icon: ShieldCheck },
-      { to: '/settings', label: 'Settings', desc: 'System configuration & preferences', perm: 'settings.manage', icon: SettingsIcon },
+      { to: '/staff', label: 'Staff & Roles', desc: 'Team users & access permissions', perm: ['staff.manage_accounts', 'staff.manage_permissions'], icon: ShieldCheck },
+      { to: '/settings', label: 'Settings', desc: 'System configuration & preferences', perm: ['settings.manage', 'branches.manage'], icon: SettingsIcon },
     ],
   },
 ];
@@ -590,13 +590,16 @@ export function TopNav({ onToggleSidebar, onToggleMobile } = {}) {
 
   if (isFieldSales) {
     const FIELD_SALES_NAV = [
-      { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-      { to: '/customers', label: 'Customers', icon: Users },
-      { to: '/orders', label: 'Orders', icon: ClipboardList },
-      { to: '/vans', label: 'Vans', icon: Truck },
-      { to: '/van-stock', label: 'Van Stock', icon: Package },
-      { to: '/stock-history', label: 'Stock History', icon: History },
+      { to: '/', label: 'Dashboard', perm: 'dashboard.view_financial_summary', icon: LayoutDashboard },
+      { to: '/customers', label: 'Customers', perm: 'parties.manage_customers', icon: Users },
+      { to: '/orders', label: 'Orders', perm: ['orders.create_prebooking', 'orders.view_prebooking', 'orders.manage_prebooking_status'], icon: ClipboardList },
+      { to: '/vans', label: 'Vans', perm: ['inventory.issue_van_stock', 'inventory.view_stock'], icon: Truck },
+      { to: '/van-stock', label: 'Van Stock', perm: ['inventory.issue_van_stock', 'inventory.view_stock'], icon: Package },
+      { to: '/stock-history', label: 'Stock History', perm: ['inventory.view_stock', 'inventory.issue_van_stock'], icon: History },
     ];
+    const visibleFieldSalesNav = FIELD_SALES_NAV.filter((item) =>
+      checkPermission(user, item.perm, item.to)
+    );
 
     return (
       <header className="sticky top-0 z-40 w-full shrink-0 shadow-md bg-[#351442] text-white">
@@ -629,7 +632,7 @@ export function TopNav({ onToggleSidebar, onToggleMobile } = {}) {
 
           {/* Center: Six Direct Links — NO DROPDOWNS, NO EXPANDABLES, NO NESTING */}
           <nav aria-label="Field Sales Navigation" className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar py-1">
-            {FIELD_SALES_NAV.map((item) => {
+            {visibleFieldSalesNav.map((item) => {
               const Icon = item.icon;
               const isActive = item.to === '/'
                 ? location.pathname === '/'

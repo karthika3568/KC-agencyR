@@ -52,7 +52,8 @@ export function ThermalTemplate({ data }) {
   const isInterstate = Number(invoice.igst_amount || 0) > 0;
   const isNonGst = invoice.bill_type === 'non_gst';
 
-  const companyName = branch.print_name || branch.name || COMPANY_DETAILS.name;
+  const rawCompanyName = branch.print_name || branch.name || COMPANY_DETAILS.name;
+  const companyName = rawCompanyName.replace(/AJ\s*AGENCY/gi, 'KC AGENCY').replace(/AJ\s*Agency/gi, 'KC Agency');
   const companyAddress = [branch.address_line1, branch.city, branch.state, branch.pincode]
     .filter(Boolean)
     .join(', ') || COMPANY_DETAILS.address;

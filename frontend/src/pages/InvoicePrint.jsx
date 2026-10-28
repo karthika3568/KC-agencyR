@@ -25,8 +25,9 @@ export function InvoicePrint() {
   const whatsappHref = () => {
     if (!data) return '#';
     const phone = (data.invoice.customer_phone || '').replace(/\D/g, '');
+    const agencyName = (data.branch?.print_name || 'KC AGENCY').replace(/AJ\s*AGENCY/gi, 'KC AGENCY');
     const text = encodeURIComponent(
-      `Hi! Your invoice ${data.invoice.invoice_no || ''} from ${data.branch?.print_name || 'KC AGENCY'} — Total: Rs. ${data.invoice.grand_total}. Thank you for your business!`
+      `Hi! Your invoice ${data.invoice.invoice_no || ''} from ${agencyName} — Total: Rs. ${data.invoice.grand_total}. Thank you for your business!`
     );
     return `https://wa.me/${phone ? '91' + phone : ''}?text=${text}`;
   };
@@ -60,7 +61,7 @@ export function InvoicePrint() {
           A5
         </button>
         <div className="w-full sm:w-auto sm:ml-auto flex flex-wrap items-center gap-2 pt-1 sm:pt-0">
-          <button onClick={() => window.print()} className="rounded bg-gray-800 px-3 py-1 text-sm text-white">
+          <button onClick={() => window.print()} className="rounded bg-emerald-600 hover:bg-emerald-700 font-semibold px-3 py-1 text-sm text-white transition-colors">
             Print
           </button>
           {data.invoice.customer_phone && (
