@@ -40,13 +40,19 @@ class VanStockController
         $claims = JwtAuthMiddleware::authenticate();
         PermissionMiddleware::require($claims, 'inventory.issue_van_stock');
 
-        if ($this->isSalesman($claims)) {
-            Response::error('Forbidden: Field Sales Executives are not authorized to issue warehouse stock', 403);
-        }
-
         $body = json_decode(file_get_contents('php://input'), true) ?? [];
         if (empty($body['employee_id']) || empty($body['items']) || !is_array($body['items'])) {
             Response::error('employee_id and items are required', 422);
+        }
+
+        $canSwitch = in_array('branches.switch_context', (array) ($claims['permissions'] ?? []), true);
+        if (!$canSwitch) {
+            $stmt = $this->pdo->prepare('SELECT branch_id FROM users WHERE id = :id');
+            $stmt->execute(['id' => (int) $body['employee_id']]);
+            $empBranch = $stmt->fetchColumn();
+            if ($empBranch !== false && (int) $empBranch !== (int) $claims['branch_id']) {
+                Response::error('Forbidden: cross-branch access', 403);
+            }
         }
 
         foreach ($body['items'] as $it) {
@@ -80,8 +86,14 @@ class VanStockController
             Response::error('employee_id and items are required', 422);
         }
 
-        if ($this->isSalesman($claims) && (int) $body['employee_id'] !== (int) $claims['sub']) {
-            Response::error('Forbidden: Field Sales Executives cannot alter another salesman\'s van stock', 403);
+        $canSwitch = in_array('branches.switch_context', (array) ($claims['permissions'] ?? []), true);
+        if (!$canSwitch) {
+            $stmt = $this->pdo->prepare('SELECT branch_id FROM users WHERE id = :id');
+            $stmt->execute(['id' => (int) $body['employee_id']]);
+            $empBranch = $stmt->fetchColumn();
+            if ($empBranch !== false && (int) $empBranch !== (int) $claims['branch_id']) {
+                Response::error('Forbidden: cross-branch access', 403);
+            }
         }
 
         foreach ($body['items'] as $it) {
@@ -171,6 +183,9 @@ class VanStockController
 
         $branchId = $this->resolveBranchId($claims);
         $employeeId = !empty($_GET['employee_id']) ? (int) $_GET['employee_id'] : null;
+        if (empty($employeeId) && $this->isSalesman($claims)) {
+            $employeeId = (int) $claims['sub'];
+        }
         $rows = $this->model->listIssues($branchId, $employeeId);
 
         if (!empty($_GET['ids'])) {
@@ -259,6 +274,113 @@ class VanStockController
         $filename = $singleIssueNo !== null
             ? "{$singleIssueNo}.xlsx"
             : 'Van_Stock_Issues_' . ($isSelected ? 'Selected' : 'All') . '_' . date('Y-m-d') . '.xlsx';
+        \App\Helpers\TableExporter::export($columns, $rows, $filename);
+    }
+
+    /**
+     * GET /api/van-stock/returns — return TRANSACTIONS for this branch (one
+     * row per Return Stock action). ?employee_id narrows to one salesman.
+     * ?detail=1 returns flattened item-line rows. ?export=1 streams as .xlsx.
+     * ?ids=1,2,3 narrows to specific return transactions.
+     */
+    public function returns(): void
+    {
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::require($claims, 'inventory.view_stock');
+
+        $branchId = $this->resolveBranchId($claims);
+        $employeeId = !empty($_GET['employee_id']) ? (int) $_GET['employee_id'] : null;
+        if (empty($employeeId) && $this->isSalesman($claims)) {
+            $employeeId = (int) $claims['sub'];
+        }
+        $rows = $this->model->listReturns($branchId, $employeeId);
+
+        if (!empty($_GET['ids'])) {
+            $wanted = array_map('intval', explode(',', (string) $_GET['ids']));
+            $rows = array_values(array_filter($rows, fn ($r) => in_array((int) $r['id'], $wanted, true)));
+        }
+
+        if (!empty($_GET['detail'])) {
+            Response::json($this->flattenedReturnLines($rows));
+            return;
+        }
+
+        if (!empty($_GET['export'])) {
+            PermissionMiddleware::require($claims, 'reports.export_excel');
+            $this->exportReturnsExcel($rows, !empty($_GET['ids']));
+        }
+
+        Response::json($rows);
+    }
+
+    /** GET /api/van-stock/returns/{id} — one return transaction with all its item lines. */
+    public function showReturn(string $id): void
+    {
+        $claims = JwtAuthMiddleware::authenticate();
+        PermissionMiddleware::require($claims, 'inventory.view_stock');
+
+        $return = $this->model->findReturn((int) $id);
+        if (!$return) {
+            Response::error('Not found', 404);
+        }
+
+        $canSwitch = in_array('branches.switch_context', (array) ($claims['permissions'] ?? []), true);
+        if (!$canSwitch && (int) $return['branch_id'] !== (int) $claims['branch_id']) {
+            Response::error('Forbidden: cross-branch access', 403);
+        }
+
+        $return['amount_in_words'] = \App\Helpers\NumberToWords::convert((float) ($return['total_amount'] ?? 0));
+        Response::json($return);
+    }
+
+    /** One row per return-transaction line — header fields repeated per item. */
+    private function flattenedReturnLines(array $returns): array
+    {
+        $rows = [];
+        foreach ($returns as $ret) {
+            $lines = !empty($ret['items']) ? $ret['items'] : $this->model->returnLines((int) $ret['id']);
+            foreach ($lines as $line) {
+                $rows[] = [
+                    'return_no' => $ret['return_no'],
+                    'returned_at' => $ret['returned_at'],
+                    'employee_name' => $ret['employee_name'],
+                    'returned_by_name' => $ret['returned_by_name'],
+                    'branch_name' => $ret['branch_print_name'] ?? $ret['branch_name'] ?? null,
+                    'notes' => $ret['notes'],
+                    'item_name' => $line['item_name'],
+                    'item_code' => $line['item_code'],
+                    'qty' => (float) $line['qty'],
+                    'unit_code' => $line['unit_code'],
+                    'unit_price' => (float) ($line['unit_price'] ?? 0),
+                    'line_amount' => (float) ($line['line_amount'] ?? 0),
+                ];
+            }
+        }
+        return $rows;
+    }
+
+    private function exportReturnsExcel(array $returns, bool $isSelected): void
+    {
+        $singleReturnNo = (count($returns) === 1) ? $returns[0]['return_no'] : null;
+
+        if (empty($returns)) {
+            \App\Helpers\TableExporter::export(['return_no' => 'Return #'], [], 'Van_Stock_Returns_' . ($isSelected ? 'Selected' : 'All') . '_' . date('Y-m-d') . '.xlsx');
+            return;
+        }
+
+        $rows = $this->flattenedReturnLines($returns);
+        $columns = [
+            'return_no' => 'Return Number', 'returned_at' => 'Return Date', 'employee_name' => 'Salesman',
+            'branch_name' => 'Branch',
+            'item_code' => 'SKU', 'item_name' => 'Item Name',
+            'qty' => 'Qty Returned', 'unit_code' => 'Unit',
+            'unit_price' => 'Unit Price', 'line_amount' => 'Amount',
+            'returned_by_name' => 'Recorded By', 'notes' => 'Reason / Notes',
+        ];
+
+        $filename = $singleReturnNo !== null
+            ? "{$singleReturnNo}.xlsx"
+            : 'Van_Stock_Returns_' . ($isSelected ? 'Selected' : 'All') . '_' . date('Y-m-d') . '.xlsx';
         \App\Helpers\TableExporter::export($columns, $rows, $filename);
     }
 }

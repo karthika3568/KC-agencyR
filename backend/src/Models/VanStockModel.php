@@ -304,6 +304,126 @@ class VanStockModel
     }
 
     /**
+     * Return TRANSACTIONS (headers) for a branch — one row per Return Stock
+     * action, however many items it contained. item_count/total_qty are a
+     * quick summary for the list view; full lines come from returnLines().
+     */
+    public function listReturns(int $branchId, ?int $employeeId = null): array
+    {
+        $sql = "SELECT srn.id, srn.return_no, srn.issue_id, srn.returned_at, srn.notes,
+                       srn.branch_id, srn.employee_id, u.name AS employee_name,
+                       ub.name AS returned_by_name,
+                       sin.issue_no,
+                       b.branch_name, b.print_name AS branch_print_name,
+                       COUNT(sri.id) AS item_count,
+                       COALESCE(SUM(sri.qty), 0) AS total_qty,
+                       COALESCE(SUM(sri.qty * COALESCE(i.net_srate, i.retail_price, 0)), 0) AS total_amount
+                FROM stock_return_notes srn
+                JOIN users u ON u.id = srn.employee_id
+                LEFT JOIN users ub ON ub.id = srn.returned_by
+                LEFT JOIN branches b ON b.id = srn.branch_id
+                LEFT JOIN stock_issue_notes sin ON sin.id = srn.issue_id
+                LEFT JOIN stock_return_items sri ON sri.return_id = srn.id
+                LEFT JOIN items i ON i.id = sri.item_id
+                WHERE srn.branch_id = :branch_id";
+        $params = ['branch_id' => $branchId];
+        if ($employeeId !== null) {
+            $sql .= ' AND srn.employee_id = :employee_id';
+            $params['employee_id'] = $employeeId;
+        }
+        $sql .= ' GROUP BY srn.id ORDER BY srn.id DESC LIMIT 200';
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+        $returns = $stmt->fetchAll();
+
+        if (!empty($returns)) {
+            $returnIds = array_column($returns, 'id');
+            $placeholders = implode(',', array_fill(0, count($returnIds), '?'));
+            $itemSql = "SELECT sri.id, sri.return_id, sri.item_id, sri.qty,
+                               i.item_name, i.item_code, su.short_code AS unit_code,
+                               COALESCE(i.net_srate, i.retail_price, 0) AS unit_price,
+                               ROUND(sri.qty * COALESCE(i.net_srate, i.retail_price, 0), 2) AS line_amount
+                        FROM stock_return_items sri
+                        JOIN items i ON i.id = sri.item_id
+                        LEFT JOIN stock_units su ON su.id = i.base_unit_id
+                        WHERE sri.return_id IN ($placeholders)
+                        ORDER BY sri.id";
+            $itemStmt = $this->pdo->prepare($itemSql);
+            $itemStmt->execute($returnIds);
+            $allItems = $itemStmt->fetchAll();
+
+            $itemsByReturn = [];
+            foreach ($allItems as $item) {
+                $item['qty'] = (float) $item['qty'];
+                $item['unit_price'] = (float) $item['unit_price'];
+                $item['line_amount'] = (float) $item['line_amount'];
+                $itemsByReturn[$item['return_id']][] = $item;
+            }
+
+            foreach ($returns as &$rtn) {
+                $rtn['items'] = $itemsByReturn[$rtn['id']] ?? [];
+                $rtn['item_count'] = count($rtn['items']);
+                $rtn['total_qty'] = (float) array_sum(array_column($rtn['items'], 'qty'));
+                $rtn['total_amount'] = (float) round(array_sum(array_column($rtn['items'], 'line_amount')), 2);
+            }
+            unset($rtn);
+        }
+
+        return $returns;
+    }
+
+    /** Item lines of one return transaction. */
+    public function returnLines(int $returnId): array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT sri.*, i.item_name, i.item_code, su.short_code AS unit_code,
+                    COALESCE(i.net_srate, i.retail_price, 0) AS unit_price,
+                    ROUND(sri.qty * COALESCE(i.net_srate, i.retail_price, 0), 2) AS line_amount
+             FROM stock_return_items sri
+             JOIN items i ON i.id = sri.item_id
+             LEFT JOIN stock_units su ON su.id = i.base_unit_id
+             WHERE sri.return_id = :return_id
+             ORDER BY sri.id'
+        );
+        $stmt->execute(['return_id' => $returnId]);
+        $lines = $stmt->fetchAll();
+        foreach ($lines as &$line) {
+            $line['qty'] = (float) $line['qty'];
+            $line['unit_price'] = (float) $line['unit_price'];
+            $line['line_amount'] = (float) $line['line_amount'];
+        }
+        return $lines;
+    }
+
+    public function findReturn(int $returnId): ?array
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT srn.*, u.name AS employee_name, ub.name AS returned_by_name,
+                    sin.issue_no,
+                    b.branch_name, b.print_name AS branch_print_name,
+                    b.address_line1, b.city, b.state, b.pincode, b.phone AS branch_phone, b.gstin AS branch_gstin,
+                    c.name AS company_name
+             FROM stock_return_notes srn
+             JOIN users u ON u.id = srn.employee_id
+             LEFT JOIN users ub ON ub.id = srn.returned_by
+             LEFT JOIN branches b ON b.id = srn.branch_id
+             LEFT JOIN company c ON c.id = b.company_id
+             LEFT JOIN stock_issue_notes sin ON sin.id = srn.issue_id
+             WHERE srn.id = :id'
+        );
+        $stmt->execute(['id' => $returnId]);
+        $return = $stmt->fetch();
+        if (!$return) {
+            return null;
+        }
+        $return['items'] = $this->returnLines($returnId);
+        $return['total_qty'] = (float) array_sum(array_column($return['items'], 'qty'));
+        $return['total_amount'] = (float) round(array_sum(array_column($return['items'], 'line_amount')), 2);
+        return $return;
+    }
+
+    /**
      * issued - returned per item for one employee, i.e. what's still "out"
      * with them (van pending). Joined to items/stock_units so the UI can
      * show the actual item name/SKU/unit instead of a bare item_id — the

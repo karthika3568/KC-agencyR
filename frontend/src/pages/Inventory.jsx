@@ -1,4 +1,5 @@
 import { useState, useEffect, Fragment } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Package, Search, Plus, Trash2, CheckCircle2, AlertTriangle, Truck, SlidersHorizontal, X, FileSpreadsheet, FileDown, Printer, ChevronDown, ChevronRight } from 'lucide-react';
 import { itemsApi } from '../api/catalog';
@@ -471,10 +472,21 @@ export function StockAdjustmentPanel({ canManage }) {
 
 export function VanStockPanel({ canManage }) {
   const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const isSalesman = user?.role === 'Field Sales Executive';
-  const [employeeId, setEmployeeId] = useState(() => (isSalesman ? (user?.id ? String(user.id) : '') : (canManage ? '' : (user?.id ? String(user.id) : ''))));
-  const [mode, setMode] = useState(() => (isSalesman ? 'return' : 'issue'));
+  const urlMode = searchParams.get('mode') || searchParams.get('tab');
+  const urlEmpId = searchParams.get('employee_id');
+
+  const [employeeId, setEmployeeId] = useState(() => {
+    if (urlEmpId) return urlEmpId;
+    if (isSalesman) return user?.id ? String(user.id) : '';
+    return canManage ? '' : (user?.id ? String(user.id) : '');
+  });
+  const [mode, setMode] = useState(() => {
+    if (urlMode === 'issue' || urlMode === 'return') return urlMode;
+    return 'issue';
+  });
   const [lines, setLines] = useState([{ item_id: '', qty: 1 }]);
   const [formError, setFormError] = useState('');
   const [message, setMessage] = useState('');
@@ -483,13 +495,21 @@ export function VanStockPanel({ canManage }) {
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
-    if (isSalesman && user?.id) {
+    if (urlEmpId) {
+      if (String(employeeId) !== String(urlEmpId)) setEmployeeId(String(urlEmpId));
+    } else if (isSalesman && user?.id) {
       if (String(employeeId) !== String(user.id)) setEmployeeId(String(user.id));
-      if (mode !== 'return') setMode('return');
     } else if (!canManage && user?.id && String(employeeId) !== String(user.id)) {
       setEmployeeId(String(user.id));
     }
-  }, [isSalesman, canManage, user?.id, employeeId, mode]);
+  }, [isSalesman, canManage, user?.id, employeeId, urlEmpId]);
+
+  useEffect(() => {
+    const m = searchParams.get('mode') || searchParams.get('tab');
+    if (m === 'issue' || m === 'return') {
+      setMode(m);
+    }
+  }, [searchParams]);
 
   const usersQuery = useQuery({ queryKey: ['users'], queryFn: usersApi.list, enabled: canManage });
   const itemsQuery = useQuery({ queryKey: ['items', ''], queryFn: () => itemsApi.list('') });
@@ -752,17 +772,15 @@ export function VanStockPanel({ canManage }) {
                   Van Stock Operations
                 </h2>
                 <div className="flex gap-1 bg-surface-subtle p-0.5 rounded-lg">
-                  {!isSalesman && (
-                    <button
-                      type="button"
-                      onClick={() => setMode('issue')}
-                      className={`px-2 py-0.5 rounded text-xs font-semibold transition ${
-                        mode === 'issue' ? 'bg-indigo-500 text-white' : 'text-ink-muted hover:text-ink'
-                      }`}
-                    >
-                      Issue Stock
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => setMode('issue')}
+                    className={`px-2 py-0.5 rounded text-xs font-semibold transition ${
+                      mode === 'issue' ? 'bg-indigo-500 text-white' : 'text-ink-muted hover:text-ink'
+                    }`}
+                  >
+                    Issue Stock
+                  </button>
                   <button
                     type="button"
                     onClick={() => setMode('return')}
@@ -780,7 +798,7 @@ export function VanStockPanel({ canManage }) {
 
                 <div>
                   <label className="text-xs font-medium text-ink-muted block mb-0.5">Salesman *</label>
-                  {isSalesman ? (
+                  {!canManage ? (
                     <div className="input w-full bg-page/70 text-ink text-xs flex items-center justify-between cursor-not-allowed">
                       <span>{user?.name || 'Logged-in Salesman'}</span>
                       <span className="text-[10px] text-ink-muted">(You)</span>
@@ -795,7 +813,7 @@ export function VanStockPanel({ canManage }) {
                       <option value="">-- Select Salesman --</option>
                       {users.map((u) => (
                         <option key={u.id} value={u.id}>
-                          {u.name} ({u.role_name})
+                          {u.name} ({u.role_name || u.role || 'Sales Executive'})
                         </option>
                       ))}
                     </select>

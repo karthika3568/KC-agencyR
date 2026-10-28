@@ -143,6 +143,34 @@ export const vanStockIssuesApi = {
   },
 };
 
+export const vanStockReturnsApi = {
+  /** List return TRANSACTIONS (one row per Return Stock action) — optionally narrowed to one salesman or paginated. */
+  list: async (employeeIdOrParams) => {
+    let params = employeeIdOrParams;
+    if (typeof employeeIdOrParams !== 'object' || employeeIdOrParams === null) {
+      params = employeeIdOrParams ? { employee_id: employeeIdOrParams } : {};
+    }
+    return (await apiClient.get('/van-stock/returns', cleanQueryConfig(params))).data;
+  },
+
+  get: async (id) => (await apiClient.get(`/van-stock/returns/${id}`)).data,
+
+  /** Flattened item-line rows for the given return transaction ids. */
+  async detail(ids) {
+    const params = { detail: 1 };
+    if (ids?.length) params.ids = ids.join(',');
+    return (await apiClient.get('/van-stock/returns', { params })).data;
+  },
+
+  /** ids: optional array to narrow to "Export Selected" return transactions — omit for the full list. */
+  async downloadExport(ids) {
+    const params = { export: 1 };
+    if (ids?.length) params.ids = ids.join(',');
+    const res = await apiClient.get('/van-stock/returns', { params, responseType: 'blob' });
+    await downloadWithServerFilename(res, 'Van_Stock_Returns.xlsx');
+  },
+};
+
 export const stockHubApi = {
   list: async (params = {}) => (await apiClient.get('/stock-hub', cleanQueryConfig(params))).data,
   lowStock: async () => (await apiClient.get('/stock-hub/low-stock')).data,
