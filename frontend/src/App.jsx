@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { ProtectedRoute } from './components/ProtectedRoute.jsx';
 import { AppShell } from './components/AppShell.jsx';
 import { AccessDenied } from './components/AccessDenied.jsx';
+import { PwaInstallBanner } from './components/PwaInstallBanner.jsx';
 import { useAuth } from './hooks/useAuth.jsx';
 import { hasPermission } from './hooks/usePermission';
 import { ROUTE_PERMISSIONS, getFirstAuthorizedRoute } from './utils/navigationConfig';
@@ -80,7 +81,8 @@ function RootRoute() {
 
 export default function App() {
   return (
-    <Routes>
+    <>
+      <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/" element={<Protected><RootRoute /></Protected>} />
       <Route path="/pos" element={<Protected perm={ROUTE_PERMISSIONS['/pos']} targetPath="/pos"><POS /></Protected>} />
@@ -105,5 +107,7 @@ export default function App() {
       <Route path="/print/invoice/:id" element={<ProtectedRoute perm="pos.access"><InvoicePrint /></ProtectedRoute>} />
       <Route path="*" element={<Protected><AccessDenied /></Protected>} />
     </Routes>
+    <PwaInstallBanner />
+  </>
   );
 }
