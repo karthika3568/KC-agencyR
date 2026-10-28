@@ -1,7 +1,7 @@
 import EncryptedStorage from 'react-native-encrypted-storage';
 
-const TOKEN_KEY = 'aj_agency_token';
-const USER_KEY = 'aj_agency_user';
+const TOKEN_KEY = 'kc_agency_token';
+const USER_KEY = 'kc_agency_user';
 
 export const secureStorage = {
   async saveSession(token, user) {
