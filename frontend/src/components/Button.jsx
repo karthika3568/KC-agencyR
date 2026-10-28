@@ -4,6 +4,7 @@ const VARIANT_CLASSES = {
   danger: 'bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100 disabled:opacity-40',
   ghost: 'text-[#697797] hover:text-[#17233D] hover:bg-[#EEE5FF]/60 disabled:opacity-40',
   gold: 'bg-[#6F2DA8] text-white hover:bg-[#5C238C] shadow-sm disabled:opacity-40',
+  success: 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm disabled:opacity-40',
 };
 
 /**

@@ -511,7 +511,7 @@ export function ItemsPanel({ canManage }) {
               onChange={(e) => handleSearchChange(e.target.value)}
               className="input w-48 sm:w-56 focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1"
             />
-            <Button variant="secondary" size="sm" data-catalog-nav="true" onClick={() => itemsApi.downloadExport()}>Export Excel</Button>
+            <Button variant="success" size="sm" data-catalog-nav="true" onClick={() => itemsApi.downloadExport()}>Export Excel</Button>
             {canManage && (
               <Button size="sm" data-catalog-nav="true" icon={<Plus size={13} />} onClick={openAdd}>Add Item</Button>
             )}
@@ -635,7 +635,7 @@ export function ItemsPanel({ canManage }) {
         <div className="card p-4">
           <div className="mb-2 font-semibold text-ink">Bulk Import (Excel)</div>
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="secondary" size="sm" data-catalog-nav="true" onClick={() => itemsApi.downloadImportTemplate()}>Download Template</Button>
+            <Button variant="success" size="sm" data-catalog-nav="true" onClick={() => itemsApi.downloadImportTemplate()}>Download Template</Button>
             <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleImportFile} data-catalog-nav="true" className="text-sm focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1 rounded" />
             <Button variant="secondary" size="sm" data-catalog-nav="true" disabled={!importFile} onClick={handlePreview}>Preview</Button>
             <Button size="sm" data-catalog-nav="true" disabled={!importFile || !importResult} onClick={handleCommit}>Commit Import</Button>

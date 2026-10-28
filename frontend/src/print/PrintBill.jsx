@@ -161,7 +161,7 @@ export default function PrintBill() {
 
           {/* Print Button */}
           <button
-            className="bg-blue-900 hover:bg-blue-950 text-white font-bold px-5 py-1.5 rounded-lg text-sm flex items-center gap-1.5 shadow"
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-1.5 rounded-lg text-sm flex items-center gap-1.5 shadow transition-colors"
             onClick={() => window.print()}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

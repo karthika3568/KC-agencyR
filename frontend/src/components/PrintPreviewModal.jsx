@@ -139,8 +139,9 @@ export function PrintPreviewModal({ invoiceId, stockIssue, issueId, onClose }) {
       return `https://wa.me/${phone ? '91' + phone : ''}?text=${text}`;
     }
     const phone = (data.invoice.customer_phone || '').replace(/\D/g, '');
+    const agencyName = (data.branch?.print_name || 'KC AGENCY').replace(/AJ\s*AGENCY/gi, 'KC AGENCY');
     const text = encodeURIComponent(
-      `Hi! Your invoice ${data.invoice.invoice_no || ''} from ${data.branch?.print_name || 'KC AGENCY'} — Total: Rs. ${data.invoice.grand_total}. Thank you for your business!`
+      `Hi! Your invoice ${data.invoice.invoice_no || ''} from ${agencyName} — Total: Rs. ${data.invoice.grand_total}. Thank you for your business!`
     );
     return `https://wa.me/${phone ? '91' + phone : ''}?text=${text}`;
   };
@@ -178,7 +179,7 @@ export function PrintPreviewModal({ invoiceId, stockIssue, issueId, onClose }) {
               Share via WhatsApp
             </a>
           )}
-          <Button icon={<Printer size={14} />} onClick={() => window.print()}>Print</Button>
+          <Button variant="success" icon={<Printer size={14} />} onClick={() => window.print()}>Print</Button>
           <Button variant="secondary" icon={<X size={14} />} onClick={onClose}>Close</Button>
         </div>
       </div>

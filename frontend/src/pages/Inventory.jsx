@@ -141,11 +141,11 @@ export function StockHubPanel() {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs text-ink-muted">{filteredRows.length} item(s) in view</span>
-              <button onClick={handleExportExcel} disabled={exportingExcel} className="flex items-center gap-1.5 rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
+              <button onClick={handleExportExcel} disabled={exportingExcel} className="flex items-center gap-1.5 rounded bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors disabled:opacity-60">
                 <FileSpreadsheet className="h-3.5 w-3.5" />
                 {exportingExcel ? 'Exporting…' : 'Export Excel'}
               </button>
-              <button onClick={handleExportPdf} disabled={filteredRows.length === 0} className="flex items-center gap-1.5 rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
+              <button onClick={handleExportPdf} disabled={filteredRows.length === 0} className="flex items-center gap-1.5 rounded bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors disabled:opacity-60">
                 <FileDown className="h-3.5 w-3.5" />
                 Export PDF
               </button>
@@ -874,12 +874,12 @@ export function VanStockPanel({ canManage }) {
             </div>
             {employeeId && (
               <div className="px-3.5 py-1.5 border-b border-border-soft flex flex-wrap items-center gap-1.5 bg-surface-subtle/20">
-                <button onClick={handlePrint} className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200">Print</button>
-                <button onClick={handleExportPdf} className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200">Download PDF</button>
-                <button onClick={handleExportExcel} disabled={exporting} className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
+                <button onClick={handlePrint} className="rounded bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors">Print</button>
+                <button onClick={handleExportPdf} className="rounded bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors">Download PDF</button>
+                <button onClick={handleExportExcel} disabled={exporting} className="rounded bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors disabled:opacity-60">
                   {exporting ? 'Exporting…' : 'Export Excel'}
                 </button>
-                <button onClick={handleExportSelectedExcel} disabled={exporting} className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
+                <button onClick={handleExportSelectedExcel} disabled={exporting} className="rounded bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors disabled:opacity-60">
                   Export Selected
                 </button>
                 {selectedItemIds.length > 0 && (
@@ -936,12 +936,12 @@ export function VanStockPanel({ canManage }) {
               </span>
             </div>
             <div className="px-3.5 py-1.5 border-b border-border-soft flex flex-wrap items-center gap-1.5 bg-surface-subtle/20">
-              <button onClick={() => handleIssuesPdfOrPrint(true)} className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200">Print</button>
-              <button onClick={() => handleIssuesPdfOrPrint(false)} className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200">Download PDF</button>
-              <button onClick={handleExportIssuesExcel} disabled={issueExporting} className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
+              <button onClick={() => handleIssuesPdfOrPrint(true)} className="rounded bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors">Print</button>
+              <button onClick={() => handleIssuesPdfOrPrint(false)} className="rounded bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors">Download PDF</button>
+              <button onClick={handleExportIssuesExcel} disabled={issueExporting} className="rounded bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors disabled:opacity-60">
                 {issueExporting ? 'Exporting…' : 'Export Excel'}
               </button>
-              <button onClick={handleExportSelectedIssuesExcel} disabled={issueExporting} className="rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-ink hover:bg-gray-200 disabled:opacity-60">
+              <button onClick={handleExportSelectedIssuesExcel} disabled={issueExporting} className="rounded bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors disabled:opacity-60">
                 Export Selected
               </button>
               {selectedIssueIds.length > 0 && <span className="text-xs text-ink-muted">{selectedIssueIds.length} selected</span>}
@@ -997,7 +997,7 @@ export function VanStockPanel({ canManage }) {
                             <button
                               type="button"
                               onClick={() => setPrintingIssue(i)}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition cursor-pointer"
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition cursor-pointer"
                               title="Print Stock Issue Bill"
                             >
                               <Printer className="w-3.5 h-3.5" />
@@ -1021,7 +1021,7 @@ export function VanStockPanel({ canManage }) {
                                   <button
                                     type="button"
                                     onClick={() => setPrintingIssue(i)}
-                                    className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition cursor-pointer"
+                                    className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition cursor-pointer"
                                   >
                                     <Printer className="w-3 h-3" />
                                     <span>Print Bill</span>

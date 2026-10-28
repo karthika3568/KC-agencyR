@@ -64,7 +64,8 @@ export function A5Template({ data }) {
     : (data?.title || (isNonGst ? 'BILL OF SUPPLY / ESTIMATE' : 'TAX INVOICE'));
 
   // Company details resolution
-  const companyName = branch.print_name || branch.name || DEFAULT_COMPANY_DETAILS.name;
+  const rawCompanyName = branch.print_name || branch.name || DEFAULT_COMPANY_DETAILS.name;
+  const companyName = rawCompanyName.replace(/AJ\s*AGENCY/gi, 'KC AGENCY').replace(/AJ\s*Agency/gi, 'KC Agency');
   const companyAddress = [branch.address_line1, branch.city, branch.state, branch.pincode]
     .filter(Boolean)
     .join(', ') || DEFAULT_COMPANY_DETAILS.address;

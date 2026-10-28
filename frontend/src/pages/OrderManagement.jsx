@@ -157,7 +157,7 @@ function PrebookingPrintView({ data, onClose }) {
           <Button variant="secondary" size="sm" onClick={onClose}>
             Close
           </Button>
-          <Button size="sm" onClick={() => window.print()}>
+          <Button variant="success" size="sm" onClick={() => window.print()}>
             Print
           </Button>
         </div>
@@ -707,7 +707,7 @@ function CustomerPrebookingPanel() {
               />
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="secondary" size="sm" onClick={() => customerPrebookingsApi.downloadExport()}>
+              <Button variant="success" size="sm" onClick={() => customerPrebookingsApi.downloadExport()}>
                 Export Excel
               </Button>
               <span className="text-xs text-ink-muted">{rows.length} order(s)</span>
@@ -771,7 +771,7 @@ function CustomerPrebookingPanel() {
                           <button
                             title="Print Slip"
                             onClick={() => setPrintingId(r.id)}
-                            className="p-1 rounded hover:bg-surface-subtle text-ink-muted hover:text-ink transition"
+                            className="p-1 rounded hover:bg-emerald-50 text-emerald-600 hover:text-emerald-700 transition"
                           >
                             <Printer className="w-3.5 h-3.5" />
                           </button>
@@ -956,7 +956,7 @@ function RequestPrintView({ data, onClose }) {
           <Button variant="secondary" size="sm" onClick={onClose}>
             Close
           </Button>
-          <Button size="sm" onClick={() => window.print()}>
+          <Button variant="success" size="sm" onClick={() => window.print()}>
             Print
           </Button>
         </div>
@@ -1344,7 +1344,7 @@ function SupplierRequestPanel() {
                           <button
                             title="Print Indent"
                             onClick={() => setPrintingId(r.id)}
-                            className="p-1 rounded hover:bg-surface-subtle text-ink-muted hover:text-ink transition"
+                            className="p-1 rounded hover:bg-emerald-50 text-emerald-600 hover:text-emerald-700 transition"
                           >
                             <Printer className="w-3.5 h-3.5" />
                           </button>

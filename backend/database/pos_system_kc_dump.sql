@@ -87,7 +87,7 @@ CREATE TABLE `branches` (
 
 LOCK TABLES `branches` WRITE;
 /*!40000 ALTER TABLE `branches` DISABLE KEYS */;
-INSERT INTO `branches` VALUES (1,1,'Main Branch','AJ AGENCY',NULL,'PLACEHOLDER-GSTIN','PLACEHOLDER-PAN','Address line 1, edit in Settings','City','State','000000','0000000000','support@example.com',1,'active','2026-10-22 11:04:58');
+INSERT INTO `branches` VALUES (1,1,'Main Branch','KC AGENCY',NULL,'PLACEHOLDER-GSTIN','PLACEHOLDER-PAN','Address line 1, edit in Settings','City','State','000000','0000000000','support@example.com',1,'active','2026-10-22 11:04:58');
 /*!40000 ALTER TABLE `branches` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -291,7 +291,7 @@ CREATE TABLE `company` (
 
 LOCK TABLES `company` WRITE;
 /*!40000 ALTER TABLE `company` DISABLE KEYS */;
-INSERT INTO `company` VALUES (1,'AJ Agency','2026-10-22 11:04:58');
+INSERT INTO `company` VALUES (1,'KC Agency','2026-10-22 11:04:58');
 /*!40000 ALTER TABLE `company` ENABLE KEYS */;
 UNLOCK TABLES;
 

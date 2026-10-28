@@ -22,13 +22,13 @@ SET NAMES utf8mb4;
 -- Company + one placeholder branch (address/GSTIN editable later in
 -- Settings > Company Profile, once that screen exists in a later phase)
 -- ---------------------------------------------------------------------
-INSERT INTO company (id, name) VALUES (1, 'AJ Agency')
+INSERT INTO company (id, name) VALUES (1, 'KC Agency')
   ON DUPLICATE KEY UPDATE name = VALUES(name);
 
 INSERT INTO branches
   (id, company_id, branch_name, print_name, gstin, pan_number, address_line1, city, state, pincode, phone, support_email, is_main_branch, status)
 VALUES
-  (1, 1, 'Main Branch', 'AJ AGENCY', 'PLACEHOLDER-GSTIN', 'PLACEHOLDER-PAN',
+  (1, 1, 'Main Branch', 'KC AGENCY', 'PLACEHOLDER-GSTIN', 'PLACEHOLDER-PAN',
    'Address line 1, edit in Settings', 'City', 'State', '000000', '0000000000', 'support@example.com', 1, 'active')
   ON DUPLICATE KEY UPDATE branch_name = VALUES(branch_name);
 

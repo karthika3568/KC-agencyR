@@ -354,7 +354,7 @@ export function CustomersPanel({ canManage }) {
               </select>
               {canManage && (
                 <>
-                  <Button variant="secondary" size="sm" onClick={() => customersApi.downloadExport()}>Export</Button>
+                  <Button variant="success" size="sm" onClick={() => customersApi.downloadExport()}>Export</Button>
                   <Button variant="secondary" size="sm" onClick={() => setImportOpen((v) => !v)}>Import</Button>
                 </>
               )}
@@ -364,7 +364,7 @@ export function CustomersPanel({ canManage }) {
           {importOpen && (
             <div className="border-b border-border-soft bg-slate-50/60 p-3">
               <div className="flex flex-wrap items-center gap-2">
-                <Button variant="secondary" size="sm" onClick={() => customersApi.downloadImportTemplate()}>Download Template</Button>
+                <Button variant="success" size="sm" onClick={() => customersApi.downloadImportTemplate()}>Download Template</Button>
                 <input
                   ref={fileInputRef}
                   type="file"
