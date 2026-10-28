@@ -8,3 +8,4 @@ WHERE `name` = 'AJ Agency' OR `id` = 1;
 UPDATE `branches` 
 SET `print_name` = 'KC AGENCY' 
 WHERE `print_name` = 'AJ AGENCY' OR `id` = 1;
+
