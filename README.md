@@ -40,7 +40,7 @@ Multi-branch, role-based POS + distributor billing system.
 
 All 7 phases of the spec are now built. A React Native mobile app (`mobile/`)
 was added afterward as a full-parity client of the same backend — see
-[`AJ_AGENCY_PROJECT_DOCUMENTATION.md`](AJ_AGENCY_PROJECT_DOCUMENTATION.md) for
+[`KC_AGENCY_PROJECT_DOCUMENTATION.md`](KC_AGENCY_PROJECT_DOCUMENTATION.md) for
 the consolidated technical reference covering all three apps (web, mobile,
 backend), the full API endpoint list, and database documentation.
 
@@ -574,8 +574,8 @@ Password: Admin@123
       /components    shared UI (FormModal, ImportExcelModal, ...)
       /api           mirrors frontend/src/api
       /navigation    RootNavigator, DrawerContent
-      /config        env.js (hardcoded API base URL — see AJ_AGENCY_PROJECT_DOCUMENTATION.md §8)
-  AJ_AGENCY_PROJECT_DOCUMENTATION.md   Consolidated technical reference
+      /config        env.js (hardcoded API base URL — see KC_AGENCY_PROJECT_DOCUMENTATION.md §8)
+  KC_AGENCY_PROJECT_DOCUMENTATION.md   Consolidated technical reference
 ```
 
 ## Assumptions made in Phase 1 (not 100% explicit in the spec)
