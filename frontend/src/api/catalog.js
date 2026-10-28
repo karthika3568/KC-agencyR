@@ -28,6 +28,7 @@ export const itemsApi = {
   create: async (data) => (await apiClient.post('/items', data)).data,
   update: async (id, data) => (await apiClient.put(`/items/${id}`, data)).data,
   remove: async (id) => (await apiClient.delete(`/items/${id}`)).data,
+  usage: async (id) => (await apiClient.get(`/items/${id}/usage`)).data,
 
   async uploadImage(id, file) {
     const form = new FormData();

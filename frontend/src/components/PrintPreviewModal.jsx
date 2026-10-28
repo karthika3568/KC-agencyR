@@ -47,10 +47,13 @@ export function adaptStockIssueToPrintData(issue) {
 
   const issueNo = issue.issue_no || (`VSI-${String(issue.id || '').padStart(5, '0')}`);
   const issueDate = issue.issued_at || issue.created_at || new Date().toISOString();
-  const salesmanName = issue.salesman_name || issue.salesman?.name || 'Salesman';
+  const salesmanName = issue.salesman_name || issue.salesman?.name || issue.employee_name || 'Salesman';
   const salesmanCode = issue.salesman_code || issue.salesman?.code || '';
   const salesmanPhone = issue.salesman_phone || issue.salesman?.phone || '';
   const branchName = issue.branch_name || issue.branch?.name || 'Main Branch';
+  const customerName = issue.customer_name || '';
+  const customerPhone = issue.customer_phone || '';
+  const prebookingNo = issue.prebooking_no || '';
   const notes = issue.notes || '';
 
   return {
@@ -62,6 +65,9 @@ export function adaptStockIssueToPrintData(issue) {
       salesman_name: salesmanName,
       salesman_code: salesmanCode,
       salesman_phone: salesmanPhone,
+      customer_name: customerName,
+      customer_phone: customerPhone,
+      prebooking_no: prebookingNo,
       branch_name: branchName,
       notes: notes,
       items: items,
@@ -69,6 +75,7 @@ export function adaptStockIssueToPrintData(issue) {
       subtotal: totalAmount,
       taxable_value: totalAmount,
     },
+    customer: customerName ? { ledger_name: customerName, name: customerName, phone: customerPhone } : null,
     branch: {
       name: branchName,
       print_name: 'KC AGENCY',

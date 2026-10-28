@@ -135,6 +135,7 @@ $router->delete('/api/items/{id}', fn ($id) => $itemController->destroy($id));
 $router->post('/api/items/{id}/image', fn ($id) => $itemController->uploadImage($id));
 $router->delete('/api/items/{id}/image', fn ($id) => $itemController->removeImage($id));
 $router->post('/api/items/image-search', fn () => $itemController->imageSearch());
+$router->get('/api/items/{id}/usage', fn ($id) => $itemController->usage($id));
 
 // ---------------------------------------------------------------
 // Parties — branch-scoped (section 4.2)
@@ -261,6 +262,7 @@ $router->post('/api/stock-adjustments', fn () => $stockAdjustments->store());
 $vanStock = new VanStockController($pdo);
 $router->post('/api/van-stock/issue', fn () => $vanStock->issue());
 $router->post('/api/van-stock/return', fn () => $vanStock->returnStock());
+$router->get('/api/van-stock/eligible-orders', fn () => $vanStock->eligibleOrders());
 $router->get('/api/van-stock/issues', fn () => $vanStock->issues());
 $router->get('/api/van-stock/issues/{id}', fn ($id) => $vanStock->showIssue($id));
 $router->get('/api/van-stock/{employeeId}', fn ($employeeId) => $vanStock->pending($employeeId));

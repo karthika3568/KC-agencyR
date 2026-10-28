@@ -12,6 +12,7 @@ import { purchaseRequestsApi, purchasesApi, customerPrebookingsApi, stockHubApi 
 import { resolveImageUrl } from '../utils/media';
 import { Tabs } from '../components/Tabs.jsx';
 import { Card } from '../components/Card.jsx';
+import { VanStockPanel } from './Inventory.jsx';
 import { Badge } from '../components/Badge.jsx';
 import { Button } from '../components/Button.jsx';
 import { Pagination } from '../components/Pagination.jsx';
@@ -452,6 +453,7 @@ function CustomerPrebookingPanel() {
   const canCreate = usePermission('orders.create_prebooking');
   const canManageStatus = usePermission('orders.manage_prebooking_status');
   const queryClient = useQueryClient();
+  const [, setSearchParams] = useSearchParams();
 
   const [search, setSearch] = useState('');
   const [editingBooking, setEditingBooking] = useState(null);
@@ -749,9 +751,14 @@ function CustomerPrebookingPanel() {
                               {statusKey.replace(/_/g, ' ')}
                             </Badge>
                             {r.issue_no && (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20" title={`Van Issue: ${r.issue_no}`}>
+                              <button
+                                type="button"
+                                onClick={() => setSearchParams({ tab: 'van-stock' })}
+                                className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 px-1.5 py-0.5 rounded border border-amber-500/20 cursor-pointer transition"
+                                title={`View Van Issue ${r.issue_no} in Van Stock tab`}
+                              >
                                 <Truck size={10} /> {r.issue_no}
-                              </span>
+                              </button>
                             )}
                             {r.invoice_no && (
                               <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20" title={`Invoice: ${r.invoice_no}`}>
@@ -852,6 +859,9 @@ function CustomerPrebookingPanel() {
           onClose={() => setDispatchingBooking(null)}
           onSuccess={() => {
             queryClient.invalidateQueries({ queryKey: ['customer-prebookings'] });
+            queryClient.invalidateQueries({ queryKey: ['van-issues'] });
+            queryClient.invalidateQueries({ queryKey: ['van-pending'] });
+            queryClient.invalidateQueries({ queryKey: ['eligible-orders'] });
             queryClient.invalidateQueries({ queryKey: ['stock-hub'] });
             showSuccess('Order dispatched to van! Stock issued successfully.');
           }}
@@ -1409,6 +1419,15 @@ export function OrderManagement() {
     'orders.view_prebooking',
     'orders.manage_prebooking_status',
   ]);
+  const canVanStock = usePermission([
+    'inventory.issue_van_stock',
+    'inventory.view_stock',
+    'orders.view_prebooking',
+    'orders.create_prebooking',
+  ]);
+  const canManageVanStock = usePermission([
+    'inventory.issue_van_stock',
+  ]);
   const canPurchaseIndent = usePermission([
     'orders.create_purchase_indent',
     'orders.approve_purchase_request',
@@ -1417,6 +1436,9 @@ export function OrderManagement() {
   const tabs = [];
   if (canPrebooking) {
     tabs.push({ key: 'prebooking', label: 'Customer Pre-Booking Orders', content: <CustomerPrebookingPanel /> });
+  }
+  if (canVanStock) {
+    tabs.push({ key: 'van-stock', label: 'Van / Salesman Stock', content: <VanStockPanel canManage={canManageVanStock} /> });
   }
   if (canPurchaseIndent) {
     tabs.push({ key: 'requests', label: 'Supplier Purchase Requests / Indents', content: <SupplierRequestPanel /> });
@@ -1450,7 +1472,13 @@ export function OrderManagement() {
           icon={<RefreshCw size={13} />}
           onClick={() => {
             if (canPrebooking) queryClient.invalidateQueries({ queryKey: ['customer-prebookings'] });
+            if (canVanStock) {
+              queryClient.invalidateQueries({ queryKey: ['van-issues'] });
+              queryClient.invalidateQueries({ queryKey: ['van-pending'] });
+              queryClient.invalidateQueries({ queryKey: ['eligible-orders'] });
+            }
             if (canPurchaseIndent) queryClient.invalidateQueries({ queryKey: ['purchase-requests'] });
+            queryClient.invalidateQueries({ queryKey: ['stock-hub'] });
           }}
         >
           Refresh

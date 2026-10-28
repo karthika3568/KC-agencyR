@@ -83,11 +83,20 @@ export function StaffPermissions() {
       setError('Name, email, and role are required.');
       return;
     }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+    if (form.phone && !/^[6-9]\d{9}$/.test(form.phone.trim())) {
+      setError('Phone number must be a valid 10-digit Indian mobile number.');
+      return;
+    }
 
     try {
       if (editingId) {
         const payload = {
           name: form.name.trim(),
+          email: form.email.trim(),
           phone: form.phone || null,
           role_id: Number(form.role_id),
           branch_id: form.branch_id ? Number(form.branch_id) : null,
@@ -187,7 +196,6 @@ export function StaffPermissions() {
                 <label className="text-xs font-bold text-slate-800 block mb-1">Email Address *</label>
                 <input
                   required
-                  disabled={Boolean(editingId)}
                   type="email"
                   placeholder="john@store.com"
                   value={form.email}
