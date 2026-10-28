@@ -1,6 +1,6 @@
 import { useState, useEffect, Fragment } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Package, Search, Plus, Trash2, CheckCircle2, AlertTriangle, Truck, SlidersHorizontal, X, FileSpreadsheet, FileDown, Printer, ChevronDown, ChevronRight } from 'lucide-react';
+import { Package, Search, Plus, Trash2, CheckCircle2, AlertTriangle, Truck, SlidersHorizontal, X, FileSpreadsheet, FileDown, Printer, ChevronDown, ChevronRight, ShoppingCart } from 'lucide-react';
 import { itemsApi } from '../api/catalog';
 import { usersApi } from '../api/users';
 import { stockAdjustmentsApi, stockHubApi, vanStockApi, vanStockIssuesApi } from '../api/purchasing';
@@ -479,6 +479,8 @@ export function VanStockPanel({ canManage }) {
   const isSalesman = user?.role === 'Field Sales Executive';
   const [employeeId, setEmployeeId] = useState(() => (isSalesman ? (user?.id ? String(user.id) : '') : (canManage ? '' : (user?.id ? String(user.id) : ''))));
   const [mode, setMode] = useState(() => (isSalesman ? 'return' : 'issue'));
+  const [selectedOrderId, setSelectedOrderId] = useState('');
+  const [notes, setNotes] = useState('');
   const [lines, setLines] = useState([{ item_id: '', qty: 1 }]);
   const [formError, setFormError] = useState('');
   const [message, setMessage] = useState('');
@@ -508,15 +510,56 @@ export function VanStockPanel({ canManage }) {
     queryFn: () => vanStockIssuesApi.list(employeeId || undefined),
     enabled: !!employeeId || canManage,
   });
+  const eligibleOrdersQuery = useQuery({
+    queryKey: ['eligible-orders'],
+    queryFn: () => vanStockApi.eligibleOrders('customer'),
+    enabled: canManage && mode === 'issue',
+  });
+
+  const eligibleOrders = eligibleOrdersQuery.data || [];
+  const selectedOrder = eligibleOrders.find((o) => String(o.id) === String(selectedOrderId));
+
+  const handleSelectOrder = (orderIdStr) => {
+    setSelectedOrderId(orderIdStr);
+    if (!orderIdStr) {
+      return;
+    }
+    const order = eligibleOrders.find((o) => String(o.id) === String(orderIdStr));
+    if (order) {
+      if (order.employee_id) {
+        setEmployeeId(String(order.employee_id));
+      }
+      if (order.items && order.items.length > 0) {
+        setLines(
+          order.items.map((it) => ({
+            item_id: String(it.item_id),
+            qty: Number(it.qty),
+            fromOrder: true,
+          }))
+        );
+      }
+      setNotes(`Order ${order.prebooking_no} for ${order.customer_name}`);
+    }
+  };
+
+  const handleClearOrder = () => {
+    setSelectedOrderId('');
+    setLines([{ item_id: '', qty: 1 }]);
+    setNotes('');
+  };
 
   const mutation = useMutation({
     mutationFn: (payload) => (mode === 'issue' ? vanStockApi.issue(payload) : vanStockApi.returnStock(payload)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['van-pending', employeeId] });
       queryClient.invalidateQueries({ queryKey: ['van-issues'] });
+      queryClient.invalidateQueries({ queryKey: ['eligible-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['customer-prebookings'] });
       queryClient.invalidateQueries({ queryKey: ['stock-hub'] });
       queryClient.invalidateQueries({ queryKey: ['items'] });
       setLines([{ item_id: '', qty: 1 }]);
+      setSelectedOrderId('');
+      setNotes('');
       setMessage(mode === 'issue' ? 'Stock issued to salesman successfully!' : 'Van stock return recorded.');
       setTimeout(() => setMessage(''), 3000);
     },
@@ -558,10 +601,20 @@ export function VanStockPanel({ canManage }) {
       return;
     }
 
-    await submitPayload({
+    const payload = {
       employee_id: Number(employeeId),
       items: validLines.map((l) => ({ item_id: Number(l.item_id), qty: Number(l.qty) })),
-    });
+    };
+    if (notes) payload.notes = notes;
+    if (mode === 'issue' && selectedOrderId) {
+      const ord = eligibleOrders.find((o) => String(o.id) === String(selectedOrderId));
+      if (ord) {
+        payload.prebooking_id = Number(ord.id);
+        payload.customer_id = Number(ord.customer_id);
+      }
+    }
+
+    await submitPayload(payload);
   };
 
   const confirmShortageAndIssue = async () => {
@@ -803,6 +856,57 @@ export function VanStockPanel({ canManage }) {
               <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="space-y-2">
                 {formError && <div className="text-xs text-red-400 bg-red-950/40 p-2.5 rounded border border-red-800/40">{formError}</div>}
 
+                {mode === 'issue' && (
+                  <div className="bg-indigo-500/10 border border-indigo-500/30 rounded-lg p-2.5 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold text-indigo-300 flex items-center gap-1.5">
+                        <ShoppingCart className="w-3.5 h-3.5 text-indigo-400" />
+                        Link Customer Pre-Booking Order
+                      </label>
+                      {selectedOrderId && (
+                        <button
+                          type="button"
+                          onClick={handleClearOrder}
+                          className="text-[10px] text-red-400 hover:text-red-300 underline font-medium"
+                        >
+                          Clear Order Link
+                        </button>
+                      )}
+                    </div>
+                    <select
+                      value={selectedOrderId}
+                      onChange={(e) => handleSelectOrder(e.target.value)}
+                      className="input w-full text-xs bg-surface border-indigo-500/40 text-ink"
+                    >
+                      <option value="">-- No Order Linked (General Van Stock Allocation) --</option>
+                      {eligibleOrders.map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.prebooking_no} — {o.customer_name} ({o.item_count} items · ₹{Number(o.estimated_total || 0).toLocaleString('en-IN')})
+                        </option>
+                      ))}
+                    </select>
+
+                    {selectedOrder && (
+                      <div className="text-[11px] bg-surface/90 border border-indigo-500/30 rounded p-2 text-ink space-y-1">
+                        <div className="flex items-center justify-between font-semibold">
+                          <span className="text-emerald-400 flex items-center gap-1">
+                            <span className="text-ink-muted font-normal">Customer:</span> {selectedOrder.customer_name}
+                          </span>
+                          <span className="font-mono text-gold bg-gold/10 px-1.5 py-0.5 rounded text-[10px]">
+                            {selectedOrder.prebooking_no}
+                          </span>
+                        </div>
+                        {selectedOrder.customer_phone && (
+                          <div className="text-[10.5px] text-ink-muted">Phone: {selectedOrder.customer_phone}</div>
+                        )}
+                        <div className="text-[10px] text-indigo-300 bg-indigo-500/10 px-2 py-1 rounded">
+                          ✓ {selectedOrder.items?.length || 0} order item(s) mapped automatically. You can adjust quantities or click <b>"+ Add Extra Item to Van"</b> below.
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div>
                   <label className="text-xs font-medium text-ink-muted block mb-0.5">Salesman *</label>
                   {isSalesman ? (
@@ -828,7 +932,12 @@ export function VanStockPanel({ canManage }) {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-ink-muted block">Stock Lines *</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-medium text-ink-muted block">Stock Lines *</label>
+                    {selectedOrderId && (
+                      <span className="text-[10.5px] text-indigo-400 font-medium">Order items + Extra items</span>
+                    )}
+                  </div>
                   {lines.map((line, idx) => (
                     <div key={idx} className="flex items-center gap-2">
                       <select
@@ -837,11 +946,17 @@ export function VanStockPanel({ canManage }) {
                         className="input text-xs flex-1"
                       >
                         <option value="">Select Item</option>
-                        {items.map((i) => (
-                          <option key={i.id} value={i.id}>
-                            {i.item_name}
-                          </option>
-                        ))}
+                        {items.map((i) => {
+                          const vanItem = mode === 'return' ? pending.find((p) => p.item_id === i.id) : null;
+                          const suffix = mode === 'return'
+                            ? (vanItem ? ` [In Van: ${vanItem.quantity_on_hand}]` : ' [In Van: 0]')
+                            : (i.item_code ? ` (${i.item_code})` : '');
+                          return (
+                            <option key={i.id} value={i.id}>
+                              {i.item_name}{suffix}
+                            </option>
+                          );
+                        })}
                       </select>
                       <input
                         type="number"
@@ -852,11 +967,17 @@ export function VanStockPanel({ canManage }) {
                         onChange={(e) => updateLine(idx, { qty: e.target.value })}
                         className="input text-xs w-20"
                       />
+                      {line.fromOrder && (
+                        <span className="text-[9px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-1 py-0.5 rounded whitespace-nowrap">
+                          Order
+                        </span>
+                      )}
                       {lines.length > 1 && (
                         <button
                           type="button"
                           onClick={() => removeLine(idx)}
                           className="p-1 text-red-400 hover:text-red-300 transition"
+                          title="Remove item line"
                         >
                           <X className="w-4 h-4" />
                         </button>
@@ -866,10 +987,22 @@ export function VanStockPanel({ canManage }) {
                   <button
                     type="button"
                     onClick={addLine}
-                    className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition"
+                    className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition flex items-center gap-1 pt-0.5"
                   >
-                    + Add Another Item
+                    <Plus className="w-3.5 h-3.5" />
+                    {selectedOrderId ? 'Add Extra Item to Van' : 'Add Another Item'}
                   </button>
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-ink-muted block mb-0.5">Notes (Optional)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Route / Delivery instructions"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    className="input w-full text-xs"
+                  />
                 </div>
 
                 <div className="pt-1">
@@ -880,7 +1013,9 @@ export function VanStockPanel({ canManage }) {
                     disabled={!employeeId}
                     className="w-full"
                   >
-                    {mode === 'issue' ? 'Issue Stock to Salesman' : 'Save Van Stock Return'}
+                    {mode === 'issue'
+                      ? (selectedOrderId ? 'Issue Stock & Dispatch Order' : 'Issue Stock to Salesman')
+                      : 'Save Van Stock Return'}
                   </Button>
                 </div>
               </form>
@@ -983,6 +1118,7 @@ export function VanStockPanel({ canManage }) {
                     </th>
                     <th className="w-6 px-1 py-1.5 text-center"></th>
                     <th className="px-3 py-1.5">Issue #</th>
+                    <th className="px-3 py-1.5">Order / Customer</th>
                     <th className="px-3 py-1.5">Salesman</th>
                     <th className="px-3 py-1.5">Date</th>
                     <th className="px-3 py-1.5 text-center">Items</th>
@@ -1011,6 +1147,27 @@ export function VanStockPanel({ canManage }) {
                             </button>
                           </td>
                           <td className="px-3 py-1.5 font-mono font-medium text-ink">{i.issue_no}</td>
+                          <td className="px-3 py-1.5">
+                            {i.customer_name || i.prebooking_no ? (
+                              <div className="flex flex-col gap-0.5">
+                                {i.prebooking_no && (
+                                  <span className="font-mono text-[11px] font-semibold text-indigo-400 flex items-center gap-1">
+                                    <ShoppingCart size={10} /> {i.prebooking_no}
+                                  </span>
+                                )}
+                                <span className="text-ink font-medium text-xs">
+                                  {i.customer_name || 'Customer'}
+                                </span>
+                                {i.customer_phone && (
+                                  <span className="text-[10px] text-ink-muted">
+                                    {i.customer_phone}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-ink-muted text-[11px] italic">General Allocation</span>
+                            )}
+                          </td>
                           <td className="px-3 py-1.5 text-ink">{i.employee_name}</td>
                           <td className="px-3 py-1.5 text-ink-muted whitespace-nowrap">{i.issued_at}</td>
                           <td className="px-3 py-1.5 text-center text-ink-muted font-medium">{i.item_count}</td>
@@ -1032,13 +1189,23 @@ export function VanStockPanel({ canManage }) {
                         </tr>
                         {isExpanded && (
                           <tr className="bg-surface-subtle/20 border-b border-border-soft">
-                            <td colSpan={9} className="p-3">
+                            <td colSpan={10} className="p-3">
                               <div className="bg-surface border border-border-soft rounded-lg p-3 space-y-2 shadow-xs">
-                                <div className="flex items-center justify-between border-b border-border-soft pb-1.5">
-                                  <div className="flex items-center gap-2">
+                                <div className="flex flex-wrap items-center justify-between border-b border-border-soft pb-1.5 gap-2">
+                                  <div className="flex flex-wrap items-center gap-2">
                                     <span className="font-semibold text-xs text-ink">
                                       Product Breakdown — <span className="font-mono text-indigo-400">{i.issue_no}</span>
                                     </span>
+                                    {i.prebooking_no && (
+                                      <span className="text-[10.5px] bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 px-1.5 py-0.5 rounded font-mono">
+                                        Order: {i.prebooking_no}
+                                      </span>
+                                    )}
+                                    {i.customer_name && (
+                                      <span className="text-[10.5px] text-emerald-400 font-medium">
+                                        Customer: {i.customer_name}
+                                      </span>
+                                    )}
                                     <span className="text-[11px] text-ink-muted">
                                       ({i.items?.length || 0} product{i.items?.length === 1 ? '' : 's'})
                                     </span>
@@ -1108,7 +1275,7 @@ export function VanStockPanel({ canManage }) {
                   })}
                   {issues.length === 0 && (
                     <tr>
-                      <td colSpan={9} className="px-4 py-8 text-center text-ink-muted text-xs">
+                      <td colSpan={10} className="px-4 py-8 text-center text-ink-muted text-xs">
                         No issue transactions found.
                       </td>
                     </tr>

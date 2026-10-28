@@ -262,6 +262,7 @@ $router->post('/api/stock-adjustments', fn () => $stockAdjustments->store());
 $vanStock = new VanStockController($pdo);
 $router->post('/api/van-stock/issue', fn () => $vanStock->issue());
 $router->post('/api/van-stock/return', fn () => $vanStock->returnStock());
+$router->get('/api/van-stock/eligible-orders', fn () => $vanStock->eligibleOrders());
 $router->get('/api/van-stock/issues', fn () => $vanStock->issues());
 $router->get('/api/van-stock/issues/{id}', fn ($id) => $vanStock->showIssue($id));
 $router->get('/api/van-stock/{employeeId}', fn ($employeeId) => $vanStock->pending($employeeId));

@@ -604,12 +604,16 @@ CREATE TABLE IF NOT EXISTS stock_issue_notes (
   issue_no VARCHAR(30) NULL,
   branch_id INT UNSIGNED NOT NULL,
   employee_id INT UNSIGNED NOT NULL,
+  customer_id INT UNSIGNED NULL,
+  prebooking_id INT UNSIGNED NULL,
   issued_by INT UNSIGNED NOT NULL,
   issued_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   notes VARCHAR(255) NULL,
   UNIQUE KEY uq_stock_issue_no (issue_no),
   CONSTRAINT fk_sin_branch FOREIGN KEY (branch_id) REFERENCES branches(id),
   CONSTRAINT fk_sin_employee FOREIGN KEY (employee_id) REFERENCES users(id),
+  CONSTRAINT fk_sin_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL,
+  CONSTRAINT fk_sin_prebooking FOREIGN KEY (prebooking_id) REFERENCES customer_prebookings(id) ON DELETE SET NULL,
   CONSTRAINT fk_sin_issued_by FOREIGN KEY (issued_by) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

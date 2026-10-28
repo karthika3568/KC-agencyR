@@ -432,7 +432,10 @@ class CustomerPrebookingController
                 $targetEmployeeId,
                 (int) $claims['sub'],
                 $body['notes'] ?? ("Dispatched from Pre-booking #" . ($booking['prebooking_no'] ?? $id)),
-                $items
+                $items,
+                false,
+                (int) $booking['customer_id'],
+                (int) $id
             );
             if (isset($result['warning'])) {
                 $first = $result['shortages'][0];
