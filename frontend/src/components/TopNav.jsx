@@ -590,7 +590,7 @@ export function TopNav({ onToggleSidebar, onToggleMobile } = {}) {
 
   if (isFieldSales) {
     const FIELD_SALES_NAV = [
-      { to: '/', label: 'Dashboard', perm: 'dashboard.view_financial_summary', icon: LayoutDashboard },
+      { to: '/', label: 'Dashboard', perm: null, icon: LayoutDashboard },
       { to: '/customers', label: 'Customers', perm: 'parties.manage_customers', icon: Users },
       { to: '/orders', label: 'Orders', perm: ['orders.create_prebooking', 'orders.view_prebooking', 'orders.manage_prebooking_status'], icon: ClipboardList },
       { to: '/vans', label: 'Vans', perm: ['inventory.issue_van_stock', 'inventory.view_stock'], icon: Truck },
@@ -598,7 +598,7 @@ export function TopNav({ onToggleSidebar, onToggleMobile } = {}) {
       { to: '/stock-history', label: 'Stock History', perm: ['inventory.view_stock', 'inventory.issue_van_stock'], icon: History },
     ];
     const visibleFieldSalesNav = FIELD_SALES_NAV.filter((item) =>
-      checkPermission(user, item.perm, item.to)
+      !item.perm || checkPermission(user, item.perm, item.to)
     );
 
     return (

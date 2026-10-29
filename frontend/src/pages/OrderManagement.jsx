@@ -609,7 +609,7 @@ function CustomerPrebookingPanel() {
             </div>
 
             <form onSubmit={handleFormSubmit} onKeyDown={handleFormKeyDown} className="space-y-2">
-              {formError && <div className="text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{formError}</div>}
+              {formError && <div className="text-xs font-medium text-red-600 bg-white p-2 rounded border border-red-300 shadow-sm">{formError}</div>}
 
               <div>
                 <label className="text-xs font-medium text-ink-muted block mb-0.5">Customer *</label>
@@ -1252,7 +1252,7 @@ function SupplierRequestPanel() {
             </div>
 
             <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="space-y-2">
-              {formError && <div className="text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{formError}</div>}
+              {formError && <div className="text-xs font-medium text-red-600 bg-white p-2 rounded border border-red-300 shadow-sm">{formError}</div>}
 
               <div>
                 <label className="text-xs font-medium text-ink-muted block mb-0.5">Supplier *</label>

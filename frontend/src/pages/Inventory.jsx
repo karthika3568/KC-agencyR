@@ -153,7 +153,7 @@ export function StockHubPanel() {
               </button>
             </div>
           </div>
-          {exportError && <div className="text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{exportError}</div>}
+          {exportError && <div className="text-xs font-medium text-red-600 bg-white p-2 rounded border border-red-300 shadow-sm">{exportError}</div>}
 
           <div className="card overflow-hidden">
             <div className="px-3.5 py-2 border-b border-border-soft flex items-center justify-between">
@@ -321,7 +321,7 @@ export function StockAdjustmentPanel({ canManage }) {
             </div>
 
             <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="space-y-2">
-              {formError && <div className="text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{formError}</div>}
+              {formError && <div className="text-xs font-medium text-red-600 bg-white p-2 rounded border border-red-300 shadow-sm">{formError}</div>}
 
               <div>
                 <label className="text-xs font-medium text-ink-muted block mb-0.5">Select Item *</label>
@@ -478,15 +478,13 @@ export function VanStockPanel({ canManage }) {
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
-  const isSalesman = user?.role === 'Field Sales Executive';
 
   const urlMode = searchParams.get('mode') || searchParams.get('tab');
   const urlEmpId = searchParams.get('employee_id');
 
   const [employeeId, setEmployeeId] = useState(() => {
     if (urlEmpId) return urlEmpId;
-    if (isSalesman) return user?.id ? String(user.id) : '';
-    return canManage ? '' : (user?.id ? String(user.id) : '');
+    return user?.id ? String(user.id) : '';
   });
 
   const [mode, setMode] = useState(() => {
@@ -507,13 +505,11 @@ export function VanStockPanel({ canManage }) {
 
   useEffect(() => {
     if (urlEmpId) {
-      if (String(employeeId) !== String(urlEmpId)) setEmployeeId(String(urlEmpId));
-    } else if (isSalesman && user?.id) {
-      if (String(employeeId) !== String(user.id)) setEmployeeId(String(user.id));
-    } else if (!canManage && user?.id && String(employeeId) !== String(user.id)) {
+      setEmployeeId(String(urlEmpId));
+    } else if (!canManage && user?.id) {
       setEmployeeId(String(user.id));
     }
-  }, [isSalesman, canManage, user?.id, employeeId, urlEmpId]);
+  }, [canManage, user?.id, urlEmpId]);
 
   useEffect(() => {
     const m = searchParams.get('mode') || searchParams.get('tab');
@@ -876,7 +872,7 @@ export function VanStockPanel({ canManage }) {
               </div>
 
               <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="space-y-2">
-                {formError && <div className="text-xs text-red-400 bg-red-950/40 p-2.5 rounded border border-red-800/40">{formError}</div>}
+                {formError && <div className="text-xs font-medium text-red-600 bg-white p-2.5 rounded border border-red-300 shadow-sm">{formError}</div>}
 
                 {mode === 'issue' && (
                   <div className="bg-indigo-500/10 border border-indigo-500/30 rounded-lg p-2.5 space-y-1.5">
@@ -1069,7 +1065,7 @@ export function VanStockPanel({ canManage }) {
                 )}
               </div>
             )}
-            {exportError && <div className="mx-3.5 mt-2 text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{exportError}</div>}
+            {exportError && <div className="mx-3.5 mt-2 text-xs font-medium text-red-600 bg-white p-2 rounded border border-red-300 shadow-sm">{exportError}</div>}
             <div className="max-h-[calc(100vh-320px)] overflow-x-auto overflow-y-auto">
               <table className="w-full min-w-[650px] text-left text-xs">
                 <thead className="sticky top-0 bg-page z-10">
@@ -1128,7 +1124,7 @@ export function VanStockPanel({ canManage }) {
               </button>
               {selectedIssueIds.length > 0 && <span className="text-xs text-ink-muted">{selectedIssueIds.length} selected</span>}
             </div>
-            {issueExportError && <div className="mx-3.5 mt-2 text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{issueExportError}</div>}
+            {issueExportError && <div className="mx-3.5 mt-2 text-xs font-medium text-red-600 bg-white p-2 rounded border border-red-300 shadow-sm">{issueExportError}</div>}
             <div className="max-h-[calc(100vh-320px)] overflow-x-auto overflow-y-auto">
               <table className="w-full min-w-[650px] text-left text-xs">
                 <thead className="sticky top-0 bg-page z-10">
