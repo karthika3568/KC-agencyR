@@ -113,9 +113,18 @@ export function CustomersPanel({ canManage }) {
       return;
     }
     const trimmedGstin = gstin.trim().toUpperCase();
-    if (trimmedGstin && !isValidGstin(trimmedGstin)) {
-      setFormError('Invalid GSTIN format. Expected 15 characters, e.g. 27AAPFU0939F1ZV.');
-      return;
+    if (trimmedGstin) {
+      if (!isValidGstin(trimmedGstin)) {
+        setFormError('Invalid GSTIN format. Expected 15 characters, e.g. 27AAPFU0939F1ZV.');
+        return;
+      }
+      const duplicate = rows.find(
+        (r) => r.id !== editingId && (r.gstin || '').trim().toUpperCase() === trimmedGstin
+      );
+      if (duplicate) {
+        setFormError(`GSTIN "${trimmedGstin}" is already registered to customer "${duplicate.ledger_name || duplicate.name}".`);
+        return;
+      }
     }
     const payload = {
       ledger_name: ledgerName.trim(),
@@ -561,9 +570,18 @@ function SuppliersPanel({ canManage }) {
       return;
     }
     const trimmedGstin = gstin.trim().toUpperCase();
-    if (trimmedGstin && !isValidGstin(trimmedGstin)) {
-      setFormError('Invalid GSTIN format. Expected 15 characters, e.g. 27AAPFU0939F1ZV.');
-      return;
+    if (trimmedGstin) {
+      if (!isValidGstin(trimmedGstin)) {
+        setFormError('Invalid GSTIN format. Expected 15 characters, e.g. 27AAPFU0939F1ZV.');
+        return;
+      }
+      const duplicate = rows.find(
+        (r) => r.id !== editingId && (r.gstin || '').trim().toUpperCase() === trimmedGstin
+      );
+      if (duplicate) {
+        setFormError(`GSTIN "${trimmedGstin}" is already registered to supplier "${duplicate.name}".`);
+        return;
+      }
     }
     const payload = {
       name: name.trim(),

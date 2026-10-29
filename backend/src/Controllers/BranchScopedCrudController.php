@@ -123,7 +123,6 @@ class BranchScopedCrudController
         Response::json($this->model()->all(['branch_id' => $branchId]));
     }
 
-
     public function show(string $id): void
     {
         $claims = JwtAuthMiddleware::authenticate();
@@ -161,6 +160,38 @@ class BranchScopedCrudController
         }
     }
 
+    private function checkDuplicateGstin(int $branchId, mixed $gstin, ?int $excludeId = null): void
+    {
+        if ($gstin === null) {
+            return;
+        }
+
+        $gstin = strtoupper(trim((string) $gstin));
+        if ($gstin === '') {
+            return;
+        }
+
+        $nameCol = $this->table === 'customers' ? 'ledger_name' : 'name';
+        $sql = "SELECT id, {$nameCol} AS entity_name FROM {$this->table} WHERE branch_id = :branch_id AND UPPER(TRIM(gstin)) = :gstin";
+        $params = ['branch_id' => $branchId, 'gstin' => $gstin];
+
+        if ($excludeId !== null) {
+            $sql .= " AND id != :exclude_id";
+            $params['exclude_id'] = $excludeId;
+        }
+
+        $sql .= " LIMIT 1";
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+        $existing = $stmt->fetch();
+
+        if ($existing) {
+            $entityType = $this->table === 'customers' ? 'customer' : 'supplier';
+            Response::error("GSTIN '{$gstin}' is already registered to {$entityType} '{$existing['entity_name']}'", 422);
+        }
+    }
+
     public function store(): void
     {
         $claims = JwtAuthMiddleware::authenticate();
@@ -168,7 +199,13 @@ class BranchScopedCrudController
 
         $data = json_decode(file_get_contents('php://input'), true) ?? [];
         $this->validateCommonFields($data);
-        $data['branch_id'] = $this->resolveBranchId($claims);
+        $branchId = $this->resolveBranchId($claims);
+        $data['branch_id'] = $branchId;
+
+        if (in_array('gstin', $this->columns, true) && array_key_exists('gstin', $data)) {
+            $this->checkDuplicateGstin($branchId, $data['gstin']);
+        }
+
         foreach ($this->autoDefaults as $column => $default) {
             if (!isset($data[$column]) || $data[$column] === '') {
                 $data[$column] = $default($claims);
@@ -199,6 +236,10 @@ class BranchScopedCrudController
         $data = json_decode(file_get_contents('php://input'), true) ?? [];
         unset($data['branch_id']); // branch is fixed at creation, never reassigned via update
         $this->validateCommonFields($data);
+
+        if (in_array('gstin', $this->columns, true) && array_key_exists('gstin', $data)) {
+            $this->checkDuplicateGstin((int) $row['branch_id'], $data['gstin'], (int) $row['id']);
+        }
 
         $this->model()->update((int) $row['id'], $data);
         Response::json($this->model()->find((int) $row['id']));

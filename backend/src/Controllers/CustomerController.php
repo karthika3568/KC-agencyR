@@ -166,13 +166,20 @@ class CustomerController
         // re-importing the same file updates instead of duplicating.
         $existingByPhone = [];
         $existingByName = [];
-        $stmt = $this->pdo->prepare('SELECT id, ledger_name, phone FROM customers WHERE branch_id = :b');
+        $existingByGstin = [];
+        $stmt = $this->pdo->prepare('SELECT id, ledger_name, phone, gstin FROM customers WHERE branch_id = :b');
         $stmt->execute(['b' => $branchId]);
         foreach ($stmt->fetchAll() as $row) {
             if (!empty($row['phone'])) {
                 $existingByPhone[$this->normalizePhone((string) $row['phone'])] = (int) $row['id'];
             }
             $existingByName[$this->normalizeName((string) $row['ledger_name'])] = (int) $row['id'];
+            if (!empty($row['gstin'])) {
+                $existingByGstin[strtoupper(trim((string) $row['gstin']))] = [
+                    'id' => (int) $row['id'],
+                    'name' => (string) $row['ledger_name'],
+                ];
+            }
         }
 
         $results = [];
@@ -183,7 +190,7 @@ class CustomerController
                 continue; // skip blank rows
             }
             $record = array_combine($header, array_pad($row, count($header), null));
-            [$mapped, $rowErrors] = $this->mapImportRow($record, $existingByPhone, $existingByName);
+            [$mapped, $rowErrors] = $this->mapImportRow($record, $existingByPhone, $existingByName, $existingByGstin);
 
             $results[] = [
                 'row' => $rowNumber + 2,
@@ -247,7 +254,8 @@ class CustomerController
     private function mapImportRow(
         array $record,
         array &$existingByPhone,
-        array &$existingByName
+        array &$existingByName,
+        array &$existingByGstin
     ): array {
         $errors = [];
 
@@ -284,8 +292,21 @@ class CustomerController
         // none of those must be stored literally as a GSTIN.
         $gstinRaw = trim((string) ($record['gstin'] ?? ''));
         $gstin = in_array(strtoupper($gstinRaw), ['', '0', 'NA', 'N/A', '-', 'NIL'], true) ? null : $gstinRaw;
-        if ($gstin !== null && !preg_match('/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/', strtoupper($gstin))) {
-            $errors[] = "invalid GSTIN format '{$gstin}'";
+        if ($gstin !== null) {
+            $upperGstin = strtoupper($gstin);
+            if (!preg_match('/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/', $upperGstin)) {
+                $errors[] = "invalid GSTIN format '{$gstin}'";
+            } elseif (isset($existingByGstin[$upperGstin])) {
+                $existingOwner = $existingByGstin[$upperGstin];
+                if ($existingId === null || $existingOwner['id'] !== $existingId) {
+                    $errors[] = "GSTIN '{$upperGstin}' is already registered to customer '{$existingOwner['name']}'";
+                }
+            } else {
+                $existingByGstin[$upperGstin] = [
+                    'id' => $existingId ?? -1,
+                    'name' => $ledgerName !== '' ? $ledgerName : 'Unknown',
+                ];
+            }
         }
 
         $pricingType = strtolower(trim((string) ($record['pricing_type'] ?? '')));
