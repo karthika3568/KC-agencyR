@@ -540,7 +540,7 @@ export function POS() {
     // Shift focus to product search field and automatically show product list
     setTimeout(() => {
       hasUserNavigatedDropdownRef.current = false;
-      ignoreEnterUntilRef.current = Date.now() + 250;
+      ignoreEnterUntilRef.current = Date.now() + 80;
       productSearchInputRef.current?.focus();
       productSearchInputRef.current?.select();
       setShowProductDropdown(true);
@@ -582,7 +582,7 @@ export function POS() {
     setShowProductDropdown(false);
     setProductSelectedIndex(0);
     hasUserNavigatedDropdownRef.current = false;
-    ignoreEnterUntilRef.current = Date.now() + 250;
+    ignoreEnterUntilRef.current = Date.now() + 80;
     focusBillCell(targetIndex, 'qty');
     return true;
   };
@@ -722,7 +722,7 @@ export function POS() {
         setShowCustomerDropdown(false);
         setTimeout(() => {
           hasUserNavigatedDropdownRef.current = false;
-          ignoreEnterUntilRef.current = Date.now() + 250;
+          ignoreEnterUntilRef.current = Date.now() + 80;
           productSearchInputRef.current?.focus();
           productSearchInputRef.current?.select();
           setShowProductDropdown(true);
@@ -768,7 +768,7 @@ export function POS() {
       e.preventDefault();
       e.stopPropagation();
 
-      if (Date.now() < ignoreEnterUntilRef.current) {
+      if (e.repeat || Date.now() < ignoreEnterUntilRef.current) {
         return;
       }
 
@@ -782,7 +782,7 @@ export function POS() {
         return;
       }
 
-      if (hasUserNavigatedDropdownRef.current && showProductDropdown && displayedProducts.length > 0 && productSelectedIndex >= 0 && productSelectedIndex < displayedProducts.length) {
+      if (showProductDropdown && displayedProducts.length > 0 && productSelectedIndex >= 0 && productSelectedIndex < displayedProducts.length) {
         addItem(displayedProducts[productSelectedIndex]);
         return;
       }
@@ -816,7 +816,7 @@ export function POS() {
     setShowProductDropdown(true);
     setProductSelectedIndex(0);
     hasUserNavigatedDropdownRef.current = false;
-    ignoreEnterUntilRef.current = Date.now() + 250;
+    ignoreEnterUntilRef.current = Date.now() + 80;
     setTimeout(() => {
       productSearchInputRef.current?.focus();
       productSearchInputRef.current?.select();
