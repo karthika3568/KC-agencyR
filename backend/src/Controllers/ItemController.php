@@ -539,6 +539,32 @@ class ItemController
         $this->import(true);
     }
 
+    /**
+     * Cleans and parses numeric cell values from Excel (handles ₹, $, commas, %, etc.).
+     */
+    private function cleanNumeric(mixed $value): ?float
+    {
+        if ($value === null) {
+            return null;
+        }
+        if (is_numeric($value)) {
+            return (float) $value;
+        }
+        $str = trim((string) $value);
+        if ($str === '') {
+            return null;
+        }
+        $cleaned = str_ireplace(['₹', '$', 'rs.', 'rs', '%', ','], '', $str);
+        $cleaned = trim($cleaned);
+        if (is_numeric($cleaned)) {
+            return (float) $cleaned;
+        }
+        return null;
+    }
+
+    /**
+     * Excel import — validate every row first; only ?commit=1 writes.
+     */
     private function import(bool $commit): void
     {
         $claims = JwtAuthMiddleware::authenticate();
@@ -548,32 +574,64 @@ class ItemController
             Response::error('No file uploaded (expected multipart field "file")', 422);
         }
 
-        $spreadsheet = IOFactory::load($_FILES['file']['tmp_name']);
+        try {
+            $spreadsheet = IOFactory::load($_FILES['file']['tmp_name']);
+        } catch (\Throwable $e) {
+            Response::error('Invalid or unsupported Excel file format. Please upload a valid .xlsx or .xls file.', 422);
+        }
+
         $sheet = $spreadsheet->getActiveSheet();
         $rows = $sheet->toArray(null, true, true, false);
 
+        if (empty($rows)) {
+            Response::error('The uploaded Excel file contains no data rows.', 422);
+        }
+
         $rawHeader = array_map(fn ($h) => trim((string) $h), array_shift($rows) ?? []);
-        $header = array_map(fn ($h) => $this->normalizeHeader($h), $rawHeader);
+
+        // Discard completely empty trailing columns
+        while (!empty($rawHeader) && end($rawHeader) === '') {
+            array_pop($rawHeader);
+        }
+
+        if (empty($rawHeader)) {
+            Response::error('Excel file header row is missing or empty.', 422);
+        }
+
+        // Build unique, normalized header keys
+        $cleanHeaders = [];
+        $headerCounts = [];
+        foreach ($rawHeader as $idx => $h) {
+            $norm = $this->normalizeHeader($h);
+            if ($norm === '') {
+                $norm = '_col_' . $idx;
+            } elseif (isset($headerCounts[$norm])) {
+                $headerCounts[$norm]++;
+                $norm = $norm . '_' . $headerCounts[$norm];
+            } else {
+                $headerCounts[$norm] = 1;
+            }
+            $cleanHeaders[] = $norm;
+        }
+
         $lookups = $this->buildLookups();
         $pendingBrands = [];
         $pendingCategories = [];
-        // Same auto-create-on-import behavior as Brand/Category, extended to
-        // every other item-master field that can legitimately be missing on
-        // a fresh import: Unit Type (base + secondary) and GST (tax code).
-        // Each has its own pending map because each materializes into a
-        // different table with different required columns.
         $pendingUnits = [];
         $pendingTaxCodes = [];
 
         $results = [];
         $toInsert = [];
 
+        $seenCodesInFile = [];
+        $seenBarcodesInFile = [];
+
         foreach ($rows as $rowNumber => $row) {
-            if (empty(array_filter($row, fn ($v) => $v !== null && $v !== ''))) {
+            if (empty(array_filter($row, fn ($v) => $v !== null && trim((string) $v) !== ''))) {
                 continue; // skip blank rows
             }
 
-            $record = array_combine($header, array_pad($row, count($header), null));
+            $record = array_combine($cleanHeaders, array_pad(array_slice($row, 0, count($cleanHeaders)), count($cleanHeaders), null));
             [$mapped, $rowErrors] = $this->mapImportRow(
                 $record,
                 $lookups,
@@ -583,79 +641,126 @@ class ItemController
                 $pendingTaxCodes
             );
 
+            $itemCode = trim((string) ($record['item_code'] ?? ''));
+            $barcode = trim((string) ($record['barcode'] ?? ''));
+            $itemName = trim((string) ($record['item_name'] ?? ''));
+
+            // In-file duplicate item_code check
+            if ($itemCode !== '') {
+                $codeLower = strtolower($itemCode);
+                if (isset($seenCodesInFile[$codeLower])) {
+                    $rowErrors[] = "Duplicate code '{$itemCode}' in file (row {$seenCodesInFile[$codeLower]})";
+                } else {
+                    $seenCodesInFile[$codeLower] = $rowNumber + 2;
+                }
+            }
+
+            // In-file duplicate barcode check
+            if ($barcode !== '') {
+                $barcodeLower = strtolower($barcode);
+                if (isset($seenBarcodesInFile[$barcodeLower])) {
+                    $rowErrors[] = "Duplicate barcode '{$barcode}' in file (row {$seenBarcodesInFile[$barcodeLower]})";
+                } else {
+                    $seenBarcodesInFile[$barcodeLower] = $rowNumber + 2;
+                }
+            }
+
+            $existingItemId = $mapped['existing_item_id'] ?? null;
+            $action = $existingItemId !== null ? 'update' : 'create';
+            $statusText = empty($rowErrors)
+                ? ($action === 'update' ? 'Valid (Update)' : 'Valid (Create)')
+                : 'Invalid';
+
             $results[] = [
-                'row' => $rowNumber + 2, // +1 for 0-index, +1 for header row
-                'item_code' => $record['item_code'] ?? null,
-                'item_name' => $record['item_name'] ?? null,
-                'opening_stock' => $record['opening_stock'] ?? null,
+                'row' => $rowNumber + 2,
+                'action' => $action,
+                'item_code' => $itemCode !== '' ? $itemCode : ($mapped['item']['item_code'] ?? null),
+                'item_name' => $itemName,
+                'category' => $record['category'] ?? null,
+                'brand' => $record['brand'] ?? null,
+                'unit' => $record['base_unit'] ?? null,
+                'mrp' => $mapped['item']['mrp'] ?? ($record['mrp'] ?? null),
+                'net_srate' => $mapped['item']['net_srate'] ?? ($record['net_srate'] ?? null),
+                'net_purrate' => $mapped['item']['net_purrate'] ?? ($record['net_purrate'] ?? null),
+                'opening_stock' => $mapped['item']['opening_stock'] ?? ($record['opening_stock'] ?? null),
+                'gst' => $record['gst'] ?? ($record['tax_code'] ?? null),
+                'hsn' => $record['hsn_code'] ?? null,
+                'barcode' => $barcode ?: null,
+                'status' => $statusText,
                 'errors' => $rowErrors,
             ];
 
             if (empty($rowErrors)) {
+                $mapped['row_number'] = $rowNumber + 2;
                 $toInsert[] = $mapped;
             }
         }
 
         $inserted = 0;
         $updated = 0;
+        $commitErrors = [];
+
         if ($commit) {
-            // Create each newly-seen master exactly once (deduped across
-            // every row in this file via the $pending* maps), before any
-            // item row references its id.
             $createdBrandIds = $this->materializePendingMasters('brands', $pendingBrands);
             $createdCategoryIds = $this->materializePendingMasters('categories', $pendingCategories);
             $createdUnitIds = $this->materializePendingUnits($pendingUnits);
             $createdTaxCodeIds = $this->materializePendingTaxCodes($pendingTaxCodes);
 
             foreach ($toInsert as $mapped) {
-                ['item' => $itemData, 'branch_ids' => $branchIds, 'existing_item_id' => $existingItemId] = $mapped;
-                $itemData['brand_id'] = $this->resolvePendingMasterId($itemData['brand_id'], $createdBrandIds);
-                $itemData['category_id'] = $this->resolvePendingMasterId($itemData['category_id'], $createdCategoryIds);
-                $itemData['base_unit_id'] = $this->resolvePendingMasterId($itemData['base_unit_id'], $createdUnitIds);
-                $itemData['secondary_unit_id'] = $this->resolvePendingMasterId($itemData['secondary_unit_id'], $createdUnitIds);
-                $itemData['tax_code_id'] = $this->resolvePendingMasterId($itemData['tax_code_id'], $createdTaxCodeIds);
+                try {
+                    ['item' => $itemData, 'branch_ids' => $branchIds, 'existing_item_id' => $existingItemId] = $mapped;
+                    $itemData['brand_id'] = $this->resolvePendingMasterId($itemData['brand_id'], $createdBrandIds);
+                    $itemData['category_id'] = $this->resolvePendingMasterId($itemData['category_id'], $createdCategoryIds);
+                    $itemData['base_unit_id'] = $this->resolvePendingMasterId($itemData['base_unit_id'], $createdUnitIds);
+                    $itemData['secondary_unit_id'] = $this->resolvePendingMasterId($itemData['secondary_unit_id'], $createdUnitIds);
+                    $itemData['tax_code_id'] = $this->resolvePendingMasterId($itemData['tax_code_id'], $createdTaxCodeIds);
 
-                $openingStock = (float) ($itemData['opening_stock'] ?? 0);
-                unset($itemData['opening_stock']);
+                    $openingStock = (float) ($itemData['opening_stock'] ?? 0);
+                    unset($itemData['opening_stock']);
 
-                // A blank NET_SRATE/NET_PURRATE/MRP/etc. cell means "leave
-                // unchanged" (never "clear this out") on both paths — on
-                // create there's nothing to preserve, so the omitted NOT
-                // NULL columns (mrp, purchase_price, ...) just take their
-                // DB-level DEFAULT 0 instead of failing on a NULL insert.
-                $itemData = array_filter($itemData, fn ($v) => $v !== null);
-                if ($existingItemId !== null) {
-                    $this->items->update($existingItemId, $itemData, null, $branchIds);
-                    $updated++;
-                    if ($openingStock > 0.0001) {
-                        $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM stock_movements WHERE item_id = :id AND movement_type = 'opening_stock'");
-                        $stmt->execute(['id' => $existingItemId]);
-                        if ((int) $stmt->fetchColumn() === 0) {
+                    $itemData = array_filter($itemData, fn ($v) => $v !== null);
+
+                    if ($existingItemId !== null) {
+                        $this->items->update($existingItemId, $itemData, null, $branchIds);
+                        $updated++;
+                        if ($openingStock > 0.0001) {
+                            $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM stock_movements WHERE item_id = :id AND movement_type = 'opening_stock'");
+                            $stmt->execute(['id' => $existingItemId]);
+                            if ((int) $stmt->fetchColumn() === 0) {
+                                $stock = new StockLedgerService($this->pdo);
+                                $targetBranches = $branchIds ?: $this->items->branchIdsFor($existingItemId);
+                                if (empty($targetBranches)) {
+                                    $targetBranches = array_column($this->pdo->query('SELECT id FROM branches')->fetchAll(), 'id');
+                                }
+                                $sub = (int) ($claims['sub'] ?? 1);
+                                foreach ($targetBranches as $branchId) {
+                                    $stock->applyMovement(
+                                        $existingItemId, 'branch', (int) $branchId, $openingStock, 'opening_stock',
+                                        'items', $existingItemId, null, 'Opening stock from Excel import', $sub
+                                    );
+                                }
+                            }
+                        }
+                    } else {
+                        $newId = $this->items->create($itemData, [], $branchIds);
+                        $inserted++;
+                        if ($openingStock > 0.0001) {
                             $stock = new StockLedgerService($this->pdo);
-                            $targetBranches = $branchIds ?: $this->items->branchIdsFor($existingItemId);
+                            $targetBranches = $branchIds ?: $this->items->branchIdsFor($newId);
+                            if (empty($targetBranches)) {
+                                $targetBranches = array_column($this->pdo->query('SELECT id FROM branches')->fetchAll(), 'id');
+                            }
                             $sub = (int) ($claims['sub'] ?? 1);
                             foreach ($targetBranches as $branchId) {
                                 $stock->applyMovement(
-                                    $existingItemId, 'branch', (int) $branchId, $openingStock, 'opening_stock',
-                                    'items', $existingItemId, null, 'Opening stock from Excel import', $sub
+                                    $newId, 'branch', (int) $branchId, $openingStock, 'opening_stock',
+                                    'items', $newId, null, 'Opening stock from Excel import', $sub
                                 );
                             }
                         }
                     }
-                } else {
-                    $newId = $this->items->create($itemData, [], $branchIds);
-                    $inserted++;
-                    if ($openingStock > 0.0001) {
-                        $stock = new StockLedgerService($this->pdo);
-                        $targetBranches = $branchIds ?: $this->items->branchIdsFor($newId);
-                        $sub = (int) ($claims['sub'] ?? 1);
-                        foreach ($targetBranches as $branchId) {
-                            $stock->applyMovement(
-                                $newId, 'branch', (int) $branchId, $openingStock, 'opening_stock',
-                                'items', $newId, null, 'Opening stock from Excel import', $sub
-                            );
-                        }
-                    }
+                } catch (\Throwable $e) {
+                    $commitErrors[] = "Row " . ($mapped['row_number'] ?? '?') . ": " . $e->getMessage();
                 }
             }
         }
@@ -667,10 +772,7 @@ class ItemController
             'inserted' => $commit ? $inserted : 0,
             'updated' => $commit ? $updated : 0,
             'committed' => $commit,
-            // Brand/Category auto-create: preview shows what WOULD be
-            // created, commit shows what actually WAS created — the
-            // matching/dedup logic (resolveOrStageMaster) is identical
-            // either way, only whether materializePendingMasters() runs differs.
+            'commit_errors' => $commitErrors,
             'new_brands' => array_values($pendingBrands),
             'new_categories' => array_values($pendingCategories),
             'new_units' => array_values(array_column($pendingUnits, 'short_code')),
@@ -680,67 +782,244 @@ class ItemController
     }
 
     /**
-     * Maps an Excel header cell back to our internal column key, accepting
-     * either the new required label (STOCKITEM, NET_SRATE, S-UNIT, …) or
-     * the old internal key spelling (item_name, net_srate, …) so files
-     * exported before this terminology existed still import cleanly —
-     * never a reason to silently drop a column (section 24).
+     * Maps an Excel header cell back to our internal column key, supporting
+     * user-friendly names (CODE, NAME, CATEGORY, UNIT, MRP, NET_SRATE, NET_PURRATE, STOCK, GST%, HSN),
+     * legacy format labels (STOCKITEM, S-UNIT, etc.), and common business variants.
      */
     private function normalizeHeader(string $rawHeader): string
     {
         static $reverse = null;
         if ($reverse === null) {
             $reverse = [
+                // Item Name aliases
+                'name' => 'item_name',
+                'item_name' => 'item_name',
+                'item name' => 'item_name',
+                'product_name' => 'item_name',
+                'product name' => 'item_name',
+                'product' => 'item_name',
+                'item' => 'item_name',
+                'stockitem' => 'item_name',
+                'stock_item' => 'item_name',
+                'stock item' => 'item_name',
+
+                // Item Code aliases
+                'code' => 'item_code',
+                'item_code' => 'item_code',
+                'item code' => 'item_code',
+                'product_code' => 'item_code',
+                'product code' => 'item_code',
+                'sku' => 'item_code',
+
+                // Category aliases
+                'category' => 'category',
+                'category_name' => 'category',
+                'category name' => 'category',
+
+                // Brand aliases
+                'brand' => 'brand',
+                'brand_name' => 'brand',
+                'brand name' => 'brand',
+
+                // Unit aliases
+                'unit' => 'base_unit',
+                'base_unit' => 'base_unit',
+                'base unit' => 'base_unit',
+                'uom' => 'base_unit',
+                'unit_code' => 'base_unit',
+                'unit code' => 'base_unit',
+                'unit_name' => 'base_unit',
+                'unit name' => 'base_unit',
+
+                // Secondary unit aliases
+                'secondary_unit' => 'secondary_unit',
+                'secondary unit' => 'secondary_unit',
+                's-unit' => 'secondary_unit',
+                's_unit' => 'secondary_unit',
+                'sunit' => 'secondary_unit',
+
+                // MRP aliases
+                'mrp' => 'mrp',
+                'm.r.p.' => 'mrp',
+                'm.r.p' => 'mrp',
+
+                // Net selling rate
+                'net_srate' => 'net_srate',
+                'net srate' => 'net_srate',
+                'srate' => 'net_srate',
+                'selling_rate' => 'net_srate',
+                'selling rate' => 'net_srate',
+                'selling_price' => 'net_srate',
+                'selling price' => 'net_srate',
+                'sale_rate' => 'net_srate',
+                'sale rate' => 'net_srate',
+                'retail_price' => 'retail_price',
+                'retail price' => 'retail_price',
+                'rate' => 'net_srate',
+
+                // Net purchase rate
+                'net_purrate' => 'net_purrate',
+                'net purrate' => 'net_purrate',
+                'purrate' => 'net_purrate',
+                'purchase_rate' => 'net_purrate',
+                'purchase rate' => 'net_purrate',
+                'purchase_price' => 'purchase_price',
+                'purchase price' => 'purchase_price',
+                'pur_rate' => 'net_purrate',
+                'pur rate' => 'net_purrate',
+                'cost_price' => 'cost_price',
+                'cost price' => 'cost_price',
+
+                // Secondary rates
+                'secondary_mrp' => 'secondary_mrp',
+                'secondary mrp' => 'secondary_mrp',
+                's-mrp' => 'secondary_mrp',
+                's_mrp' => 'secondary_mrp',
+                'secondary_net_srate' => 'secondary_net_srate',
+                'secondary net srate' => 'secondary_net_srate',
+                's-net_srate' => 'secondary_net_srate',
+                's_net_srate' => 'secondary_net_srate',
+                'secondary_net_purrate' => 'secondary_net_purrate',
+                'secondary net purrate' => 'secondary_net_purrate',
+                's-net_purrate' => 'secondary_net_purrate',
+                's_net_purrate' => 'secondary_net_purrate',
+
+                // Stock aliases
+                'stock' => 'opening_stock',
+                'opening_stock' => 'opening_stock',
                 'opening stock' => 'opening_stock',
-                'opening stock qty' => 'opening_stock',
-                'opening stock quantity' => 'opening_stock',
                 'opening_stock_qty' => 'opening_stock',
+                'opening stock qty' => 'opening_stock',
                 'opening_stock_quantity' => 'opening_stock',
+                'opening stock quantity' => 'opening_stock',
                 'opening stock quanity' => 'opening_stock',
+                'qty' => 'opening_stock',
+                'stock_qty' => 'opening_stock',
+                'stock qty' => 'opening_stock',
+                'opening_qty' => 'opening_stock',
+                'opening qty' => 'opening_stock',
+
+                // GST / Tax aliases
+                'gst' => 'gst',
+                'gst%' => 'gst',
+                'gst %' => 'gst',
+                'gst_rate' => 'gst',
+                'gst rate' => 'gst',
+                'gst_percent' => 'gst',
+                'gst percent' => 'gst',
+                'tax' => 'gst',
+                'tax%' => 'gst',
+                'tax %' => 'gst',
+                'tax_rate' => 'gst',
+                'tax rate' => 'gst',
+                'tax_code' => 'tax_code',
+                'tax code' => 'tax_code',
+
+                // HSN aliases
+                'hsn' => 'hsn_code',
+                'hsn_code' => 'hsn_code',
+                'hsn code' => 'hsn_code',
+                'hsn/sac' => 'hsn_code',
+                'hsn / sac' => 'hsn_code',
+
+                // Barcode aliases
+                'barcode' => 'barcode',
+                'bar_code' => 'barcode',
+                'bar code' => 'barcode',
+
+                // Supplier
+                'supplier' => 'supplier',
+                'supplier_name' => 'supplier',
+                'supplier name' => 'supplier',
+
+                // Branches
+                'branches' => 'branches',
+                'branch' => 'branches',
+
+                // Min stock
+                'min_stock_threshold' => 'min_stock_threshold',
+                'min_stock' => 'min_stock_threshold',
+                'min stock' => 'min_stock_threshold',
+                'minimum_stock' => 'min_stock_threshold',
+                'reorder_level' => 'min_stock_threshold',
+                'reorder level' => 'min_stock_threshold',
+
+                // Is active
+                'is_active' => 'is_active',
+                'active' => 'is_active',
+                'status' => 'is_active',
             ];
             foreach (self::EXCEL_COLUMNS as $key => $label) {
                 $reverse[strtolower($key)] = $key;
                 $reverse[strtolower($label)] = $key;
             }
         }
-        $normalized = strtolower(trim($rawHeader));
-        return $reverse[$normalized] ?? $rawHeader;
+        $clean = strtolower(trim($rawHeader));
+        if (isset($reverse[$clean])) {
+            return $reverse[$clean];
+        }
+        $withUnderscores = str_replace(' ', '_', $clean);
+        if (isset($reverse[$withUnderscores])) {
+            return $reverse[$withUnderscores];
+        }
+        $withSpaces = str_replace('_', ' ', $clean);
+        if (isset($reverse[$withSpaces])) {
+            return $reverse[$withSpaces];
+        }
+        return $clean;
     }
 
     private function buildLookups(): array
     {
-        $index = function (string $table, string $key) {
+        $indexMaster = function (string $table, string $key) {
             $stmt = $this->pdo->query("SELECT id, $key FROM $table");
             $map = [];
             foreach ($stmt->fetchAll() as $row) {
-                $map[strtolower((string) $row[$key])] = (int) $row['id'];
+                if ($row[$key] !== null && $row[$key] !== '') {
+                    $map[$this->normalizeMasterName((string) $row[$key])] = (int) $row['id'];
+                }
             }
             return $map;
         };
 
+        // Stock units: index both short_code (e.g. PCS) and full name (e.g. Pieces)
+        $units = $this->pdo->query('SELECT id, name, short_code FROM stock_units')->fetchAll();
+        $unitMap = [];
+        foreach ($units as $u) {
+            if (!empty($u['short_code'])) {
+                $unitMap[$this->normalizeMasterName((string) $u['short_code'])] = (int) $u['id'];
+            }
+            if (!empty($u['name'])) {
+                $unitMap[$this->normalizeMasterName((string) $u['name'])] = (int) $u['id'];
+            }
+        }
+
+        // Tax codes: index code (e.g. GST5, GST12) and percentage (5, 5.00, 12, etc.)
+        $taxCodes = $this->pdo->query('SELECT id, code, gst_percent FROM tax_codes')->fetchAll();
+        $taxCodeMap = [];
+        $taxPercentMap = [];
+        foreach ($taxCodes as $tc) {
+            if (!empty($tc['code'])) {
+                $taxCodeMap[strtolower(trim((string) $tc['code']))] = (int) $tc['id'];
+            }
+            if ($tc['gst_percent'] !== null) {
+                $pctFloat = (float) $tc['gst_percent'];
+                $taxPercentMap[number_format($pctFloat, 2, '.', '')] = (int) $tc['id'];
+                $taxPercentMap[(string) $pctFloat] = (int) $tc['id'];
+                $taxPercentMap[(string) (int) $pctFloat] = (int) $tc['id'];
+            }
+        }
+
         return [
-            'category' => $index('categories', 'name'),
-            'brand' => $index('brands', 'name'),
-            'supplier' => $index('suppliers', 'name'),
-            'base_unit' => $index('stock_units', 'short_code'),
-            'branch' => $index('branches', 'branch_name'),
-            'tax_code' => $index('tax_codes', 'code'),
-            'gst_percent' => array_column(
-                $this->pdo->query('SELECT id, gst_percent FROM tax_codes')->fetchAll(),
-                'id',
-                'gst_percent'
-            ),
-            // item_code -> id: an existing item_code UPDATES that row
-            // instead of erroring as a duplicate (section 9.6/9.7 — the
-            // existing importer was create-only; this is a genuine, small
-            // addition, not a behavior it silently lacked already).
+            'category' => $indexMaster('categories', 'name'),
+            'brand' => $indexMaster('brands', 'name'),
+            'supplier' => $indexMaster('suppliers', 'name'),
+            'base_unit' => $unitMap,
+            'branch' => $indexMaster('branches', 'branch_name'),
+            'tax_code' => $taxCodeMap,
+            'gst_percent' => $taxPercentMap,
             'existing_item_code' => $this->indexById('items', 'item_code'),
             'existing_barcode' => $this->indexById('items', 'barcode'),
-            // Fallback match when a row has no item_code at all — without
-            // this, re-importing the same file (no codes assigned yet)
-            // silently creates a fresh duplicate item every single time
-            // instead of recognizing "this item already exists". Matched the
-            // same normalized way as Brand/Category (case/space-insensitive).
             'existing_item_name' => $this->indexItemsByNormalizedName(),
         ];
     }
@@ -761,12 +1040,12 @@ class ItemController
         $stmt = $this->pdo->query("SELECT id, $column FROM $table WHERE $column IS NOT NULL");
         $map = [];
         foreach ($stmt->fetchAll() as $row) {
-            $map[strtolower((string) $row[$column])] = (int) $row['id'];
+            $map[strtolower(trim((string) $row[$column]))] = (int) $row['id'];
         }
         return $map;
     }
 
-    /** @return array{0: array{item: array, branch_ids: array}, 1: string[]} */
+    /** @return array{0: array{item: array, branch_ids: array|null, existing_item_id: int|null}, 1: string[]} */
     private function mapImportRow(
         array $record,
         array &$lookups,
@@ -781,10 +1060,6 @@ class ItemController
             $errors[] = 'item_name is required';
         }
 
-        // An existing item_code means this row UPDATES that item rather
-        // than being rejected as a duplicate. With no item_code at all,
-        // fall back to a normalized item_name match so re-importing the same
-        // file updates the existing item instead of creating another copy.
         $itemCode = trim((string) ($record['item_code'] ?? ''));
         $existingItemId = $itemCode !== ''
             ? ($lookups['existing_item_code'][strtolower($itemCode)] ?? null)
@@ -796,28 +1071,15 @@ class ItemController
             $errors[] = "barcode '{$barcode}' already belongs to a different item";
         }
 
-        // Unit Type is auto-created exactly like Brand/Category (section 1 of
-        // the master-data-auto-create requirement) — a base_unit is required
-        // on every item, so an unknown one is staged and created, never
-        // rejected. The Excel cell is used as both the new unit's display
-        // name and its short_code (stock_units.short_code is VARCHAR(10) and
-        // UNIQUE, so it's truncated defensively — real unit codes like "PCS"/
-        // "BOX"/"KG" are always well under that limit).
         $baseUnitId = $this->resolveOrStageUnit($lookups['base_unit'], $pendingUnits, $record['base_unit'] ?? null);
         if ($baseUnitId === null) {
             $errors[] = "base_unit is required";
         }
         $secondaryUnitId = $this->resolveOrStageUnit($lookups['base_unit'], $pendingUnits, $record['secondary_unit'] ?? null);
 
-        // Brand/Category are auto-created on import rather than
-        // rejected — resolveOrStageMaster() matches case/space-insensitively
-        // against what's already loaded, or stages a new one (deduped across
-        // rows in this same file) to be created when the import actually commits.
         $categoryId = $this->resolveOrStageMaster($lookups['category'], $pendingCategories, $record['category'] ?? null);
         $brandId = $this->resolveOrStageMaster($lookups['brand'], $pendingBrands, $record['brand'] ?? null);
-        // The category/brand mapping restriction only applies when both
-        // already exist for real — a brand-new category has no mappings
-        // configured yet, which is already "no restriction" (opt-in feature).
+
         if (is_int($categoryId) && is_int($brandId) && !$this->categoryAllowsBrand($categoryId, $brandId)) {
             $errors[] = "brand '{$record['brand']}' is not mapped to category '{$record['category']}'";
         }
@@ -827,11 +1089,6 @@ class ItemController
             $errors[] = "unknown supplier '{$record['supplier']}'";
         }
 
-        // GST/tax code is auto-created the same way — either an unrecognized
-        // tax_code label, or a bare GST% with no matching tax code yet, stages
-        // a new tax_codes row (code, gst_percent, and an even CGST/SGST split,
-        // the same convention every other tax code in this system already
-        // uses) instead of failing the row.
         $taxCodeId = $this->resolveOrStageTaxCode(
             $lookups['tax_code'],
             $lookups['gst_percent'],
@@ -851,43 +1108,56 @@ class ItemController
             $branchIds[] = $branchId;
         }
 
-        foreach ([
+        // Validate numeric fields
+        $numericFields = [
             'purchase_price', 'cost_price', 'wholesale_price', 'retail_price', 'mrp', 'min_stock_threshold',
             'net_srate', 'net_purrate', 'secondary_mrp', 'secondary_net_srate', 'secondary_net_purrate', 'gst',
             'opening_stock',
-        ] as $numField) {
-            if (isset($record[$numField]) && $record[$numField] !== '' && !is_numeric($record[$numField])) {
-                $errors[] = "{$numField} must be numeric";
+        ];
+
+        foreach ($numericFields as $numField) {
+            if (isset($record[$numField]) && trim((string) $record[$numField]) !== '') {
+                $cleaned = $this->cleanNumeric($record[$numField]);
+                if ($cleaned === null) {
+                    $errors[] = "{$numField} must be numeric";
+                }
             }
         }
 
-        $openingStock = isset($record['opening_stock']) && $record['opening_stock'] !== '' ? (float) $record['opening_stock'] : null;
+        $openingStock = isset($record['opening_stock']) && trim((string) $record['opening_stock']) !== ''
+            ? $this->cleanNumeric($record['opening_stock'])
+            : null;
         if ($openingStock !== null && $openingStock < 0) {
             $errors[] = "opening_stock must be non-negative";
         }
 
-        // NET_SRATE/NET_PURRATE are never derived from MRP or from each
-        // other (section 21) — each is read independently, defaulting to
-        // null (not 0) when the column is blank so an old row's existing
-        // value isn't silently zeroed out by a partial re-import.
-        $netSrate = isset($record['net_srate']) && $record['net_srate'] !== '' ? (float) $record['net_srate'] : null;
-        $netPurrate = isset($record['net_purrate']) && $record['net_purrate'] !== '' ? (float) $record['net_purrate'] : null;
-        $secondaryMrp = isset($record['secondary_mrp']) && $record['secondary_mrp'] !== '' ? (float) $record['secondary_mrp'] : null;
-        $secondaryNetSrate = isset($record['secondary_net_srate']) && $record['secondary_net_srate'] !== '' ? (float) $record['secondary_net_srate'] : null;
-        $secondaryNetPurrate = isset($record['secondary_net_purrate']) && $record['secondary_net_purrate'] !== '' ? (float) $record['secondary_net_purrate'] : null;
+        $netSrate = isset($record['net_srate']) && trim((string) $record['net_srate']) !== '' ? $this->cleanNumeric($record['net_srate']) : null;
+        if ($netSrate !== null && $netSrate < 0) {
+            $errors[] = "net_srate cannot be negative";
+        }
 
-        // A blank cell means "leave unchanged" on an update, never "reset to
-        // zero" — so every optional numeric field is null (not 0) here when
-        // blank; the commit loop fills nulls with 0 only for brand-new items
-        // (where the column has no existing value to preserve).
-        $purchasePrice = isset($record['purchase_price']) && $record['purchase_price'] !== '' ? (float) $record['purchase_price'] : $netPurrate;
-        $costPrice = isset($record['cost_price']) && $record['cost_price'] !== '' ? (float) $record['cost_price'] : null;
-        $wholesalePrice = isset($record['wholesale_price']) && $record['wholesale_price'] !== '' ? (float) $record['wholesale_price'] : null;
-        $retailPrice = isset($record['retail_price']) && $record['retail_price'] !== '' ? (float) $record['retail_price'] : $netSrate;
-        $mrp = isset($record['mrp']) && $record['mrp'] !== '' ? (float) $record['mrp'] : null;
-        $minStockThreshold = isset($record['min_stock_threshold']) && $record['min_stock_threshold'] !== '' ? (float) $record['min_stock_threshold'] : null;
+        $netPurrate = isset($record['net_purrate']) && trim((string) $record['net_purrate']) !== '' ? $this->cleanNumeric($record['net_purrate']) : null;
+        if ($netPurrate !== null && $netPurrate < 0) {
+            $errors[] = "net_purrate cannot be negative";
+        }
+
+        $secondaryMrp = isset($record['secondary_mrp']) && trim((string) $record['secondary_mrp']) !== '' ? $this->cleanNumeric($record['secondary_mrp']) : null;
+        $secondaryNetSrate = isset($record['secondary_net_srate']) && trim((string) $record['secondary_net_srate']) !== '' ? $this->cleanNumeric($record['secondary_net_srate']) : null;
+        $secondaryNetPurrate = isset($record['secondary_net_purrate']) && trim((string) $record['secondary_net_purrate']) !== '' ? $this->cleanNumeric($record['secondary_net_purrate']) : null;
+
+        $purchasePrice = isset($record['purchase_price']) && trim((string) $record['purchase_price']) !== '' ? $this->cleanNumeric($record['purchase_price']) : $netPurrate;
+        $costPrice = isset($record['cost_price']) && trim((string) $record['cost_price']) !== '' ? $this->cleanNumeric($record['cost_price']) : null;
+        $wholesalePrice = isset($record['wholesale_price']) && trim((string) $record['wholesale_price']) !== '' ? $this->cleanNumeric($record['wholesale_price']) : null;
+        $retailPrice = isset($record['retail_price']) && trim((string) $record['retail_price']) !== '' ? $this->cleanNumeric($record['retail_price']) : $netSrate;
+        $mrp = isset($record['mrp']) && trim((string) $record['mrp']) !== '' ? $this->cleanNumeric($record['mrp']) : null;
+        if ($mrp !== null && $mrp < 0) {
+            $errors[] = "mrp cannot be negative";
+        }
+
+        $minStockThreshold = isset($record['min_stock_threshold']) && trim((string) $record['min_stock_threshold']) !== '' ? $this->cleanNumeric($record['min_stock_threshold']) : null;
 
         $mapped = [
+            'item_code' => $itemCode !== '' ? $itemCode : null,
             'item_name' => $itemName,
             'category_id' => $categoryId,
             'brand_id' => $brandId,
@@ -896,9 +1166,6 @@ class ItemController
             'barcode' => $barcode ?: null,
             'base_unit_id' => $baseUnitId,
             'secondary_unit_id' => $secondaryUnitId,
-            // Legacy fields kept in sync with NET_SRATE/NET_PURRATE (never
-            // the reverse) so anything still reading purchase_price/
-            // retail_price directly stays meaningful, not stale.
             'purchase_price' => $purchasePrice,
             'cost_price' => $costPrice,
             'wholesale_price' => $wholesalePrice,
@@ -920,7 +1187,6 @@ class ItemController
 
     private function categoryAllowsBrand(int $categoryId, int $brandId): bool
     {
-        // No mappings configured for this category at all = no restriction (opt-in feature).
         $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM category_brands WHERE category_id = :c');
         $stmt->execute(['c' => $categoryId]);
         if ((int) $stmt->fetchColumn() === 0) {
@@ -939,29 +1205,11 @@ class ItemController
         return $map[strtolower(trim((string) $value))] ?? null;
     }
 
-    /**
-     * Matching key for Brand/Category names during import: case-insensitive,
-     * trimmed, and repeated internal whitespace collapsed to one space —
-     * just enough to treat "coco_cola" / "COCO_COLA " / "Coco_Cola" as the
-     * same logical name without merging names that are genuinely different.
-     * Never used to rewrite what's actually stored — only to decide reuse
-     * vs. create.
-     */
     private function normalizeMasterName(string $name): string
     {
         return strtolower(preg_replace('/\s+/', ' ', trim($name)));
     }
 
-    /**
-     * Resolves a Brand/Category name against the already-loaded lookup map;
-     * if there's no match, stages it in $pending (normalized => first-seen
-     * display spelling) instead of failing the row. Returns either the
-     * existing numeric id, a "NEW:<normalized>" sentinel to be resolved to a
-     * real id once the import actually commits (see materializePendingMasters),
-     * or null for a blank cell. Multiple rows in the same file with
-     * case/space variants of one new name all resolve to the same sentinel,
-     * so exactly one master record gets created for them.
-     */
     private function resolveOrStageMaster(array &$lookup, array &$pending, mixed $rawValue): int|string|null
     {
         if ($rawValue === null || trim((string) $rawValue) === '') {
@@ -973,20 +1221,15 @@ class ItemController
             return $lookup[$normalized];
         }
         if (!isset($pending[$normalized])) {
-            $pending[$normalized] = $display; // first spelling seen wins
+            $pending[$normalized] = $display;
         }
         return "NEW:{$normalized}";
     }
 
-    /** Creates the brand/category rows staged in $pending (once each), returning normalized-name => new id. */
     private function materializePendingMasters(string $table, array $pending): array
     {
         $createdIds = [];
         foreach ($pending as $normalized => $displayName) {
-            // Re-check right before inserting to narrow (the current schema
-            // has no unique index on `name` for either table, so this isn't
-            // a full guarantee) the window for a concurrent import creating
-            // the same master between buildLookups() and this commit step.
             $stmt = $this->pdo->prepare("SELECT id FROM {$table} WHERE LOWER(TRIM(name)) = :n LIMIT 1");
             $stmt->execute(['n' => $normalized]);
             $existing = $stmt->fetchColumn();
@@ -1001,14 +1244,6 @@ class ItemController
         return $createdIds;
     }
 
-    /**
-     * Resolves a Unit Type (base or secondary) against the already-loaded
-     * short_code lookup; stages a new stock_units row if unseen. Mirrors
-     * resolveOrStageMaster() but keyed/materialized differently because
-     * stock_units has no plain "name-only" shape — short_code is the actual
-     * unique/lookup column, and the Excel cell is the only value we have, so
-     * it becomes both the new unit's name and its short_code.
-     */
     private function resolveOrStageUnit(array &$lookup, array &$pending, mixed $rawValue): int|string|null
     {
         if ($rawValue === null || trim((string) $rawValue) === '') {
@@ -1020,21 +1255,17 @@ class ItemController
             return $lookup[$normalized];
         }
         if (!isset($pending[$normalized])) {
-            // short_code is VARCHAR(10) UNIQUE — real unit codes (PCS, BOX,
-            // KG, CTN, ...) are always well under this; truncate defensively
-            // rather than let an oversized cell fail the whole import.
             $pending[$normalized] = ['name' => $display, 'short_code' => substr($display, 0, 10)];
         }
         return "NEW:{$normalized}";
     }
 
-    /** Creates the stock_units rows staged by resolveOrStageUnit(), returning normalized-name => new id. */
     private function materializePendingUnits(array $pending): array
     {
         $createdIds = [];
         foreach ($pending as $normalized => $unit) {
-            $stmt = $this->pdo->prepare('SELECT id FROM stock_units WHERE LOWER(TRIM(short_code)) = :sc LIMIT 1');
-            $stmt->execute(['sc' => strtolower($unit['short_code'])]);
+            $stmt = $this->pdo->prepare('SELECT id FROM stock_units WHERE LOWER(TRIM(short_code)) = :sc OR LOWER(TRIM(name)) = :nm LIMIT 1');
+            $stmt->execute(['sc' => strtolower($unit['short_code']), 'nm' => strtolower($unit['name'])]);
             $existing = $stmt->fetchColumn();
             if ($existing) {
                 $createdIds[$normalized] = (int) $existing;
@@ -1047,18 +1278,10 @@ class ItemController
         return $createdIds;
     }
 
-    /**
-     * Resolves GST against the tax_code lookup (by code) or the gst_percent
-     * lookup (by percentage number), staging a new tax_codes row when
-     * neither matches — an unrecognized tax_code label, or a bare GST% with
-     * no existing tax code at that rate, both auto-create instead of failing
-     * the row. New tax codes use an even CGST/SGST split (IGST = full rate),
-     * the same convention every seeded tax code already follows.
-     */
     private function resolveOrStageTaxCode(array &$codeLookup, array &$percentLookup, array &$pending, mixed $taxCodeValue, mixed $gstValue): int|string|null
     {
         $codeText = trim((string) ($taxCodeValue ?? ''));
-        $gstPercent = ($gstValue !== null && $gstValue !== '') ? (float) $gstValue : null;
+        $gstPercent = ($gstValue !== null && trim((string) $gstValue) !== '') ? $this->cleanNumeric($gstValue) : null;
 
         if ($codeText !== '') {
             $normalized = strtolower($codeText);
@@ -1077,25 +1300,35 @@ class ItemController
         }
 
         if ($gstPercent !== null) {
-            $percentKey = number_format($gstPercent, 2);
-            if (isset($percentLookup[$percentKey])) {
-                return $percentLookup[$percentKey];
+            $formatted = number_format($gstPercent, 2, '.', '');
+            $asStr = (string) $gstPercent;
+            $asInt = (string) (int) $gstPercent;
+
+            if (isset($percentLookup[$formatted])) {
+                return $percentLookup[$formatted];
             }
-            $normalized = 'gst' . $percentKey;
+            if (isset($percentLookup[$asStr])) {
+                return $percentLookup[$asStr];
+            }
+            if (isset($percentLookup[$asInt])) {
+                return $percentLookup[$asInt];
+            }
+
+            $normalized = 'gst' . $formatted;
             if (!isset($pending[$normalized])) {
+                $rateLabel = rtrim(rtrim($formatted, '0'), '.');
                 $pending[$normalized] = [
-                    'code' => 'GST' . rtrim(rtrim(number_format($gstPercent, 2), '0'), '.'),
-                    'name' => 'GST ' . rtrim(rtrim(number_format($gstPercent, 2), '0'), '.') . '%',
+                    'code' => 'GST' . $rateLabel,
+                    'name' => 'GST ' . $rateLabel . '%',
                     'gst_percent' => $gstPercent,
                 ];
             }
             return "NEW:{$normalized}";
         }
 
-        return null; // no tax_code and no gst% given — item is saved with no tax code, same as before.
+        return null;
     }
 
-    /** Creates the tax_codes rows staged by resolveOrStageTaxCode(), returning normalized-key => new id. */
     private function materializePendingTaxCodes(array $pending): array
     {
         $createdIds = [];
@@ -1125,7 +1358,6 @@ class ItemController
         return $createdIds;
     }
 
-    /** Swaps a resolveOrStageMaster() result for its real id once pending masters have been created. */
     private function resolvePendingMasterId(int|string|null $value, array $createdIds): ?int
     {
         if ($value === null) {
@@ -1137,7 +1369,7 @@ class ItemController
         return $createdIds[substr($value, 4)] ?? null;
     }
 
-    /** GET /api/items/import/template — a blank starter workbook with headers. */
+    /** GET /api/items/import/template — download standard, clean Excel starter template */
     public function importTemplate(): void
     {
         JwtAuthMiddleware::authenticate();
@@ -1145,34 +1377,46 @@ class ItemController
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle('Items');
-        $sheet->fromArray(array_values(self::EXCEL_COLUMNS), null, 'A1');
-        // Three rows on purpose, not one: brand/category are given as
-        // coco_cola / COCO_COLA / Coco_Cola and Soft Drinks / SOFT DRINKS —
-        // case/space variants of names that don't exist yet, so importing
-        // this template is itself a live demonstration (and test) of the
-        // Brand/Category auto-create + dedup-by-normalized-name behavior —
-        // all three rows must end up sharing one Brand id and one Category id.
+
+        $headers = [
+            'CODE',
+            'NAME',
+            'CATEGORY',
+            'BRAND',
+            'UNIT',
+            'MRP',
+            'NET_SRATE',
+            'NET_PURRATE',
+            'STOCK',
+            'GST%',
+            'HSN',
+            'BARCODE',
+        ];
+        $sheet->fromArray($headers, null, 'A1');
+
+        // Style the header row bold
+        $sheet->getStyle('A1:L1')->getFont()->setBold(true);
+
+        // Realistic sample products matching columns 1-to-1
         $sheet->fromArray(
-            ['', 'Coca Cola 250ml', 'Soft Drinks', 'coco_cola', '', 'ABC Distributors', '22021010', '8901111111111',
-             'PCS', '15', '13', '11', '', '', '', '', '18',
-             '1', 'Main Branch', '11', '9', '13', '10', '50', 'GST18', '1'],
+            ['ITM001', 'KC Premium Cashew 500g', 'Dry Fruits', 'KC Gold', 'PCS', '600.00', '500.00', '400.00', '470', '12', '080132', '8901111111111'],
             null,
             'A2'
         );
         $sheet->fromArray(
-            ['', 'Coca Cola 500ml', 'SOFT DRINKS', 'COCO_COLA', '', 'ABC Distributors', '22021010', '8901111111112',
-             'PCS', '25', '22', '19', '', '', '', '', '18',
-             '1', 'Main Branch', '19', '16', '22', '10', '100', 'GST18', '1'],
+            ['ITM002', 'KC California Almonds 1kg', 'Dry Fruits', 'KC Gold', 'PCS', '1000.00', '850.00', '700.00', '469', '5', '080212', '8901111111112'],
             null,
             'A3'
         );
         $sheet->fromArray(
-            ['', 'Coca Cola 1L', 'Soft Drinks', 'Coco_Cola', '', 'ABC Distributors', '22021010', '8901111111113',
-             'PCS', '45', '40', '35', '', '', '', '', '18',
-             '1', 'Main Branch', '35', '30', '40', '10', '25', 'GST18', '1'],
+            ['ITM003', 'Organic Raisins 250g', 'Dry Fruits', 'KC Gold', 'PCS', '150.00', '120.00', '90.00', '50', '5', '080620', '8901111111113'],
             null,
             'A4'
         );
+
+        foreach (range('A', 'L') as $col) {
+            $sheet->getColumnDimension($col)->setAutoSize(true);
+        }
 
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         header('Content-Disposition: attachment; filename="items_import_template.xlsx"');

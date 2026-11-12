@@ -11,7 +11,7 @@ class ItemModel
 {
     /** Columns a caller may write directly on the items row. */
     private const WRITABLE_COLUMNS = [
-        'item_name', 'category_id', 'brand_id', 'supplier_id', 'hsn_code', 'barcode',
+        'item_code', 'item_name', 'category_id', 'brand_id', 'supplier_id', 'hsn_code', 'barcode',
         'base_unit_id', 'secondary_unit_id', 'conversion_factor', 'purchase_price', 'cost_price',
         'wholesale_price', 'retail_price', 'mrp', 'net_srate', 'net_purrate',
         'secondary_mrp', 'secondary_net_srate', 'secondary_net_purrate',
@@ -238,8 +238,10 @@ class ItemModel
             $stmt->execute($columns);
             $id = (int) $this->pdo->lastInsertId();
 
-            $this->pdo->prepare('UPDATE items SET item_code = :code WHERE id = :id')
-                ->execute(['code' => CodeGenerator::fromId('ITM', $id), 'id' => $id]);
+            if (empty($data['item_code'])) {
+                $this->pdo->prepare('UPDATE items SET item_code = :code WHERE id = :id')
+                    ->execute(['code' => CodeGenerator::fromId('ITM', $id), 'id' => $id]);
+            }
 
             $this->saveUnitConversions($id, $unitConversions);
             $this->saveBranchMapping($id, $branchIds);

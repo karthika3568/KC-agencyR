@@ -417,6 +417,9 @@ export function ItemsPanel({ canManage }) {
   const [importResult, setImportResult] = useState(null);
   const [importFile, setImportFile] = useState(null);
   const [importSuccessMsg, setImportSuccessMsg] = useState('');
+  const [isPreviewing, setIsPreviewing] = useState(false);
+  const [isCommitting, setIsCommitting] = useState(false);
+  const [importError, setImportError] = useState('');
   const [pendingDeactivate, setPendingDeactivate] = useState(null);
   const [deactivateError, setDeactivateError] = useState('');
   const fileInputRef = useRef(null);
@@ -489,23 +492,43 @@ export function ItemsPanel({ canManage }) {
   const handleImportFile = (e) => {
     setImportFile(e.target.files[0] || null);
     setImportResult(null);
+    setImportError('');
   };
 
   const handlePreview = async () => {
-    if (!importFile) return;
-    const result = await itemsApi.importPreview(importFile);
-    setImportResult(result);
+    if (!importFile || isPreviewing) return;
+    setIsPreviewing(true);
+    setImportError('');
+    try {
+      const result = await itemsApi.importPreview(importFile);
+      setImportResult(result);
+    } catch (err) {
+      setImportError(err?.response?.data?.error || err?.message || 'Failed to preview Excel file.');
+      setImportResult(null);
+    } finally {
+      setIsPreviewing(false);
+    }
   };
 
   const handleCommit = async () => {
-    if (!importFile) return;
+    if (!importFile || isCommitting || !importResult || importResult.valid_rows === 0) return;
+    setIsCommitting(true);
+    setImportError('');
     setImportSuccessMsg('');
-    const result = await itemsApi.importCommit(importFile);
-    setImportResult(result);
-    invalidateItems();
-    if (result.invalid_rows === 0 && (result.inserted > 0 || result.updated > 0)) {
-      setImportSuccessMsg(`Import successful — ${result.inserted} item(s) added, ${result.updated} updated.`);
-      setTimeout(() => setImportSuccessMsg(''), 4000);
+    try {
+      const result = await itemsApi.importCommit(importFile);
+      setImportResult(result);
+      invalidateItems();
+      if (result.invalid_rows === 0 && (result.inserted > 0 || result.updated > 0)) {
+        setImportSuccessMsg(`Import successful — ${result.inserted} item(s) created, ${result.updated} item(s) updated.`);
+        setTimeout(() => setImportSuccessMsg(''), 5000);
+      } else if (result.valid_rows > 0) {
+        setImportSuccessMsg(`Partial import completed — ${result.inserted} created, ${result.updated} updated, ${result.invalid_rows} row(s) skipped.`);
+      }
+    } catch (err) {
+      setImportError(err?.response?.data?.error || err?.message || 'Failed to commit import.');
+    } finally {
+      setIsCommitting(false);
     }
   };
 
@@ -675,35 +698,112 @@ export function ItemsPanel({ canManage }) {
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="success" size="sm" data-catalog-nav="true" onClick={() => itemsApi.downloadImportTemplate()}>Download Template</Button>
             <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleImportFile} data-catalog-nav="true" className="text-sm focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1 rounded" />
-            <Button variant="secondary" size="sm" data-catalog-nav="true" disabled={!importFile} onClick={handlePreview}>Preview</Button>
-            <Button size="sm" data-catalog-nav="true" disabled={!importFile || !importResult} onClick={handleCommit}>Commit Import</Button>
+            <Button variant="secondary" size="sm" data-catalog-nav="true" disabled={!importFile || isPreviewing} onClick={handlePreview}>
+              {isPreviewing ? 'Reading Excel...' : 'Preview'}
+            </Button>
+            <Button size="sm" data-catalog-nav="true" disabled={!importFile || !importResult || importResult.valid_rows === 0 || isCommitting} onClick={handleCommit}>
+              {isCommitting ? 'Importing...' : 'Commit Import'}
+            </Button>
           </div>
+
+          {importError && (
+            <div className="mt-3 rounded border border-rose-200 bg-rose-50 p-2.5 text-xs text-rose-700">
+              {importError}
+            </div>
+          )}
 
           {importResult && (
             <div className="mt-3 text-sm">
-              <p className="mb-2 text-ink-muted">
-                {importResult.total_rows} rows — {importResult.valid_rows} valid, {importResult.invalid_rows} invalid.
-                {importResult.committed && ` Inserted ${importResult.inserted}, updated ${importResult.updated}.`}
-              </p>
-              <div className="max-h-64 overflow-auto rounded border border-border-soft">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div>
+                  <span className="font-semibold text-ink">{importResult.total_rows}</span> row(s) found —{' '}
+                  <span className="font-semibold text-emerald-700">{importResult.valid_rows} valid</span>
+                  {importResult.invalid_rows > 0 && (
+                    <span className="font-semibold text-rose-600">, {importResult.invalid_rows} invalid</span>
+                  )}
+                  {importResult.committed && (
+                    <span className="ml-2 font-medium text-ink-muted">
+                      (Saved: {importResult.inserted} created, {importResult.updated} updated)
+                    </span>
+                  )}
+                </div>
+                {(importResult.new_categories?.length > 0 || importResult.new_brands?.length > 0 || importResult.new_units?.length > 0) && (
+                  <div className="text-ink-muted">
+                    Auto-creating:{' '}
+                    {[
+                      importResult.new_categories?.length ? `${importResult.new_categories.length} category` : '',
+                      importResult.new_brands?.length ? `${importResult.new_brands.length} brand` : '',
+                      importResult.new_units?.length ? `${importResult.new_units.length} unit` : '',
+                    ].filter(Boolean).join(', ')}
+                  </div>
+                )}
+              </div>
+
+              {importResult.commit_errors?.length > 0 && (
+                <div className="mb-2 rounded border border-rose-200 bg-rose-50 p-2 text-xs text-rose-700">
+                  <div className="font-semibold">Errors encountered during commit:</div>
+                  <ul className="list-disc pl-4 mt-1">
+                    {importResult.commit_errors.map((err, i) => (
+                      <li key={i}>{err}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div className="max-h-72 overflow-auto rounded border border-border-soft">
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="bg-page text-left text-ink-muted">
-                      <th className="px-3 py-1.5">Row</th>
-                      <th className="px-3 py-1.5">Item</th>
-                      <th className="px-3 py-1.5">Opening Stock</th>
-                      <th className="px-3 py-1.5">Errors</th>
+                    <tr className="bg-page text-left text-ink-muted sticky top-0 border-b border-border-soft">
+                      <th className="px-3 py-2 font-medium">Row</th>
+                      <th className="px-3 py-2 font-medium">Code</th>
+                      <th className="px-3 py-2 font-medium">Product Name</th>
+                      <th className="px-3 py-2 font-medium">Category</th>
+                      <th className="px-3 py-2 font-medium">Unit</th>
+                      <th className="px-3 py-2 font-medium">Selling Price</th>
+                      <th className="px-3 py-2 font-medium">Opening Stock</th>
+                      <th className="px-3 py-2 font-medium">Status</th>
+                      <th className="px-3 py-2 font-medium">Errors / Notes</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {importResult.rows.map((r) => (
-                      <tr key={r.row} className={r.errors.length ? 'bg-red-50' : ''}>
-                        <td className="px-3 py-1.5">{r.row}</td>
-                        <td className="px-3 py-1.5">{r.item_name}</td>
-                        <td className="px-3 py-1.5">{r.opening_stock ?? '—'}</td>
-                        <td className="px-3 py-1.5 text-danger">{r.errors.join(', ')}</td>
-                      </tr>
-                    ))}
+                  <tbody className="divide-y divide-border-soft">
+                    {importResult.rows.map((r) => {
+                      const hasErr = r.errors && r.errors.length > 0;
+                      return (
+                        <tr key={r.row} className={hasErr ? 'bg-rose-50/50' : 'hover:bg-page/50'}>
+                          <td className="px-3 py-1.5 font-mono text-ink-muted">{r.row}</td>
+                          <td className="px-3 py-1.5 font-mono text-ink-muted">{r.item_code || '—'}</td>
+                          <td className="px-3 py-1.5 font-medium text-ink">{r.item_name || '—'}</td>
+                          <td className="px-3 py-1.5 text-ink-muted">{r.category || '—'}</td>
+                          <td className="px-3 py-1.5 text-ink-muted">{r.unit || '—'}</td>
+                          <td className="px-3 py-1.5 text-ink-muted">
+                            {r.net_srate !== null && r.net_srate !== undefined && r.net_srate !== ''
+                              ? `₹${Number(r.net_srate).toFixed(2)}`
+                              : '—'}
+                          </td>
+                          <td className="px-3 py-1.5 text-ink-muted">
+                            {r.opening_stock !== null && r.opening_stock !== undefined && r.opening_stock !== ''
+                              ? r.opening_stock
+                              : '—'}
+                          </td>
+                          <td className="px-3 py-1.5">
+                            <span
+                              className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
+                                hasErr
+                                  ? 'bg-rose-100 text-rose-700'
+                                  : r.action === 'update'
+                                  ? 'bg-blue-100 text-blue-700'
+                                  : 'bg-emerald-100 text-emerald-700'
+                              }`}
+                            >
+                              {hasErr ? 'Invalid' : r.action === 'update' ? 'Valid (Update)' : 'Valid (Create)'}
+                            </span>
+                          </td>
+                          <td className="px-3 py-1.5 text-danger font-normal">
+                            {hasErr ? r.errors.join('; ') : '—'}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
