@@ -13,11 +13,18 @@ import { useClientPagination } from '../hooks/useClientPagination';
 import { StockAdjustmentPanel, StockHubPanel } from './Inventory.jsx';
 import { PrintPreviewModal } from '../components/PrintPreviewModal';
 import { downloadVanIssuePdf } from '../utils/reportPdf';
+import { useEscNavigation, ESC_PRIORITY } from '../utils/escNavigation.jsx';
 
 function StockIssuesTab() {
   const [search, setSearch] = useState('');
   const [printingIssue, setPrintingIssue] = useState(null);
   const [selectedIssue, setSelectedIssue] = useState(null);
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.MODAL,
+    onEsc: () => setSelectedIssue(null),
+    enabled: Boolean(selectedIssue),
+  });
   const [exportError, setExportError] = useState('');
   const [exporting, setExporting] = useState(false);
 
@@ -259,6 +266,12 @@ function StockReturnsTab() {
   const [search, setSearch] = useState('');
   const [balanceSearch, setBalanceSearch] = useState('');
   const [selectedReturn, setSelectedReturn] = useState(null);
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.MODAL,
+    onEsc: () => setSelectedReturn(null),
+    enabled: Boolean(selectedReturn),
+  });
   const [expandedReturns, setExpandedReturns] = useState({});
   const [exportError, setExportError] = useState('');
   const [exporting, setExporting] = useState(false);

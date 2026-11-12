@@ -1,5 +1,6 @@
 import { AlertTriangle, HelpCircle, Info } from 'lucide-react';
 import { Button } from './Button.jsx';
+import { useEscNavigation, ESC_PRIORITY } from '../utils/escNavigation.jsx';
 
 const VARIANTS = {
   danger: {
@@ -51,6 +52,12 @@ export function ConfirmDialog({
   onCancel,
   loading = false,
 }) {
+  useEscNavigation({
+    priority: ESC_PRIORITY.CONFIRM,
+    onEsc: () => onCancel?.(),
+    enabled: Boolean(open),
+  });
+
   if (!open) return null;
   const v = VARIANTS[variant] || VARIANTS.warning;
   const Icon = v.icon;
@@ -62,7 +69,11 @@ export function ConfirmDialog({
       aria-modal="true"
       aria-labelledby="confirm-dialog-title"
       onKeyDown={(e) => {
-        if (e.key === 'Escape') onCancel?.();
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          e.stopPropagation();
+          onCancel?.();
+        }
       }}
     >
       <div className={`w-full max-w-md rounded-3xl border-2 ${v.ring} bg-white shadow-2xl p-5 space-y-4`}>

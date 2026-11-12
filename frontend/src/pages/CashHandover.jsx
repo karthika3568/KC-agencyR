@@ -4,6 +4,7 @@ import { cashHandoversApi } from '../api/postsale';
 import { usePermission } from '../hooks/usePermission';
 import { Pagination } from '../components/Pagination';
 import { useClientPagination } from '../hooks/useClientPagination';
+import { useUnsavedChangesGuard } from '../utils/escNavigation.jsx';
 
 export function CashHandover() {
   const queryClient = useQueryClient();
@@ -29,6 +30,15 @@ export function CashHandover() {
 
   const pending = pendingQuery.data || [];
   const register = registerQuery.data || [];
+
+  useUnsavedChangesGuard(
+    pending.some((p) => String(submittedAmounts[p.employee_id] ?? '').trim() !== '') ||
+      register.some((h) => h.status === 'pending' && String(verifyAmounts[h.id] ?? '').trim() !== ''),
+    {
+      title: 'Discard Unsaved Cash Handover Entries?',
+      message: 'You have entered handover or reconciliation amounts that have not been submitted. Discard them and go back?',
+    }
+  );
 
   const {
     page: pendingPage,

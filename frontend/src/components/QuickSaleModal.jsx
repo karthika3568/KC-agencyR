@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { Search, Plus, Minus, Trash2, X, Zap, ArrowRight, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { Button } from './Button.jsx';
 import { resolveSellingPrice } from '../utils/pricing.js';
+import { useEscNavigation, ESC_PRIORITY } from '../utils/escNavigation.jsx';
 
 /**
  * QuickSaleModal
@@ -28,6 +29,21 @@ export function QuickSaleModal({
   const [errorMsg, setErrorMsg] = useState('');
 
   const searchInputRef = useRef(null);
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.DROPDOWN,
+    onEsc: () => setIsDropdownOpen(false),
+    enabled: isOpen && isDropdownOpen,
+  });
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.MODAL,
+    onEsc: onClose,
+    enabled: isOpen,
+    hasUnsavedChanges: () => addedItems.length > 0 || Boolean(selectedProduct) || Boolean(search.trim()),
+    confirmTitle: 'Discard Quick Sale?',
+    confirmMessage: 'You have added or entered items in Quick Sale. Close without generating a bill?',
+  });
   const qtyInputRef = useRef(null);
   const priceInputRef = useRef(null);
   const dropdownRef = useRef(null);
@@ -298,9 +314,9 @@ export function QuickSaleModal({
       }
     } else if (e.key === 'Escape') {
       if (isDropdownOpen) {
+        e.preventDefault();
+        e.stopPropagation();
         setIsDropdownOpen(false);
-      } else {
-        onClose();
       }
     }
   };

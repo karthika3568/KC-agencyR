@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { Search, User, X, ChevronDown, Check, Phone } from 'lucide-react';
+import { useEscNavigation, ESC_PRIORITY } from '../utils/escNavigation.jsx';
 
 const PAGE_SIZE = 20;
 
@@ -13,6 +14,12 @@ export function CustomerSelect({
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [highlightedIndex, setHighlightedIndex] = useState(0);
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.DROPDOWN,
+    onEsc: () => setIsOpen(false),
+    enabled: isOpen,
+  });
   const [page, setPage] = useState(1);
   const wrapperRef = useRef(null);
   const inputRef = useRef(null);
@@ -115,7 +122,11 @@ export function CustomerSelect({
         setIsOpen(true);
       }
     } else if (e.key === 'Escape') {
-      setIsOpen(false);
+      if (isOpen) {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsOpen(false);
+      }
     }
   };
 

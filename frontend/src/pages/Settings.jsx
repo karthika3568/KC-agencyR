@@ -1,29 +1,43 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { settingsApi } from '../api/admin';
 import { Tabs } from '../components/Tabs';
 import { usePermission } from '../hooks/usePermission';
 import { handleFormKeyDown } from '../utils/formNavigation';
+import { useUnsavedChangesGuard } from '../utils/escNavigation.jsx';
 
 function CompanyProfilePanel({ canManage }) {
   const queryClient = useQueryClient();
   const branchQuery = useQuery({ queryKey: ['settings-branch'], queryFn: settingsApi.getBranch });
   const [form, setForm] = useState(null);
   const [message, setMessage] = useState('');
+  const initialRef = useRef(null);
 
   useEffect(() => {
-    if (branchQuery.data && !form) setForm(branchQuery.data);
-  }, [branchQuery.data]);
+    if (branchQuery.data && !form) {
+      initialRef.current = JSON.stringify(branchQuery.data);
+      setForm(branchQuery.data);
+    }
+  }, [branchQuery.data, form]);
 
   const saveMutation = useMutation({
     mutationFn: settingsApi.updateBranch,
     onSuccess: (data) => {
+      initialRef.current = JSON.stringify(data);
       setForm(data);
       queryClient.invalidateQueries({ queryKey: ['settings-branch'] });
       setMessage('Saved.');
       setTimeout(() => setMessage(''), 2500);
     },
   });
+
+  useUnsavedChangesGuard(
+    canManage && Boolean(form && initialRef.current && JSON.stringify(form) !== initialRef.current),
+    {
+      title: 'Discard Company Profile Changes?',
+      message: 'You have unsaved company profile settings. Discard changes and go back?',
+    }
+  );
 
   if (!form) return <p className="text-ink-muted text-xs">Loading…</p>;
 
@@ -71,20 +85,33 @@ function PrintSettingsPanel({ canManage }) {
   const printQuery = useQuery({ queryKey: ['settings-print'], queryFn: settingsApi.getPrint });
   const [form, setForm] = useState(null);
   const [message, setMessage] = useState('');
+  const initialRef = useRef(null);
 
   useEffect(() => {
-    if (printQuery.data && !form) setForm(printQuery.data);
-  }, [printQuery.data]);
+    if (printQuery.data && !form) {
+      initialRef.current = JSON.stringify(printQuery.data);
+      setForm(printQuery.data);
+    }
+  }, [printQuery.data, form]);
 
   const saveMutation = useMutation({
     mutationFn: settingsApi.updatePrint,
     onSuccess: (data) => {
+      initialRef.current = JSON.stringify(data);
       setForm(data);
       queryClient.invalidateQueries({ queryKey: ['settings-print'] });
       setMessage('Saved.');
       setTimeout(() => setMessage(''), 2500);
     },
   });
+
+  useUnsavedChangesGuard(
+    canManage && Boolean(form && initialRef.current && JSON.stringify(form) !== initialRef.current),
+    {
+      title: 'Discard Printer Settings?',
+      message: 'You have unsaved thermal printer configuration changes. Discard them and go back?',
+    }
+  );
 
   if (!form) return <p className="text-ink-muted text-xs">Loading…</p>;
 
@@ -154,6 +181,14 @@ function SequencesPanel({ canManage }) {
 
   const sequences = sequencesQuery.data || [];
 
+  useUnsavedChangesGuard(
+    canManage && sequences.some((s) => edits[s.id] !== undefined && edits[s.id] !== s.prefix),
+    {
+      title: 'Discard Sequence Prefix Changes?',
+      message: 'You have unsaved invoice sequence prefix changes. Discard them and go back?',
+    }
+  );
+
   return (
     <div data-form-container="true" onKeyDown={handleFormKeyDown} className="card p-3.5 space-y-2">
       <div className="font-semibold text-ink text-xs sm:text-sm">Invoice Sequence Prefixes</div>
@@ -202,29 +237,42 @@ function FreeQtySettingsPanel({ canManage }) {
   const freeQtyQuery = useQuery({ queryKey: ['settings-free-qty'], queryFn: settingsApi.getFreeQty });
   const [form, setForm] = useState(null);
   const [message, setMessage] = useState('');
+  const initialRef = useRef(null);
 
   useEffect(() => {
     if (freeQtyQuery.data && !form) {
-      setForm({
+      const next = {
         allow_local_free_qty: Number(freeQtyQuery.data.allow_local_free_qty ?? 1),
         allow_distance_free_qty: Number(freeQtyQuery.data.allow_distance_free_qty ?? 0),
-      });
+      };
+      initialRef.current = JSON.stringify(next);
+      setForm(next);
     }
-  }, [freeQtyQuery.data]);
+  }, [freeQtyQuery.data, form]);
 
   const saveMutation = useMutation({
     mutationFn: settingsApi.updateFreeQty,
     onSuccess: (data) => {
-      setForm({
+      const next = {
         allow_local_free_qty: Number(data.allow_local_free_qty),
         allow_distance_free_qty: Number(data.allow_distance_free_qty),
-      });
+      };
+      initialRef.current = JSON.stringify(next);
+      setForm(next);
       queryClient.invalidateQueries({ queryKey: ['settings-free-qty'] });
       queryClient.invalidateQueries({ queryKey: ['settings-print'] });
       setMessage('Saved.');
       setTimeout(() => setMessage(''), 2500);
     },
   });
+
+  useUnsavedChangesGuard(
+    canManage && Boolean(form && initialRef.current && JSON.stringify(form) !== initialRef.current),
+    {
+      title: 'Discard Free Quantity Changes?',
+      message: 'You have unsaved free quantity configuration changes. Discard them and go back?',
+    }
+  );
 
   if (!form) return <p className="text-ink-muted text-xs">Loading…</p>;
 

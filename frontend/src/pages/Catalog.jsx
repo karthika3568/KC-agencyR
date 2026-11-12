@@ -12,6 +12,7 @@ import { ItemsPanel } from './ItemsPanel.jsx';
 import { Pagination } from '../components/Pagination';
 import { useClientPagination } from '../hooks/useClientPagination';
 import { handleFormKeyDown } from '../utils/formNavigation';
+import { useEscNavigation, useUnsavedChangesGuard, ESC_PRIORITY } from '../utils/escNavigation.jsx';
 
 // Spatial & context-aware keyboard navigation helper for Catalog
 function findNextCatalogNavElement(currentEl, items, dir) {
@@ -230,6 +231,28 @@ function CategoriesPanel({ canManage }) {
   const [brandSearch, setBrandSearch] = useState('');
   const [isLoadingBrands, setIsLoadingBrands] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const initialEditRef = useRef(null);
+
+  const editSnapshot = JSON.stringify({
+    name,
+    isActive,
+    selectedBrandIds: [...selectedBrandIds].map(Number).sort((a, b) => a - b),
+  });
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.NESTED_SCREEN,
+    onEsc: () => resetForm(),
+    enabled: Boolean(editingId),
+    hasUnsavedChanges: () => !isLoadingBrands && initialEditRef.current !== null && editSnapshot !== initialEditRef.current,
+    confirmTitle: 'Discard Category Changes?',
+    confirmMessage: 'You have unsaved changes to this category. Discard them and exit edit mode?',
+  });
+
+  const isCreateDirty = !editingId && Boolean(name.trim() || selectedBrandIds.length > 0 || !isActive);
+  useUnsavedChangesGuard(isCreateDirty, {
+    title: 'Leave Category Form?',
+    message: 'You have unsaved category details in the form. Discard them and go back?',
+  });
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -250,6 +273,7 @@ function CategoriesPanel({ canManage }) {
   });
 
   const resetForm = () => {
+    initialEditRef.current = null;
     setEditingId(null);
     setName('');
     setIsActive(true);
@@ -265,19 +289,33 @@ function CategoriesPanel({ canManage }) {
   };
 
   const handleEdit = async (category) => {
+    const nextName = category.name || '';
+    const nextIsActive = category.is_active === undefined ? true : Boolean(Number(category.is_active));
+    initialEditRef.current = null;
     setEditingId(category.id);
-    setName(category.name || '');
-    setIsActive(category.is_active === undefined ? true : Boolean(Number(category.is_active)));
+    setName(nextName);
+    setIsActive(nextIsActive);
     setFormError('');
     setBrandSearch('');
     setIsLoadingBrands(true);
 
     try {
       const res = await categoryBrandsApi.get(category.id);
-      setSelectedBrandIds(Array.isArray(res?.brand_ids) ? res.brand_ids : []);
+      const nextBrands = Array.isArray(res?.brand_ids) ? res.brand_ids : [];
+      initialEditRef.current = JSON.stringify({
+        name: nextName,
+        isActive: nextIsActive,
+        selectedBrandIds: [...nextBrands].map(Number).sort((a, b) => a - b),
+      });
+      setSelectedBrandIds(nextBrands);
     } catch (err) {
       console.error('Failed to load brand mappings:', err);
       setFormError('Failed to load existing brand mappings for this category.');
+      initialEditRef.current = JSON.stringify({
+        name: nextName,
+        isActive: nextIsActive,
+        selectedBrandIds: [],
+      });
       setSelectedBrandIds([]);
     } finally {
       setIsLoadingBrands(false);
@@ -347,6 +385,11 @@ function CategoriesPanel({ canManage }) {
           } catch (brandErr) {
             invalidate();
             // Safeguard: switch to editingId mode so retry will not create a duplicate category
+            initialEditRef.current = JSON.stringify({
+              name: payload.name,
+              isActive,
+              selectedBrandIds: [],
+            });
             setEditingId(newId);
             setFormError(
               `Category "${payload.name}" was created successfully, but saving brand mappings failed (${
@@ -756,6 +799,24 @@ function BrandsPanel({ canManage }) {
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [isActive, setIsActive] = useState(true);
+  const initialEditRef = useRef(null);
+
+  const editSnapshot = JSON.stringify({ name, code, isActive });
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.NESTED_SCREEN,
+    onEsc: () => resetForm(),
+    enabled: Boolean(editingId),
+    hasUnsavedChanges: () => initialEditRef.current !== null && editSnapshot !== initialEditRef.current,
+    confirmTitle: 'Discard Brand Changes?',
+    confirmMessage: 'You have unsaved changes to this brand. Discard them and exit edit mode?',
+  });
+
+  const isCreateDirty = !editingId && Boolean(name.trim() || code.trim() || !isActive);
+  useUnsavedChangesGuard(isCreateDirty, {
+    title: 'Leave Brand Form?',
+    message: 'You have unsaved brand details in the form. Discard them and go back?',
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [formError, setFormError] = useState('');
@@ -790,6 +851,7 @@ function BrandsPanel({ canManage }) {
   });
 
   const resetForm = () => {
+    initialEditRef.current = null;
     setEditingId(null);
     setName('');
     setCode('');
@@ -803,10 +865,14 @@ function BrandsPanel({ canManage }) {
   };
 
   const handleEdit = (item) => {
+    const nextName = item.name || '';
+    const nextCode = item.code || '';
+    const nextIsActive = item.is_active === undefined ? true : Boolean(Number(item.is_active));
+    initialEditRef.current = JSON.stringify({ name: nextName, code: nextCode, isActive: nextIsActive });
     setEditingId(item.id);
-    setName(item.name || '');
-    setCode(item.code || '');
-    setIsActive(item.is_active === undefined ? true : Boolean(Number(item.is_active)));
+    setName(nextName);
+    setCode(nextCode);
+    setIsActive(nextIsActive);
     setFormError('');
   };
 
@@ -1105,6 +1171,24 @@ function StockUnitsPanel({ canManage }) {
   const [shortCode, setShortCode] = useState('');
   const [isDecimal, setIsDecimal] = useState('0');
   const [isActive, setIsActive] = useState(true);
+  const initialEditRef = useRef(null);
+
+  const editSnapshot = JSON.stringify({ name, shortCode, isDecimal, isActive });
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.NESTED_SCREEN,
+    onEsc: () => resetForm(),
+    enabled: Boolean(editingId),
+    hasUnsavedChanges: () => initialEditRef.current !== null && editSnapshot !== initialEditRef.current,
+    confirmTitle: 'Discard Unit Changes?',
+    confirmMessage: 'You have unsaved changes to this stock unit. Discard them and exit edit mode?',
+  });
+
+  const isCreateDirty = !editingId && Boolean(name.trim() || shortCode.trim() || isDecimal !== '0' || !isActive);
+  useUnsavedChangesGuard(isCreateDirty, {
+    title: 'Leave Stock Unit Form?',
+    message: 'You have unsaved stock unit details in the form. Discard them and go back?',
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [formError, setFormError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -1127,6 +1211,7 @@ function StockUnitsPanel({ canManage }) {
   });
 
   const resetForm = () => {
+    initialEditRef.current = null;
     setEditingId(null);
     setName('');
     setShortCode('');
@@ -1141,11 +1226,21 @@ function StockUnitsPanel({ canManage }) {
   };
 
   const handleEdit = (item) => {
+    const nextName = item.name || '';
+    const nextShortCode = item.short_code || '';
+    const nextIsDecimal = String(item.is_decimal ?? '0');
+    const nextIsActive = item.is_active === undefined ? true : Boolean(Number(item.is_active));
+    initialEditRef.current = JSON.stringify({
+      name: nextName,
+      shortCode: nextShortCode,
+      isDecimal: nextIsDecimal,
+      isActive: nextIsActive,
+    });
     setEditingId(item.id);
-    setName(item.name || '');
-    setShortCode(item.short_code || '');
-    setIsDecimal(String(item.is_decimal ?? '0'));
-    setIsActive(item.is_active === undefined ? true : Boolean(Number(item.is_active)));
+    setName(nextName);
+    setShortCode(nextShortCode);
+    setIsDecimal(nextIsDecimal);
+    setIsActive(nextIsActive);
     setFormError('');
   };
 
@@ -1403,6 +1498,42 @@ function TaxCodesPanel({ canManage }) {
   const [igstPercent, setIgstPercent] = useState('');
   const [cessPercent, setCessPercent] = useState('');
   const [isActive, setIsActive] = useState(true);
+  const initialEditRef = useRef(null);
+
+  const editSnapshot = JSON.stringify({
+    code,
+    name,
+    gstPercent: String(gstPercent ?? ''),
+    cgstPercent: String(cgstPercent ?? ''),
+    sgstPercent: String(sgstPercent ?? ''),
+    igstPercent: String(igstPercent ?? ''),
+    cessPercent: String(cessPercent ?? ''),
+    isActive,
+  });
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.NESTED_SCREEN,
+    onEsc: () => resetForm(),
+    enabled: Boolean(editingId),
+    hasUnsavedChanges: () => initialEditRef.current !== null && editSnapshot !== initialEditRef.current,
+    confirmTitle: 'Discard Tax Code Changes?',
+    confirmMessage: 'You have unsaved changes to this tax code. Discard them and exit edit mode?',
+  });
+
+  const isCreateDirty = !editingId && Boolean(
+    code.trim() ||
+    name.trim() ||
+    String(gstPercent ?? '') !== '' ||
+    String(cgstPercent ?? '') !== '' ||
+    String(sgstPercent ?? '') !== '' ||
+    String(igstPercent ?? '') !== '' ||
+    String(cessPercent ?? '') !== '' ||
+    !isActive
+  );
+  useUnsavedChangesGuard(isCreateDirty, {
+    title: 'Leave Tax Code Form?',
+    message: 'You have unsaved tax code details in the form. Discard them and go back?',
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [formError, setFormError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -1425,6 +1556,7 @@ function TaxCodesPanel({ canManage }) {
   });
 
   const resetForm = () => {
+    initialEditRef.current = null;
     setEditingId(null);
     setCode('');
     setName('');
@@ -1443,15 +1575,33 @@ function TaxCodesPanel({ canManage }) {
   };
 
   const handleEdit = (item) => {
+    const nextCode = item.code || '';
+    const nextName = item.name || '';
+    const nextGst = item.gst_percent ?? '';
+    const nextCgst = item.cgst_percent ?? '';
+    const nextSgst = item.sgst_percent ?? '';
+    const nextIgst = item.igst_percent ?? '';
+    const nextCess = item.cess_percent ?? '';
+    const nextIsActive = item.is_active === undefined ? true : Boolean(Number(item.is_active));
+    initialEditRef.current = JSON.stringify({
+      code: nextCode,
+      name: nextName,
+      gstPercent: String(nextGst),
+      cgstPercent: String(nextCgst),
+      sgstPercent: String(nextSgst),
+      igstPercent: String(nextIgst),
+      cessPercent: String(nextCess),
+      isActive: nextIsActive,
+    });
     setEditingId(item.id);
-    setCode(item.code || '');
-    setName(item.name || '');
-    setGstPercent(item.gst_percent ?? '');
-    setCgstPercent(item.cgst_percent ?? '');
-    setSgstPercent(item.sgst_percent ?? '');
-    setIgstPercent(item.igst_percent ?? '');
-    setCessPercent(item.cess_percent ?? '');
-    setIsActive(item.is_active === undefined ? true : Boolean(Number(item.is_active)));
+    setCode(nextCode);
+    setName(nextName);
+    setGstPercent(nextGst);
+    setCgstPercent(nextCgst);
+    setSgstPercent(nextSgst);
+    setIgstPercent(nextIgst);
+    setCessPercent(nextCess);
+    setIsActive(nextIsActive);
     setFormError('');
   };
 

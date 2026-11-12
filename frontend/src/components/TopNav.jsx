@@ -14,6 +14,7 @@ import { useAuth } from '../hooks/useAuth.jsx';
 import { usePermission } from '../hooks/usePermission';
 import { useBranchStore } from '../store/branchStore';
 import { branchesApi } from '../api/branches';
+import { useEscNavigation, useEscNavigationContext, ESC_PRIORITY } from '../utils/escNavigation.jsx';
 
 // Helper to check user permissions
 function checkPermission(user, perm, targetPath = null) {
@@ -146,6 +147,7 @@ export function TopNav({ onToggleSidebar, onToggleMobile } = {}) {
   const queryClient = useQueryClient();
   const canSwitch = usePermission('branches.switch_context');
   const { selectedBranchId, setSelectedBranchId } = useBranchStore();
+  const { registerParentModuleNavigator } = useEscNavigationContext();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
@@ -157,6 +159,60 @@ export function TopNav({ onToggleSidebar, onToggleMobile } = {}) {
   const searchRef = useRef(null);
   const navRef = useRef(null);
   const pendingFocusRef = useRef(null);
+
+  // Register ESC navigation handlers for TopNav popovers/menus
+  useEscNavigation({
+    priority: ESC_PRIORITY.DROPDOWN,
+    onEsc: () => {
+      setShowSearchDropdown(false);
+      setSearchQuery('');
+    },
+    enabled: showSearchDropdown,
+  });
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.DROPDOWN,
+    onEsc: () => setShowProfileMenu(false),
+    enabled: showProfileMenu,
+  });
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.DROPDOWN,
+    onEsc: () => setMobileDrawerOpen(false),
+    enabled: mobileDrawerOpen,
+  });
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.DROPDOWN,
+    onEsc: () => {
+      const currentId = openDropdownId;
+      setOpenDropdownId(null);
+      const parentBtn = navRef.current?.querySelector(`[data-group-id="${currentId}"]`);
+      parentBtn?.focus();
+    },
+    enabled: Boolean(openDropdownId),
+  });
+
+  useEffect(() => {
+    registerParentModuleNavigator((groupId) => {
+      if (user?.role === 'Field Sales Executive') return false;
+      const group = TOP_NAV_GROUPS.find((g) => g.id === groupId);
+      if (!group) return false;
+      if (openDropdownId === groupId) return false;
+
+      if (window.innerWidth >= 1024) {
+        const btn = navRef.current?.querySelector(`[data-group-id="${groupId}"]`);
+        if (!btn) return false;
+        setOpenDropdownId(groupId);
+        setTimeout(() => {
+          btn.focus();
+        }, 40);
+      } else {
+        setMobileDrawerOpen(true);
+      }
+      return true;
+    });
+  }, [registerParentModuleNavigator, openDropdownId, user?.role]);
 
   // Helper to get all rendered, visible top-level navbar interactive items in DOM order
   const getTopLevelItems = () => {

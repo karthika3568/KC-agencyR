@@ -40,6 +40,7 @@ import { ImageSearchModal } from '../components/ImageSearchModal.jsx';
 import { BarcodeScannerModal } from '../components/BarcodeScannerModal.jsx';
 import { QuickSaleModal } from '../components/QuickSaleModal.jsx';
 import { handleFormKeyDown } from '../utils/formNavigation';
+import { useEscNavigation, useUnsavedChangesGuard, ESC_PRIORITY } from '../utils/escNavigation.jsx';
 
 const PAYMENT_METHODS = [
   { key: 'cash', label: 'Cash' },
@@ -136,6 +137,63 @@ export function POS() {
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
   const [showQuickSaleModal, setShowQuickSaleModal] = useState(false);
 
+  // Register ESC navigation handlers for POS modals, dropdowns, and cart safety
+  useEscNavigation({
+    priority: ESC_PRIORITY.DROPDOWN,
+    onEsc: () => setShowCustomerDropdown(false),
+    enabled: showCustomerDropdown,
+  });
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.DROPDOWN,
+    onEsc: () => {
+      setShowProductDropdown(false);
+      setSearch('');
+      hasUserNavigatedDropdownRef.current = false;
+      if (productSearchInputRef.current) productSearchInputRef.current.value = '';
+    },
+    enabled: showProductDropdown,
+  });
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.DROPDOWN,
+    onEsc: () => setShowHeldList(false),
+    enabled: showHeldList,
+  });
+
+  // Clear typed search / navigate back safely when bill has unsaved cart items
+  useEscNavigation({
+    priority: ESC_PRIORITY.NESTED_SCREEN,
+    onEsc: () => {
+      setSearch('');
+      hasUserNavigatedDropdownRef.current = false;
+      if (productSearchInputRef.current) productSearchInputRef.current.value = '';
+      productSearchInputRef.current?.focus();
+    },
+    enabled:
+      Boolean(search) &&
+      !showPaymentModal &&
+      !showImageSearch &&
+      !showBarcodeScanner &&
+      !showQuickSaleModal &&
+      !printingInvoiceId,
+  });
+
+  useUnsavedChangesGuard(
+    (cart.length > 0 || Boolean(billDiscount) || Boolean(vehicleNo)) &&
+      !showPaymentModal &&
+      !showImageSearch &&
+      !showBarcodeScanner &&
+      !showQuickSaleModal &&
+      !printingInvoiceId,
+    {
+      title: 'Leave POS Billing?',
+      message: 'You have items or bill details in progress. Leaving now will discard the active cart.',
+      confirmLabel: 'Leave POS',
+      cancelLabel: 'Stay',
+    }
+  );
+
   const customerSearchInputRef = useRef(null);
   const productSearchInputRef = useRef(null);
   const customerDropdownRef = useRef(null);
@@ -148,6 +206,8 @@ export function POS() {
   const [isScannerReady, setIsScannerReady] = useState(false);
   const scanErrorTimeoutRef = useRef(null);
   const lastScanRef = useRef({ code: '', time: 0 });
+  const ignoreEnterUntilRef = useRef(0);
+  const hasUserNavigatedDropdownRef = useRef(false);
 
   const showScanError = (msg) => {
     setIsScannerReady(false);
@@ -479,6 +539,8 @@ export function POS() {
     setShowCustomerDropdown(false);
     // Shift focus to product search field and automatically show product list
     setTimeout(() => {
+      hasUserNavigatedDropdownRef.current = false;
+      ignoreEnterUntilRef.current = Date.now() + 250;
       productSearchInputRef.current?.focus();
       productSearchInputRef.current?.select();
       setShowProductDropdown(true);
@@ -519,6 +581,8 @@ export function POS() {
     setIsScannerReady(false);
     setShowProductDropdown(false);
     setProductSelectedIndex(0);
+    hasUserNavigatedDropdownRef.current = false;
+    ignoreEnterUntilRef.current = Date.now() + 250;
     focusBillCell(targetIndex, 'qty');
     return true;
   };
@@ -657,6 +721,8 @@ export function POS() {
         // Walk-in customer: shift focus to product search and open product dropdown
         setShowCustomerDropdown(false);
         setTimeout(() => {
+          hasUserNavigatedDropdownRef.current = false;
+          ignoreEnterUntilRef.current = Date.now() + 250;
           productSearchInputRef.current?.focus();
           productSearchInputRef.current?.select();
           setShowProductDropdown(true);
@@ -666,7 +732,11 @@ export function POS() {
     } else if (e.key === 'Tab') {
       setShowCustomerDropdown(false);
     } else if (e.key === 'Escape') {
-      setShowCustomerDropdown(false);
+      if (showCustomerDropdown) {
+        e.preventDefault();
+        e.stopPropagation();
+        setShowCustomerDropdown(false);
+      }
     }
   };
 
@@ -674,6 +744,7 @@ export function POS() {
   const handleProductKeyDown = (e) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
+      hasUserNavigatedDropdownRef.current = true;
       if (!showProductDropdown) {
         setShowProductDropdown(true);
         setProductSelectedIndex(0);
@@ -684,6 +755,7 @@ export function POS() {
       }
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
+      hasUserNavigatedDropdownRef.current = true;
       if (!showProductDropdown) {
         setShowProductDropdown(true);
         setProductSelectedIndex(Math.max(0, displayedProducts.length - 1));
@@ -694,12 +766,28 @@ export function POS() {
       }
     } else if (e.key === 'Enter') {
       e.preventDefault();
+      e.stopPropagation();
+
+      if (Date.now() < ignoreEnterUntilRef.current) {
+        return;
+      }
+
       const currentVal = (productSearchInputRef.current?.value || search).trim();
-      if (showProductDropdown && displayedProducts.length > 0 && productSelectedIndex >= 0 && productSelectedIndex < displayedProducts.length) {
+      if (currentVal) {
+        if (showProductDropdown && displayedProducts.length > 0 && productSelectedIndex >= 0 && productSelectedIndex < displayedProducts.length) {
+          addItem(displayedProducts[productSelectedIndex]);
+        } else {
+          processScanOrSearch(currentVal);
+        }
+        return;
+      }
+
+      if (hasUserNavigatedDropdownRef.current && showProductDropdown && displayedProducts.length > 0 && productSelectedIndex >= 0 && productSelectedIndex < displayedProducts.length) {
         addItem(displayedProducts[productSelectedIndex]);
-      } else if (currentVal) {
-        processScanOrSearch(currentVal);
-      } else if (pricedLines.length > 0) {
+        return;
+      }
+
+      if (pricedLines.length > 0) {
         setShowProductDropdown(false);
         focusBillCell(0, 'qty');
       }
@@ -709,10 +797,30 @@ export function POS() {
         focusBillCell(0, 'qty');
       }
     } else if (e.key === 'Escape') {
-      setSearch('');
-      setShowProductDropdown(false);
-      if (productSearchInputRef.current) productSearchInputRef.current.value = '';
+      if (showProductDropdown || search) {
+        e.preventDefault();
+        e.stopPropagation();
+        setSearch('');
+        setShowProductDropdown(false);
+        hasUserNavigatedDropdownRef.current = false;
+        if (productSearchInputRef.current) productSearchInputRef.current.value = '';
+      }
     }
+  };
+
+  const returnFocusToProductSearch = () => {
+    setSearch('');
+    if (productSearchInputRef.current) {
+      productSearchInputRef.current.value = '';
+    }
+    setShowProductDropdown(true);
+    setProductSelectedIndex(0);
+    hasUserNavigatedDropdownRef.current = false;
+    ignoreEnterUntilRef.current = Date.now() + 250;
+    setTimeout(() => {
+      productSearchInputRef.current?.focus();
+      productSearchInputRef.current?.select();
+    }, 10);
   };
 
   // 4-Way Arrow Key Navigation + Enter in Bill Items Table
@@ -809,8 +917,11 @@ export function POS() {
       }
     } else if (e.key === 'Enter') {
       e.preventDefault();
+      e.stopPropagation();
       if (fieldKey === 'rate') {
         focusBillCell(rowIndex, 'qty');
+      } else if (fieldKey === 'qty') {
+        returnFocusToProductSearch();
       } else if (colIndex < fields.length - 1) {
         focusBillCell(rowIndex, fields[colIndex + 1]);
       } else if (rowIndex < pricedLines.length - 1) {
@@ -819,8 +930,19 @@ export function POS() {
         proceedBtnRef.current?.focus();
       }
     } else if (e.key === 'Escape') {
-      productSearchInputRef.current?.focus();
-      productSearchInputRef.current?.select();
+      if (
+        !showPaymentModal &&
+        !showImageSearch &&
+        !showBarcodeScanner &&
+        !showQuickSaleModal &&
+        !printingInvoiceId &&
+        !document.querySelector('[role="alertdialog"], [role="dialog"]')
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+        productSearchInputRef.current?.focus();
+        productSearchInputRef.current?.select();
+      }
     }
   };
 
@@ -1368,6 +1490,9 @@ export function POS() {
                 setSearch(val);
                 setShowProductDropdown(true);
                 setProductSelectedIndex(0);
+                if (!val.trim()) {
+                  hasUserNavigatedDropdownRef.current = false;
+                }
                 if (scanError) setScanError('');
               }}
               onKeyDown={handleProductKeyDown}
@@ -1428,6 +1553,7 @@ export function POS() {
                           addItem(item);
                         }}
                         onMouseMove={() => {
+                          hasUserNavigatedDropdownRef.current = true;
                           if (productSelectedIndex !== index) setProductSelectedIndex(index);
                         }}
                         className={`cursor-pointer transition-colors ${
@@ -1972,6 +2098,12 @@ function PaymentModal({
   isValid = true,
   error,
 }) {
+  useEscNavigation({
+    priority: ESC_PRIORITY.MODAL,
+    onEsc: onBack,
+    enabled: true,
+  });
+
   const grandTotal = totals.grandTotal;
   const paymentsTotal = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
   const remaining = Math.round((grandTotal - paymentsTotal) * 100) / 100;

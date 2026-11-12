@@ -4,6 +4,7 @@ import { X, Upload, Camera, ImageOff } from 'lucide-react';
 import { itemsApi } from '../api/catalog';
 import { resolveImageUrl } from '../utils/media';
 import { Button } from './Button.jsx';
+import { useEscNavigation, ESC_PRIORITY } from '../utils/escNavigation.jsx';
 
 /**
  * "Find this item from a photo." Runs server-side OCR (if the server has an
@@ -13,6 +14,12 @@ import { Button } from './Button.jsx';
  * modal surfaces that instead of pretending a match was attempted.
  */
 export function ImageSearchModal({ onClose, onAdd }) {
+  useEscNavigation({
+    priority: ESC_PRIORITY.MODAL,
+    onEsc: onClose,
+    enabled: true,
+  });
+
   const [preview, setPreview] = useState(null);
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);

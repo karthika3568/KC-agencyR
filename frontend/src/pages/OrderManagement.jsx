@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -20,6 +20,7 @@ import { useClientPagination } from '../hooks/useClientPagination';
 import { usePermission } from '../hooks/usePermission';
 import { useAuth } from '../hooks/useAuth.jsx';
 import { handleFormKeyDown } from '../utils/formNavigation';
+import { useEscNavigation, useUnsavedChangesGuard, ESC_PRIORITY } from '../utils/escNavigation.jsx';
 
 const BOOKING_SOURCES = [
   { value: 'direct', label: 'Direct Walk-in' },
@@ -145,6 +146,11 @@ function ItemLineEditor({ lines, setLines, items, stockByItemId = {}, rateLabel 
 // ---------------------------------------------------------------------
 
 function PrebookingPrintView({ data, onClose }) {
+  useEscNavigation({
+    priority: ESC_PRIORITY.MODAL,
+    onEsc: onClose,
+    enabled: true,
+  });
   if (!data || !data.items) return null;
   const subtotal = data.items.reduce((s, l) => s + Number(l.qty || 0) * Number(l.rate || 0), 0);
   const gst = data.items.reduce(
@@ -239,6 +245,27 @@ function PrebookingEditModal({ booking, stockByItemId = {}, onClose }) {
     ]
   );
   const [error, setError] = useState('');
+
+  const serializeEdit = (cid, eid, src, noteVal, ls) => JSON.stringify({
+    customerId: String(cid ?? ''),
+    employeeId: String(eid ?? ''),
+    bookingSource: String(src ?? ''),
+    notes: String(noteVal ?? ''),
+    lines: (ls || []).map((l) => ({ item_id: String(l.item_id ?? ''), qty: String(l.qty ?? ''), rate: String(l.rate ?? '') })),
+  });
+  const initialRef = useRef(null);
+  if (initialRef.current === null) {
+    initialRef.current = serializeEdit(customerId, employeeId, bookingSource, notes, lines);
+  }
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.MODAL,
+    onEsc: onClose,
+    enabled: true,
+    hasUnsavedChanges: () => serializeEdit(customerId, employeeId, bookingSource, notes, lines) !== initialRef.current,
+    confirmTitle: 'Discard Order Edits?',
+    confirmMessage: 'You have unsaved changes to this pre-booking order. Discard them and close?',
+  });
 
   const items = itemsQuery.data || [];
   const customers = customersQuery.data || [];
@@ -348,6 +375,20 @@ function PrebookingDispatchModal({ booking, onClose, onSuccess }) {
   const [notes, setNotes] = useState(`Dispatched order ${booking?.prebooking_no || ''}`);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  const initialRef = useRef(null);
+  if (initialRef.current === null) {
+    initialRef.current = JSON.stringify({ salesmanId: String(salesmanId ?? ''), notes });
+  }
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.MODAL,
+    onEsc: onClose,
+    enabled: true,
+    hasUnsavedChanges: () => JSON.stringify({ salesmanId: String(salesmanId ?? ''), notes }) !== initialRef.current,
+    confirmTitle: 'Cancel Van Dispatch?',
+    confirmMessage: 'You modified dispatch details. Discard changes and close?',
+  });
 
   const users = usersQuery.data || [];
 
@@ -461,6 +502,12 @@ function CustomerPrebookingPanel() {
   const [viewingId, setViewingId] = useState(null);
   const [dispatchingBooking, setDispatchingBooking] = useState(null);
 
+  useEscNavigation({
+    priority: ESC_PRIORITY.MODAL,
+    onEsc: () => setViewingId(null),
+    enabled: Boolean(viewingId),
+  });
+
   // Left side form state
   const [customerId, setCustomerId] = useState('');
   const [employeeId, setEmployeeId] = useState(isSalesman ? (user?.id || '') : '');
@@ -502,6 +549,24 @@ function CustomerPrebookingPanel() {
     queryKey: ['customer-prebooking', printingId],
     queryFn: () => customerPrebookingsApi.get(printingId),
     enabled: !!printingId,
+  });
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.MODAL,
+    onEsc: () => setPrintingId(null),
+    enabled: Boolean(printingId && !printQuery.data),
+  });
+
+  const isCreateDirty = Boolean(
+    customerId ||
+    notes.trim() ||
+    (!isSalesman && employeeId) ||
+    (!isSalesman && bookingSource !== 'direct') ||
+    lines.some((l) => l.item_id)
+  );
+  useUnsavedChangesGuard(isCreateDirty, {
+    title: 'Leave Pre-Booking Form?',
+    message: 'You have unsaved pre-booking details in the form. Discard them and go back?',
   });
   const viewQuery = useQuery({
     queryKey: ['customer-prebooking', viewingId],
@@ -957,6 +1022,11 @@ function CustomerPrebookingPanel() {
 // ---------------------------------------------------------------------
 
 function RequestPrintView({ data, onClose }) {
+  useEscNavigation({
+    priority: ESC_PRIORITY.MODAL,
+    onEsc: onClose,
+    enabled: true,
+  });
   if (!data || !data.items) return null;
   const total = data.items.reduce((s, l) => s + Number(l.qty || 0) * Number(l.rate || 0), 0);
   return (
@@ -1032,6 +1102,25 @@ function ConvertToGrnModal({ request, onClose }) {
     }))
   );
   const [error, setError] = useState('');
+
+  const serializeConvert = (pMode, pAmt, ls) => JSON.stringify({
+    paymentMode: String(pMode ?? 'credit'),
+    paidAmount: String(pAmt ?? 0),
+    lines: (ls || []).map((l) => ({ item_id: String(l.item_id ?? ''), qty: String(l.qty ?? ''), rate: String(l.rate ?? '') })),
+  });
+  const initialRef = useRef(null);
+  if (initialRef.current === null) {
+    initialRef.current = serializeConvert(paymentMode, paidAmount, lines);
+  }
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.MODAL,
+    onEsc: onClose,
+    enabled: true,
+    hasUnsavedChanges: () => serializeConvert(paymentMode, paidAmount, lines) !== initialRef.current,
+    confirmTitle: 'Discard GRN Conversion?',
+    confirmMessage: 'You adjusted inward GRN quantities or payment details. Discard changes and close?',
+  });
 
   const createMutation = useMutation({ mutationFn: purchasesApi.create });
 
@@ -1149,6 +1238,17 @@ function SupplierRequestPanel() {
     queryKey: ['purchase-request', printingId],
     queryFn: () => purchaseRequestsApi.get(printingId),
     enabled: !!printingId,
+  });
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.MODAL,
+    onEsc: () => setPrintingId(null),
+    enabled: Boolean(printingId && !printQuery.data),
+  });
+
+  useUnsavedChangesGuard(Boolean(supplierId || notes.trim() || lines.some((l) => l.item_id)), {
+    title: 'Leave Purchase Indent Form?',
+    message: 'You have unsaved purchase request details in the form. Discard them and go back?',
   });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['purchase-requests'] });

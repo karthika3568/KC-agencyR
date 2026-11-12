@@ -13,6 +13,7 @@ import { usePermission, hasPermission } from '../hooks/usePermission';
 import { dashboardApi } from '../api/admin';
 import { Card } from '../components/Card.jsx';
 import { FieldSalesDashboard } from '../components/FieldSalesDashboard.jsx';
+import { useEscNavigation, ESC_PRIORITY } from '../utils/escNavigation.jsx';
 
 // Spatial 2D keyboard navigation helper based on DOM geometry
 function findNextNavElement(currentEl, items, dir) {
@@ -298,6 +299,12 @@ function StandardDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [showTotalsReport, setShowTotalsReport] = useState(false);
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.MODAL,
+    onEsc: () => setShowTotalsReport(false),
+    enabled: showTotalsReport,
+  });
 
   const summaryQuery = useQuery({
     queryKey: ['dashboard-summary'],

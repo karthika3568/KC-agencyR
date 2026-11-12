@@ -7,6 +7,7 @@ import { ThermalTemplate } from '../print/ThermalTemplate';
 import { A4Template } from '../print/A4Template';
 import { A5Template } from '../print/A5Template';
 import { Button } from './Button.jsx';
+import { useEscNavigation, ESC_PRIORITY } from '../utils/escNavigation.jsx';
 import '../print/print.css';
 
 /**
@@ -97,6 +98,12 @@ export function adaptStockIssueToPrintData(issue) {
  * reusing the established KC Agency bill templates (A4 and Thermal 80mm).
  */
 export function PrintPreviewModal({ invoiceId, stockIssue, issueId, onClose }) {
+  useEscNavigation({
+    priority: ESC_PRIORITY.MODAL,
+    onEsc: onClose,
+    enabled: true,
+  });
+
   const isStockIssue = Boolean(stockIssue || issueId);
   const [format, setFormat] = useState(isStockIssue ? 'a4' : 'thermal');
   const [data, setData] = useState(() => (stockIssue ? adaptStockIssueToPrintData(stockIssue) : null));

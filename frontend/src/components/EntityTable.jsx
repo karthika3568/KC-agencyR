@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Plus, Pencil, Trash2, Check, X } from 'lucide-react';
 import { Button } from './Button.jsx';
 import { Pagination } from './Pagination.jsx';
 import { useClientPagination } from '../hooks/useClientPagination';
 import { handleFormKeyDown } from '../utils/formNavigation';
 import { ConfirmDialog } from './ConfirmDialog.jsx';
+import { useEscNavigation, useUnsavedChangesGuard, ESC_PRIORITY } from '../utils/escNavigation.jsx';
 
 function FieldInput({ f, value, onChange }) {
   if (f.type === 'select') {
@@ -46,6 +47,24 @@ export function EntityTable({ title, fields, columns, rows, onCreate, onUpdate, 
   const [pendingDelete, setPendingDelete] = useState(null);
   const [deleteError, setDeleteError] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const initialEditRef = useRef(null);
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.NESTED_SCREEN,
+    onEsc: () => {
+      setEditingId(null);
+      initialEditRef.current = null;
+    },
+    enabled: Boolean(editingId),
+    hasUnsavedChanges: () => initialEditRef.current !== null && JSON.stringify(editForm) !== initialEditRef.current,
+    confirmTitle: 'Discard row edits?',
+    confirmMessage: 'You have unsaved changes to this row. Discard them and cancel editing?',
+  });
+
+  useUnsavedChangesGuard(!editingId && JSON.stringify(form) !== JSON.stringify(emptyForm), {
+    title: 'Discard new entry?',
+    message: `You have unsaved fields in "${title}". Leave without saving?`,
+  });
 
   const handleChange = (name, value) => setForm((prev) => ({ ...prev, [name]: value }));
 
@@ -64,9 +83,11 @@ export function EntityTable({ title, fields, columns, rows, onCreate, onUpdate, 
   };
 
   const startEdit = (row) => {
+    const nextEditForm = Object.fromEntries(fields.map((f) => [f.name, row[f.name] ?? f.default ?? '']));
     setEditingId(row.id);
     setEditError('');
-    setEditForm(Object.fromEntries(fields.map((f) => [f.name, row[f.name] ?? f.default ?? ''])));
+    setEditForm(nextEditForm);
+    initialEditRef.current = JSON.stringify(nextEditForm);
   };
 
   const saveEdit = async (id) => {
@@ -74,6 +95,7 @@ export function EntityTable({ title, fields, columns, rows, onCreate, onUpdate, 
     try {
       await onUpdate(id, editForm);
       setEditingId(null);
+      initialEditRef.current = null;
     } catch (err) {
       setEditError(err?.response?.data?.errors?.join(', ') || err?.response?.data?.error || 'Update failed');
     }

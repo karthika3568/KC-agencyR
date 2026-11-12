@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ShieldCheck, Search, Plus, Edit2, CheckCircle2, UserCheck, Lock, UserX, Loader2, AlertTriangle, Users } from 'lucide-react';
 import { staffApi, rolesApi } from '../api/admin';
@@ -8,6 +8,7 @@ import { Button } from '../components/Button.jsx';
 import { Pagination } from '../components/Pagination';
 import { useClientPagination } from '../hooks/useClientPagination';
 import { handleFormKeyDown } from '../utils/formNavigation';
+import { useEscNavigation, useUnsavedChangesGuard, ESC_PRIORITY } from '../utils/escNavigation.jsx';
 
 export function StaffPermissions() {
   const canManageAccounts = usePermission('staff.manage_accounts');
@@ -25,6 +26,25 @@ export function StaffPermissions() {
   const [form, setForm] = useState({ name: '', email: '', password: '', role_id: '', branch_id: '', phone: '', status: 'active' });
   const [editingId, setEditingId] = useState(null);
   const [selectedUserForPerms, setSelectedUserForPerms] = useState(null);
+  const initialEditRef = useRef(null);
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.NESTED_SCREEN,
+    onEsc: () => resetForm(),
+    enabled: Boolean(editingId),
+    hasUnsavedChanges: () => initialEditRef.current !== null && JSON.stringify(form) !== initialEditRef.current,
+    confirmTitle: 'Discard staff edits?',
+    confirmMessage: 'You have unsaved changes to this staff account. Discard them and exit edit mode?',
+  });
+
+  useUnsavedChangesGuard(
+    !editingId &&
+      Boolean(form.name || form.email || form.password || form.role_id || form.branch_id || form.phone || form.status !== 'active'),
+    {
+      title: 'Discard new staff details?',
+      message: 'You have unsaved staff account details in the form. Leave without saving?',
+    }
+  );
 
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -54,6 +74,7 @@ export function StaffPermissions() {
   const resetForm = () => {
     setForm({ name: '', email: '', password: '', role_id: '', branch_id: '', phone: '', status: 'active' });
     setEditingId(null);
+    initialEditRef.current = null;
     setError('');
   };
 
@@ -63,8 +84,7 @@ export function StaffPermissions() {
   };
 
   const handleEdit = (u) => {
-    setEditingId(u.id);
-    setForm({
+    const nextForm = {
       name: u.name || '',
       email: u.email || '',
       password: '', // Blank unless updating
@@ -72,7 +92,10 @@ export function StaffPermissions() {
       branch_id: u.branch_id ? String(u.branch_id) : '',
       phone: u.phone || '',
       status: u.status || 'active',
-    });
+    };
+    setEditingId(u.id);
+    setForm(nextForm);
+    initialEditRef.current = JSON.stringify(nextForm);
     setError('');
   };
 
@@ -476,6 +499,15 @@ function PermissionsPanel({ user, onClose }) {
   const [pending, setPending] = useState({});
   const [searchTerm, setSearchTerm] = useState('');
   const [savedBanner, setSavedBanner] = useState(false);
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.MODAL,
+    onEsc: onClose,
+    enabled: true,
+    hasUnsavedChanges: () => Object.keys(pending).length > 0,
+    confirmTitle: 'Discard permission changes?',
+    confirmMessage: 'You have unsaved permission overrides. Close without saving?',
+  });
 
   const permsQuery = useQuery({
     queryKey: ['staff-permissions', user.id],

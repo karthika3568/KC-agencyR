@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Eye, Printer, Ban, Search, Pencil, Trash2 } from 'lucide-react';
 import { invoicesApi } from '../api/invoices';
@@ -12,6 +12,7 @@ import { Pagination } from '../components/Pagination.jsx';
 import { PrintPreviewModal } from '../components/PrintPreviewModal.jsx';
 import { usePermission } from '../hooks/usePermission';
 import { handleFormKeyDown } from '../utils/formNavigation';
+import { useEscNavigation, ESC_PRIORITY } from '../utils/escNavigation.jsx';
 
 const STATUS_VARIANT = {
   paid: 'success', partial: 'warning', credit: 'gold', cancelled: 'danger', returned: 'danger',
@@ -44,6 +45,20 @@ function GstFilingPanel({ invoice, canManage }) {
   const [busy, setBusy] = useState('');
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['invoice', invoice.id] });
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.MODAL + 5,
+    onEsc: () => setTransportOpen(false),
+    enabled: transportOpen,
+    hasUnsavedChanges: () => (
+      transporterName !== (invoice.transporter_name || '') ||
+      transporterGstin !== (invoice.transporter_gstin || '') ||
+      String(distance ?? '') !== String(invoice.transport_distance_km ?? '') ||
+      vehicleNo !== (invoice.vehicle_no || '')
+    ),
+    confirmTitle: 'Discard Transport Details?',
+    confirmMessage: 'You have unsaved transport changes. Discard them and close transport details?',
+  });
 
   const runAction = async (key, fn) => {
     setActionError('');
@@ -139,6 +154,11 @@ function GstFilingPanel({ invoice, canManage }) {
 }
 
 function ViewModal({ id, onClose }) {
+  useEscNavigation({
+    priority: ESC_PRIORITY.MODAL,
+    onEsc: onClose,
+    enabled: true,
+  });
   const canManageGst = usePermission('pos.manage_gst_filing');
   const { data } = useQuery({ queryKey: ['invoice', id], queryFn: () => invoicesApi.get(id) });
   if (!data) return null;
@@ -251,6 +271,14 @@ function ViewModal({ id, onClose }) {
 
 function CancelModal({ invoice, onClose, onConfirm, error }) {
   const [reason, setReason] = useState('');
+  useEscNavigation({
+    priority: ESC_PRIORITY.MODAL,
+    onEsc: onClose,
+    enabled: true,
+    hasUnsavedChanges: () => Boolean(reason.trim()),
+    confirmTitle: 'Discard Cancellation Reason?',
+    confirmMessage: 'You entered a cancellation reason. Close without cancelling the invoice?',
+  });
   return (
     <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/30 p-4">
       <div className="w-[420px] card p-5">
@@ -277,6 +305,14 @@ function CancelModal({ invoice, onClose, onConfirm, error }) {
 
 function DeleteModal({ invoice, onClose, onConfirm, error }) {
   const [reason, setReason] = useState('');
+  useEscNavigation({
+    priority: ESC_PRIORITY.MODAL,
+    onEsc: onClose,
+    enabled: true,
+    hasUnsavedChanges: () => Boolean(reason.trim()),
+    confirmTitle: 'Discard Deletion Reason?',
+    confirmMessage: 'You entered a deletion reason. Close without deleting the invoice?',
+  });
   return (
     <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/30 p-4">
       <div className="w-[420px] card p-5">
@@ -317,37 +353,72 @@ function EditModal({ id, onClose }) {
   const [error, setError] = useState('');
   const [confirming, setConfirming] = useState(false);
   const [success, setSuccess] = useState(false);
+  const initialEditRef = useRef(null);
+
+  const serializeEditState = (cid, editLines) => JSON.stringify({
+    customerId: String(cid ?? ''),
+    lines: (editLines || []).map((l) => ({
+      itemId: Number(l.item?.id || 0),
+      qty: String(l.qty ?? ''),
+      freeQty: String(l.free_qty ?? ''),
+      rate: String(l.rate ?? ''),
+      discountPercent: String(l.discount_percent ?? ''),
+      discountAmount: String(l.discount_amount ?? ''),
+      unitId: Number(l.unit_id || 0),
+    })),
+  });
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.MODAL + 5,
+    onEsc: () => setConfirming(false),
+    enabled: confirming && !success,
+  });
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.MODAL,
+    onEsc: onClose,
+    enabled: true,
+    hasUnsavedChanges: () => (
+      !success &&
+      initialEditRef.current !== null &&
+      lines !== null &&
+      serializeEditState(customerId, lines) !== initialEditRef.current
+    ),
+    confirmTitle: 'Discard Invoice Changes?',
+    confirmMessage: 'You have unsaved changes to this invoice. Discard them and close?',
+  });
 
   useEffect(() => {
     if (invoiceQuery.data && lines === null) {
       const inv = invoiceQuery.data;
-      setCustomerId(inv.customer_id ?? '');
-      setLines(
-        inv.items.map((it) => {
-          const lineGross = Number(it.qty) * Number(it.rate);
-          const pctVal = Number(it.discount_percent || 0);
-          const pctDisc = lineGross > 0 && pctVal > 0 ? Math.round(((lineGross * pctVal) / 100) * 100) / 100 : 0;
-          const directAmt = Math.max(0, Math.round((Number(it.discount_amount || 0) - pctDisc) * 100) / 100);
+      const initialCustomerId = inv.customer_id ?? '';
+      const initialLines = inv.items.map((it) => {
+        const lineGross = Number(it.qty) * Number(it.rate);
+        const pctVal = Number(it.discount_percent || 0);
+        const pctDisc = lineGross > 0 && pctVal > 0 ? Math.round(((lineGross * pctVal) / 100) * 100) / 100 : 0;
+        const directAmt = Math.max(0, Math.round((Number(it.discount_amount || 0) - pctDisc) * 100) / 100);
 
-          return {
-            key: `${it.id}-${Math.random()}`,
-            item: {
-              id: it.item_id,
-              item_name: it.item_name_snapshot,
-              retail_price: it.rate,
-              gst_percent: it.tax_percent,
-              cess_percent: 0,
-              base_unit_id: it.unit_id,
-            },
-            qty: Number(it.qty),
-            free_qty: Number(it.free_qty),
-            discount_percent: pctVal > 0 ? pctVal : '',
-            discount_amount: directAmt > 0 ? directAmt : '',
-            unit_id: it.unit_id,
-            rate: Number(it.rate),
-          };
-        })
-      );
+        return {
+          key: `${it.id}-${Math.random()}`,
+          item: {
+            id: it.item_id,
+            item_name: it.item_name_snapshot,
+            retail_price: it.rate,
+            gst_percent: it.tax_percent,
+            cess_percent: 0,
+            base_unit_id: it.unit_id,
+          },
+          qty: Number(it.qty),
+          free_qty: Number(it.free_qty),
+          discount_percent: pctVal > 0 ? pctVal : '',
+          discount_amount: directAmt > 0 ? directAmt : '',
+          unit_id: it.unit_id,
+          rate: Number(it.rate),
+        };
+      });
+      initialEditRef.current = serializeEditState(initialCustomerId, initialLines);
+      setCustomerId(initialCustomerId);
+      setLines(initialLines);
     }
   }, [invoiceQuery.data, lines]);
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ShoppingBag, Search, Plus, Trash2, CheckCircle2, Pencil, X, DollarSign, CreditCard } from 'lucide-react';
 import { itemsApi } from '../api/catalog';
@@ -12,6 +12,7 @@ import { downloadReportPdf, downloadGrnPdf } from '../utils/reportPdf';
 import { Pagination } from '../components/Pagination';
 import { useClientPagination } from '../hooks/useClientPagination';
 import { handleFormKeyDown } from '../utils/formNavigation';
+import { useEscNavigation, useUnsavedChangesGuard, ESC_PRIORITY } from '../utils/escNavigation.jsx';
 
 function priceGrnLine(line) {
   const qty = Number(line.qty || 0);
@@ -264,6 +265,57 @@ function GrnFormCard({ editing, onDone, items, unitsByItemId, onPickItem }) {
 
   const suppliers = suppliersQuery.data || [];
   const isEdit = !!editing;
+
+  const serializeGrn = (sId, sInv, pMode, pAmt, grnLines) => JSON.stringify({
+    supplierId: String(sId ?? ''),
+    supplierInvoiceNo: String(sInv ?? ''),
+    paymentMode: String(pMode ?? 'credit'),
+    paidAmount: String(pAmt ?? 0),
+    lines: (grnLines || []).map((l) => ({
+      item_id: String(l.item_id ?? ''),
+      unit_id: String(l.unit_id ?? ''),
+      qty: String(l.qty ?? ''),
+      free_qty: String(l.free_qty ?? 0),
+      mrp: String(l.mrp ?? ''),
+      rate: String(l.rate ?? ''),
+      discount_mode: l.discount_mode || 'percent',
+      discount_percent: String(l.discount_percent ?? 0),
+      discount_amount: String(l.discount_amount ?? ''),
+      tax_percent: String(l.tax_percent ?? 0),
+    })),
+  });
+
+  const initialGrnRef = useRef(null);
+  if (initialGrnRef.current === null) {
+    initialGrnRef.current = serializeGrn(supplierId, supplierInvoiceNo, paymentMode, paidAmount, lines);
+  }
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.NESTED_SCREEN + 5,
+    onEsc: () => setConfirming(false),
+    enabled: isEdit && confirming,
+  });
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.NESTED_SCREEN,
+    onEsc: onDone,
+    enabled: isEdit && !confirming,
+    hasUnsavedChanges: () => serializeGrn(supplierId, supplierInvoiceNo, paymentMode, paidAmount, lines) !== initialGrnRef.current,
+    confirmTitle: 'Discard GRN Edits?',
+    confirmMessage: 'You have unsaved changes to this GRN. Discard them and exit edit mode?',
+  });
+
+  const isCreateDirty = !isEdit && Boolean(
+    supplierId ||
+    supplierInvoiceNo.trim() ||
+    paymentMode !== 'credit' ||
+    Number(paidAmount || 0) > 0 ||
+    lines.some((l) => l.item_id)
+  );
+  useUnsavedChangesGuard(isCreateDirty, {
+    title: 'Leave Purchase GRN Form?',
+    message: 'You have unsaved GRN entries in the form. Discard them and go back?',
+  });
 
   const buildPayload = () => ({
     supplier_id: Number(supplierId),
@@ -760,6 +812,11 @@ function SupplierPaymentsPanel({ canManage }) {
   const [selectedPaymentIds, setSelectedPaymentIds] = useState([]);
   const [exportError, setExportError] = useState('');
   const [exporting, setExporting] = useState(false);
+
+  useUnsavedChangesGuard(Boolean(amount || referenceNo.trim()), {
+    title: 'Leave Supplier Payment Form?',
+    message: 'You have unsaved payment details in the form. Discard them and go back?',
+  });
 
   const suppliersQuery = useQuery({ queryKey: ['suppliers'], queryFn: suppliersApi.list });
   const unpaidQuery = useQuery({

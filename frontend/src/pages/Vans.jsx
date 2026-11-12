@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -12,6 +12,7 @@ import { useAuth } from '../hooks/useAuth.jsx';
 import { Button } from '../components/Button.jsx';
 import { Card } from '../components/Card.jsx';
 import { Badge } from '../components/Badge.jsx';
+import { useEscNavigation, ESC_PRIORITY } from '../utils/escNavigation.jsx';
 
 export function Vans() {
   const navigate = useNavigate();
@@ -25,6 +26,7 @@ export function Vans() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingVan, setEditingVan] = useState(null);
   const [assigningVan, setAssigningVan] = useState(null);
+  const initialEditRef = useRef(null);
 
   // Form states for Create / Edit
   const [vanName, setVanName] = useState('');
@@ -35,6 +37,32 @@ export function Vans() {
   const [vanStatus, setVanStatus] = useState('active');
   const [formError, setFormError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.MODAL,
+    onEsc: () => {
+      setShowCreateModal(false);
+      resetForm();
+    },
+    enabled: showCreateModal,
+    hasUnsavedChanges: () => Boolean(vanName || vanEmail || vanPhone || vanPassword),
+    confirmTitle: 'Discard new van details?',
+    confirmMessage: 'You have entered van registration details. Close without saving?',
+  });
+  useEscNavigation({
+    priority: ESC_PRIORITY.MODAL,
+    onEsc: () => {
+      setEditingVan(null);
+      initialEditRef.current = null;
+      resetForm();
+    },
+    enabled: Boolean(editingVan),
+    hasUnsavedChanges: () =>
+      initialEditRef.current !== null &&
+      JSON.stringify({ vanName, vanEmail, vanPhone, vanBranchId, vanStatus }) !== initialEditRef.current,
+    confirmTitle: 'Discard van edits?',
+    confirmMessage: 'You have unsaved changes to this van. Close without saving?',
+  });
 
   // Fetch users & branches
   const usersQuery = useQuery({ queryKey: ['users'], queryFn: usersApi.list });
@@ -109,12 +137,21 @@ export function Vans() {
   };
 
   const openEdit = (v) => {
+    const nextBranchId = v.branch_id ? String(v.branch_id) : '';
+    const nextStatus = v.status || 'active';
     setEditingVan(v);
     setVanName(v.name || '');
     setVanEmail(v.email || '');
     setVanPhone(v.phone || '');
-    setVanBranchId(v.branch_id ? String(v.branch_id) : '');
-    setVanStatus(v.status || 'active');
+    setVanBranchId(nextBranchId);
+    setVanStatus(nextStatus);
+    initialEditRef.current = JSON.stringify({
+      vanName: v.name || '',
+      vanEmail: v.email || '',
+      vanPhone: v.phone || '',
+      vanBranchId: nextBranchId,
+      vanStatus: nextStatus,
+    });
     setFormError('');
   };
 

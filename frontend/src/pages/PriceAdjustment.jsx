@@ -6,12 +6,18 @@ import { Button } from '../components/Button.jsx';
 import { Pagination } from '../components/Pagination';
 import { useClientPagination } from '../hooks/useClientPagination';
 import { handleFormKeyDown } from '../utils/formNavigation';
+import { useUnsavedChangesGuard } from '../utils/escNavigation.jsx';
 
 function PricingPanel({ type, label }) {
   const [search, setSearch] = useState('');
   const [edits, setEdits] = useState({});
   const [message, setMessage] = useState(null);
   const queryClient = useQueryClient();
+
+  useUnsavedChangesGuard(Object.keys(edits).length > 0, {
+    title: `Discard Unsaved ${label} Changes?`,
+    message: 'You have unsaved price adjustments. Discard them and go back?',
+  });
 
   const query = useQuery({
     queryKey: ['pricing', type, search],

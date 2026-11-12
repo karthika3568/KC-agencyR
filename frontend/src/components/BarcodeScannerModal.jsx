@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Button } from './Button.jsx';
 import { handleFormKeyDown } from '../utils/formNavigation';
+import { useEscNavigation, ESC_PRIORITY } from '../utils/escNavigation.jsx';
 
 /**
  * Short audio beep feedback using Web Audio API
@@ -65,6 +66,12 @@ async function getCameraPermissionState() {
  * audio feedback, debounced continuous scanning, manual code entry, and session history.
  */
 export function BarcodeScannerModal({ onScan, onClose }) {
+  useEscNavigation({
+    priority: ESC_PRIORITY.MODAL,
+    onEsc: onClose,
+    enabled: true,
+  });
+
   const [cameraState, setCameraState] = useState('initializing'); // 'initializing' | 'ready' | 'detected' | 'permission_denied' | 'unavailable'
   const [errorMessage, setErrorMessage] = useState('');
   const [feedback, setFeedback] = useState(null); // { type: 'success' | 'warning' | 'error', message: string, code?: string }
@@ -559,17 +566,8 @@ export function BarcodeScannerModal({ onScan, onClose }) {
     isMountedRef.current = true;
     startScanner();
 
-    // Close on ESC key
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-
     return () => {
       isMountedRef.current = false;
-      window.removeEventListener('keydown', handleKeyDown);
       if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
       stopScanner();
     };

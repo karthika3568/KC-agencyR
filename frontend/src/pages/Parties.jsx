@@ -11,6 +11,7 @@ import { Pagination } from '../components/Pagination.jsx';
 import { useClientPagination } from '../hooks/useClientPagination';
 import { usePermission } from '../hooks/usePermission';
 import { handleFormKeyDown } from '../utils/formNavigation';
+import { useEscNavigation, useUnsavedChangesGuard, ESC_PRIORITY } from '../utils/escNavigation.jsx';
 
 // CUSTOMERS PANEL (Left Form, Right Directory Table)
 export function CustomersPanel({ canManage }) {
@@ -37,6 +38,55 @@ export function CustomersPanel({ canManage }) {
   const [importFile, setImportFile] = useState(null);
   const [importResult, setImportResult] = useState(null);
   const fileInputRef = useRef(null);
+  const initialEditRef = useRef(null);
+
+  const editSnapshot = JSON.stringify({
+    ledgerName,
+    phone,
+    creditLimit,
+    isLocalCustomer,
+    isActive,
+    gstin,
+    address,
+    openingBalance,
+    pricingType,
+  });
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.NESTED_SCREEN + 1,
+    onEsc: () => {
+      setImportOpen(false);
+      setImportFile(null);
+      setImportResult(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    },
+    enabled: importOpen,
+  });
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.NESTED_SCREEN,
+    onEsc: () => resetForm(),
+    enabled: Boolean(editingId),
+    hasUnsavedChanges: () => initialEditRef.current !== null && editSnapshot !== initialEditRef.current,
+    confirmTitle: 'Discard Customer Changes?',
+    confirmMessage: 'You have unsaved edits for this customer. Discard changes and exit edit mode?',
+  });
+
+  const isCreateDirty = !editingId && Boolean(
+    ledgerName.trim() ||
+    phone.trim() ||
+    Number(creditLimit || 0) !== 0 ||
+    Number(openingBalance || 0) !== 0 ||
+    gstin.trim() ||
+    address.trim() ||
+    isLocalCustomer !== '1' ||
+    pricingType !== 'normal' ||
+    !isActive
+  );
+  useUnsavedChangesGuard(isCreateDirty, {
+    title: 'Leave Customer Form?',
+    message: 'You have unsaved customer details in the form. Discard them and go back?',
+  });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['customers'] });
 
@@ -69,6 +119,7 @@ export function CustomersPanel({ canManage }) {
   });
 
   const resetForm = () => {
+    initialEditRef.current = null;
     setEditingId(null);
     setLedgerName('');
     setPhone('');
@@ -88,16 +139,36 @@ export function CustomersPanel({ canManage }) {
   };
 
   const handleEdit = (item) => {
+    const nextLedgerName = item.ledger_name || item.name || '';
+    const nextPhone = item.phone || '';
+    const nextCreditLimit = String(item.credit_limit ?? '0');
+    const nextIsLocal = String(item.is_local_customer ?? '1');
+    const nextIsActive = item.status === 'inactive' || item.is_active === 0 || item.is_active === false ? false : true;
+    const nextGstin = item.gstin || '';
+    const nextAddress = item.address || '';
+    const nextOpeningBalance = String(item.opening_balance ?? '0');
+    const nextPricingType = item.pricing_type || 'normal';
+    initialEditRef.current = JSON.stringify({
+      ledgerName: nextLedgerName,
+      phone: nextPhone,
+      creditLimit: nextCreditLimit,
+      isLocalCustomer: nextIsLocal,
+      isActive: nextIsActive,
+      gstin: nextGstin,
+      address: nextAddress,
+      openingBalance: nextOpeningBalance,
+      pricingType: nextPricingType,
+    });
     setEditingId(item.id);
-    setLedgerName(item.ledger_name || item.name || '');
-    setPhone(item.phone || '');
-    setCreditLimit(String(item.credit_limit ?? '0'));
-    setIsLocalCustomer(String(item.is_local_customer ?? '1'));
-    setIsActive(item.status === 'inactive' || item.is_active === 0 || item.is_active === false ? false : true);
-    setGstin(item.gstin || '');
-    setAddress(item.address || '');
-    setOpeningBalance(String(item.opening_balance ?? '0'));
-    setPricingType(item.pricing_type || 'normal');
+    setLedgerName(nextLedgerName);
+    setPhone(nextPhone);
+    setCreditLimit(nextCreditLimit);
+    setIsLocalCustomer(nextIsLocal);
+    setIsActive(nextIsActive);
+    setGstin(nextGstin);
+    setAddress(nextAddress);
+    setOpeningBalance(nextOpeningBalance);
+    setPricingType(nextPricingType);
     setFormError('');
   };
 
@@ -508,6 +579,36 @@ function SuppliersPanel({ canManage }) {
   const [gstin, setGstin] = useState('');
   const [openingBalance, setOpeningBalance] = useState('0');
   const [isActive, setIsActive] = useState(true);
+  const initialEditRef = useRef(null);
+
+  const editSnapshot = JSON.stringify({
+    name,
+    phone,
+    gstin,
+    openingBalance,
+    isActive,
+  });
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.NESTED_SCREEN,
+    onEsc: () => resetForm(),
+    enabled: Boolean(editingId),
+    hasUnsavedChanges: () => initialEditRef.current !== null && editSnapshot !== initialEditRef.current,
+    confirmTitle: 'Discard Supplier Changes?',
+    confirmMessage: 'You have unsaved edits for this supplier. Discard changes and exit edit mode?',
+  });
+
+  const isCreateDirty = !editingId && Boolean(
+    name.trim() ||
+    phone.trim() ||
+    gstin.trim() ||
+    Number(openingBalance || 0) !== 0 ||
+    !isActive
+  );
+  useUnsavedChangesGuard(isCreateDirty, {
+    title: 'Leave Supplier Form?',
+    message: 'You have unsaved supplier details in the form. Discard them and go back?',
+  });
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -534,6 +635,7 @@ function SuppliersPanel({ canManage }) {
   });
 
   const resetForm = () => {
+    initialEditRef.current = null;
     setEditingId(null);
     setName('');
     setPhone('');
@@ -549,12 +651,24 @@ function SuppliersPanel({ canManage }) {
   };
 
   const handleEdit = (item) => {
+    const nextName = item.name || '';
+    const nextPhone = item.phone || '';
+    const nextGstin = item.gstin || '';
+    const nextOpeningBalance = String(item.opening_balance ?? '0');
+    const nextIsActive = item.status === 'inactive' || item.is_active === 0 || item.is_active === false ? false : true;
+    initialEditRef.current = JSON.stringify({
+      name: nextName,
+      phone: nextPhone,
+      gstin: nextGstin,
+      openingBalance: nextOpeningBalance,
+      isActive: nextIsActive,
+    });
     setEditingId(item.id);
-    setName(item.name || '');
-    setPhone(item.phone || '');
-    setGstin(item.gstin || '');
-    setOpeningBalance(String(item.opening_balance ?? '0'));
-    setIsActive(item.status === 'inactive' || item.is_active === 0 || item.is_active === false ? false : true);
+    setName(nextName);
+    setPhone(nextPhone);
+    setGstin(nextGstin);
+    setOpeningBalance(nextOpeningBalance);
+    setIsActive(nextIsActive);
     setFormError('');
   };
 

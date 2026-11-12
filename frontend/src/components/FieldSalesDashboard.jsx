@@ -23,6 +23,7 @@ import {
   ArrowUpRight
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth.jsx';
+import { useEscNavigation, ESC_PRIORITY } from '../utils/escNavigation.jsx';
 import { usePermission } from '../hooks/usePermission';
 import { customersApi } from '../api/parties';
 import { itemsApi } from '../api/catalog';
@@ -46,6 +47,21 @@ function MobileCustomerOrderModal({ onClose }) {
   const [lines, setLines] = useState([{ item_id: '', qty: 1, rate: 0 }]);
   const [formError, setFormError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.DROPDOWN,
+    onEsc: () => setShowCustomerDropdown(false),
+    enabled: showCustomerDropdown,
+  });
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.MODAL,
+    onEsc: onClose,
+    enabled: true,
+    hasUnsavedChanges: () => !successMsg && Boolean(customerId || notes || lines.some((l) => l.item_id)),
+    confirmTitle: 'Discard customer order?',
+    confirmMessage: 'You have unsaved order details. Close without submitting?',
+  });
 
   const customersQuery = useQuery({ queryKey: ['customers'], queryFn: customersApi.list });
   const itemsQuery = useQuery({ queryKey: ['items', ''], queryFn: () => itemsApi.list('') });
@@ -386,6 +402,12 @@ function MobileCustomerOrderModal({ onClose }) {
  * Mobile-First Van Stock Viewer Modal
  */
 function MobileVanStockModal({ onClose }) {
+  useEscNavigation({
+    priority: ESC_PRIORITY.MODAL,
+    onEsc: onClose,
+    enabled: true,
+  });
+
   const { user } = useAuth();
   const [search, setSearch] = useState('');
 
@@ -504,6 +526,17 @@ function MobileCustomerCreateModal({ onClose }) {
   const [pricingType, setPricingType] = useState('normal');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.MODAL,
+    onEsc: onClose,
+    enabled: true,
+    hasUnsavedChanges: () =>
+      !success &&
+      Boolean(name || phone || address || (creditLimit && creditLimit !== '0') || pricingType !== 'normal'),
+    confirmTitle: 'Discard new customer?',
+    confirmMessage: 'You have entered customer details. Close without saving?',
+  });
 
   const createMutation = useMutation({
     mutationFn: customersApi.create,

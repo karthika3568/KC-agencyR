@@ -10,6 +10,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog.jsx';
 import { resolveImageUrl } from '../utils/media';
 import { Pagination } from '../components/Pagination';
 import { handleFormKeyDown } from '../utils/formNavigation';
+import { useEscNavigation, ESC_PRIORITY } from '../utils/escNavigation.jsx';
 
 const emptyForm = {
   item_name: '', category_id: '', brand_id: '', supplier_id: '',
@@ -66,6 +67,34 @@ function ItemFormModal({ item, onClose }) {
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(item?.image ? resolveImageUrl(item.image) : null);
   const fileInputRef = useRef(null);
+
+  const initialSnapshotRef = useRef(null);
+  if (initialSnapshotRef.current === null) {
+    initialSnapshotRef.current = JSON.stringify({
+      form,
+      selectedBranches: [...selectedBranches].sort(),
+      extraUnits,
+      checkedUnitIds: [...checkedUnitIds].sort(),
+    });
+  }
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.MODAL,
+    onEsc: onClose,
+    enabled: true,
+    hasUnsavedChanges: () => {
+      if (imageFile) return true;
+      const currentSnapshot = JSON.stringify({
+        form,
+        selectedBranches: [...selectedBranches].sort(),
+        extraUnits,
+        checkedUnitIds: [...checkedUnitIds].sort(),
+      });
+      return currentSnapshot !== initialSnapshotRef.current;
+    },
+    confirmTitle: isEdit ? 'Discard product edits?' : 'Discard new product?',
+    confirmMessage: 'You have unsaved product details. Close without saving?',
+  });
 
   const categoriesQuery = useQuery({ queryKey: ['categories'], queryFn: categoriesApi.list });
   const brandsQuery = useQuery({ queryKey: ['brands'], queryFn: brandsApi.list });
@@ -198,17 +227,7 @@ function ItemFormModal({ item, onClose }) {
 
   useEffect(() => {
     firstInputRef.current?.focus();
-
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
+  }, []);
 
   return (
     <div role="dialog" aria-modal="true" className="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4">

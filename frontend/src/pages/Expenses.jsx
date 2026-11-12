@@ -8,6 +8,7 @@ import { Button } from '../components/Button.jsx';
 import { Pagination } from '../components/Pagination';
 import { useClientPagination } from '../hooks/useClientPagination';
 import { handleFormKeyDown } from '../utils/formNavigation';
+import { useUnsavedChangesGuard } from '../utils/escNavigation.jsx';
 
 function ExpensesPanel({ canManage }) {
   const queryClient = useQueryClient();
@@ -24,6 +25,11 @@ function ExpensesPanel({ canManage }) {
   const [formError, setFormError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+
+  useUnsavedChangesGuard(Boolean(categoryId || amount || description.trim()), {
+    title: 'Leave Expense Form?',
+    message: 'You have unsaved expense details in the form. Discard them and go back?',
+  });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['expenses'] });
 
@@ -277,6 +283,11 @@ function OtherIncomePanel({ canManage }) {
   const [formError, setFormError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+
+  useUnsavedChangesGuard(Boolean(amount || description.trim()), {
+    title: 'Leave Extra Income Form?',
+    message: 'You have unsaved income details in the form. Discard them and go back?',
+  });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['other-income'] });
 

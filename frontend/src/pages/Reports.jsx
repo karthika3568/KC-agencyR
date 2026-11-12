@@ -10,6 +10,7 @@ import { downloadReportPdf, downloadReportExcel, NUMERIC_REPORT_KEYS } from '../
 import { Pagination } from '../components/Pagination';
 import { useClientPagination } from '../hooks/useClientPagination';
 import { handleFormKeyDown } from '../utils/formNavigation';
+import { useUnsavedChangesGuard } from '../utils/escNavigation.jsx';
 
 /**
  * Custom hook to manage table row checkbox selection.
@@ -1022,6 +1023,11 @@ function PricingPanel({ type, label, canExport }) {
   const [edits, setEdits] = useState({}); // item_id -> raw input string
   const [message, setMessage] = useState(null); // { kind: 'success' | 'error', text }
   const queryClient = useQueryClient();
+
+  useUnsavedChangesGuard(Object.keys(edits).length > 0, {
+    title: `Discard Unsaved ${label} Changes?`,
+    message: 'You have unsaved price adjustments. Discard them and go back?',
+  });
 
   const query = useQuery({ queryKey: ['pricing', type, search], queryFn: () => pricingApi.list(type, search) });
   const saveMutation = useMutation({ mutationFn: (items) => pricingApi.bulkSave(type, items) });

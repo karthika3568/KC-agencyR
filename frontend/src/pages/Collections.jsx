@@ -9,6 +9,7 @@ import { Pagination } from '../components/Pagination';
 import { useClientPagination } from '../hooks/useClientPagination';
 import { handleFormKeyDown } from '../utils/formNavigation';
 import { Toast } from '../components/Toast.jsx';
+import { useEscNavigation, ESC_PRIORITY } from '../utils/escNavigation.jsx';
 
 export function CollectModal({ customer, onClose, onCollected }) {
   const queryClient = useQueryClient();
@@ -18,6 +19,15 @@ export function CollectModal({ customer, onClose, onCollected }) {
   const [checkedIds, setCheckedIds] = useState([]);
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [error, setError] = useState('');
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.MODAL,
+    onEsc: onClose,
+    enabled: true,
+    hasUnsavedChanges: () => (mode === 'manual' ? checkedIds.length > 0 : Boolean(amount)),
+    confirmTitle: 'Discard collection entry?',
+    confirmMessage: 'You have entered payment or invoice allocation details. Close without saving?',
+  });
 
   const customerId = customer.customer_id || customer.id;
 
@@ -178,6 +188,15 @@ export function Collections() {
   const canViewAll = usePermission('credit.view_shopwide_outstanding');
   const [selected, setSelected] = useState(null);
   const [showCustomerSelect, setShowCustomerSelect] = useState(false);
+
+  useEscNavigation({
+    priority: ESC_PRIORITY.MODAL,
+    onEsc: () => {
+      setShowCustomerSelect(false);
+      setCustomerSearch('');
+    },
+    enabled: showCustomerSelect,
+  });
   const [customerSearch, setCustomerSearch] = useState('');
   const [toastMsg, setToastMsg] = useState('');
 

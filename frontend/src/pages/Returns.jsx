@@ -12,6 +12,7 @@ import { Button } from '../components/Button.jsx';
 import { Pagination } from '../components/Pagination';
 import { useClientPagination } from '../hooks/useClientPagination';
 import { handleFormKeyDown } from '../utils/formNavigation';
+import { useUnsavedChangesGuard } from '../utils/escNavigation.jsx';
 
 function ReturnLineEditor({ lines, setLines, items }) {
   const addLine = () => setLines((prev) => [...prev, { item_id: '', qty: 1, rate: 0 }]);
@@ -310,6 +311,22 @@ function SalesReturnsPanel({ canCreate, canApprove }) {
   const [searchQuery, setSearchQuery] = useState('');
 
   const trimmedInvoice = invoiceId.trim();
+
+  useUnsavedChangesGuard(
+    Boolean(
+      trimmedInvoice ||
+        customerId ||
+        reason.trim() ||
+        refundAction !== 'credit_note' ||
+        (refundTouched && refundAmount !== '') ||
+        Object.values(quantities).some((q) => Number(q || 0) > 0) ||
+        lines.some((l) => l.item_id)
+    ),
+    {
+      title: 'Leave Sales Return Form?',
+      message: 'You have unsaved sales return details in the form. Discard them and go back?',
+    }
+  );
 
   const returnsQuery = useQuery({ queryKey: ['sales-returns'], queryFn: salesReturnsApi.list });
   const customersQuery = useQuery({ queryKey: ['customers'], queryFn: customersApi.list });
@@ -745,6 +762,21 @@ function PurchaseReturnsPanel({ canManage }) {
   const [formError, setFormError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+
+  useUnsavedChangesGuard(
+    Boolean(
+      purchaseId ||
+        supplierId ||
+        reason.trim() ||
+        (refundTouched && refundAmount !== '') ||
+        Object.values(quantities).some((q) => Number(q || 0) > 0) ||
+        lines.some((l) => l.item_id)
+    ),
+    {
+      title: 'Leave Purchase Return Form?',
+      message: 'You have unsaved purchase return details in the form. Discard them and go back?',
+    }
+  );
 
   const returnsQuery = useQuery({ queryKey: ['purchase-returns'], queryFn: purchaseReturnsApi.list });
   const suppliersQuery = useQuery({ queryKey: ['suppliers'], queryFn: suppliersApi.list });

@@ -15,6 +15,7 @@ import { Pagination } from '../components/Pagination';
 import { useClientPagination } from '../hooks/useClientPagination';
 import { PrintPreviewModal } from '../components/PrintPreviewModal';
 import { handleFormKeyDown } from '../utils/formNavigation';
+import { useUnsavedChangesGuard } from '../utils/escNavigation.jsx';
 
 export function StockHubPanel() {
   const [ownerType, setOwnerType] = useState('');
@@ -224,6 +225,14 @@ export function StockAdjustmentPanel({ canManage }) {
   const [formError, setFormError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+
+  useUnsavedChangesGuard(
+    Boolean(itemId || qty || remarks.trim() || adjustmentType !== 'deduction' || reason !== 'damage'),
+    {
+      title: 'Leave Stock Adjustment Form?',
+      message: 'You have unsaved stock adjustment details in the form. Discard them and go back?',
+    }
+  );
 
   const itemsQuery = useQuery({ queryKey: ['items', ''], queryFn: () => itemsApi.list('') });
   const adjustmentsQuery = useQuery({ queryKey: ['stock-adjustments'], queryFn: stockAdjustmentsApi.list });
@@ -502,6 +511,14 @@ export function VanStockPanel({ canManage }) {
   const [exportError, setExportError] = useState('');
   const [exporting, setExporting] = useState(false);
   const [shortageWarning, setShortageWarning] = useState(null);
+
+  useUnsavedChangesGuard(
+    Boolean(selectedOrderId || notes.trim() || lines.some((l) => l.item_id)),
+    {
+      title: 'Leave Van Stock Form?',
+      message: 'You have unsaved van stock issue/return lines in the form. Discard them and go back?',
+    }
+  );
 
   useEffect(() => {
     if (urlEmpId) {

@@ -2,10 +2,12 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { ProtectedRoute } from './components/ProtectedRoute.jsx';
 import { AppShell } from './components/AppShell.jsx';
 import { AccessDenied } from './components/AccessDenied.jsx';
+import { ConfirmDialog } from './components/ConfirmDialog.jsx';
 import { PwaInstallBanner } from './components/PwaInstallBanner.jsx';
 import { useAuth } from './hooks/useAuth.jsx';
 import { hasPermission } from './hooks/usePermission';
 import { ROUTE_PERMISSIONS, getFirstAuthorizedRoute } from './utils/navigationConfig';
+import { EscNavigationProvider } from './utils/escNavigation.jsx';
 
 import { Login } from './pages/Login.jsx';
 import { Dashboard } from './pages/Dashboard.jsx';
@@ -81,7 +83,7 @@ function RootRoute() {
 
 export default function App() {
   return (
-    <>
+    <EscNavigationProvider ConfirmDialogComponent={ConfirmDialog}>
       <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/" element={<Protected><RootRoute /></Protected>} />
@@ -108,6 +110,6 @@ export default function App() {
       <Route path="*" element={<Protected><AccessDenied /></Protected>} />
     </Routes>
     <PwaInstallBanner />
-  </>
+  </EscNavigationProvider>
   );
 }
