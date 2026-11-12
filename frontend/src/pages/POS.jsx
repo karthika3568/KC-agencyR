@@ -920,14 +920,10 @@ export function POS() {
       e.stopPropagation();
       if (fieldKey === 'rate') {
         focusBillCell(rowIndex, 'qty');
-      } else if (fieldKey === 'qty') {
-        returnFocusToProductSearch();
-      } else if (colIndex < fields.length - 1) {
+      } else if (colIndex !== -1 && colIndex < fields.length - 1) {
         focusBillCell(rowIndex, fields[colIndex + 1]);
-      } else if (rowIndex < pricedLines.length - 1) {
-        focusBillCell(rowIndex + 1, 'qty');
       } else {
-        proceedBtnRef.current?.focus();
+        returnFocusToProductSearch();
       }
     } else if (e.key === 'Escape') {
       if (
@@ -947,26 +943,48 @@ export function POS() {
   };
 
   // Global F6 Shortcut: Proceed to Payment / Complete Sale
+  const f6HandlerRef = useRef(null);
   useEffect(() => {
-    const handler = (e) => {
+    f6HandlerRef.current = (e) => {
       if (e.key === 'F6' || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's')) {
         e.preventDefault();
-        if (showPaymentModal) {
-          completeMutation.mutate();
+        e.stopPropagation();
+
+        if (
+          showImageSearch ||
+          showBarcodeScanner ||
+          showQuickSaleModal ||
+          printingInvoiceId ||
+          document.querySelector('[role="alertdialog"]')
+        ) {
           return;
         }
+
+        if (showPaymentModal) {
+          const paymentsTotal = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+          const remaining = Math.round((totals.grandTotal - paymentsTotal) * 100) / 100;
+          const blockedNoCustomer = remaining > 0.009 && !customerId;
+          if (!completeMutation.isPending && !blockedNoCustomer && cartValidation.isValid) {
+            completeMutation.mutate();
+          }
+          return;
+        }
+
         if (cart.length > 0) {
           handleProceedToPayment();
         } else {
           setMessage('Bill is empty. Scan or search products to begin.');
           setTimeout(() => setMessage(''), 3000);
         }
-        return;
       }
     };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [cart, showPaymentModal]);
+  });
+
+  useEffect(() => {
+    const handler = (e) => f6HandlerRef.current?.(e);
+    window.addEventListener('keydown', handler, { capture: true });
+    return () => window.removeEventListener('keydown', handler, { capture: true });
+  }, []);
 
   const updateLine = (key, patch) => setCart((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
 
@@ -1021,6 +1039,9 @@ export function POS() {
   };
 
   const handleProceedToPayment = () => {
+    setShowCustomerDropdown(false);
+    setShowProductDropdown(false);
+    setShowHeldList(false);
     if (cart.length === 0) {
       setMessage('Bill is empty. Scan or search products to begin.');
       setTimeout(() => setMessage(''), 3000);
