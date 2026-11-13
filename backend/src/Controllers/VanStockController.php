@@ -84,7 +84,7 @@ class VanStockController
                 (int) $claims['sub'],
                 $body['notes'] ?? null,
                 $body['items'],
-                !empty($body['confirm_insufficient']),
+                false,
                 !empty($body['customer_id']) ? (int) $body['customer_id'] : null,
                 !empty($body['prebooking_id']) ? (int) $body['prebooking_id'] : null
             );
@@ -92,9 +92,6 @@ class VanStockController
             Response::error($e->getMessage(), 422);
         }
 
-        if (isset($result['warning'])) {
-            Response::json($result, 409);
-        }
         Response::json(['issue_id' => $result['issue_id']], 201);
     }
 

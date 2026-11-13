@@ -3,7 +3,7 @@ import { useSearchParams, Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   RefreshCw, Plus, Trash2, Eye, Printer, Ban, CheckCircle2, Image as ImageIcon, X, Search,
-  Truck, Receipt, AlertTriangle
+  Truck, Receipt, AlertTriangle, Pencil
 } from 'lucide-react';
 import { itemsApi } from '../api/catalog';
 import { customersApi, suppliersApi } from '../api/parties';
@@ -81,7 +81,16 @@ function ItemLineEditor({ lines, setLines, items, stockByItemId = {}, rateLabel 
               <option value="">Select item</option>
               {items.map((i) => {
                 const s = stockByItemId[i.id];
-                const stockStr = s !== undefined ? ` [Stock: ${s.qty}]` : '';
+                let stockStr = '';
+                if (s !== undefined) {
+                  if (s.qty < 0) {
+                    stockStr = ` [Negative Stock: ${s.qty}]`;
+                  } else if (s.qty === 0) {
+                    stockStr = ` [Out of Stock: 0]`;
+                  } else {
+                    stockStr = ` [Stock: ${s.qty}]`;
+                  }
+                }
                 return (
                   <option key={i.id} value={i.id}>
                     {i.item_name} ({i.item_code}){stockStr}
@@ -110,15 +119,29 @@ function ItemLineEditor({ lines, setLines, items, stockByItemId = {}, rateLabel 
             {stockInfo && (
               <span
                 className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium ${
-                  availableStock <= 0
+                  availableStock < 0
+                    ? 'bg-rose-500/20 text-rose-500 border border-rose-500/40'
+                    : availableStock === 0
                     ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
                     : isOverStock
                     ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
                     : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
                 }`}
-                title={availableStock <= 0 ? 'Out of stock in warehouse' : isOverStock ? 'Order quantity exceeds warehouse stock' : 'Stock available in warehouse'}
+                title={
+                  availableStock < 0
+                    ? `Negative stock in warehouse (${availableStock} ${stockInfo.unit})`
+                    : availableStock === 0
+                    ? 'Out of stock in warehouse'
+                    : isOverStock
+                    ? 'Order quantity exceeds warehouse stock'
+                    : 'Stock available in warehouse'
+                }
               >
-                Stock: {availableStock} {stockInfo.unit}
+                {availableStock < 0
+                  ? `Negative Stock: ${availableStock} ${stockInfo.unit}`
+                  : availableStock === 0
+                  ? `Out of Stock: 0 ${stockInfo.unit}`
+                  : `Stock: ${availableStock} ${stockInfo.unit}`}
                 {isOverStock && <AlertTriangle size={11} className="text-amber-400" />}
               </span>
             )}
@@ -838,15 +861,6 @@ function CustomerPrebookingPanel() {
                       >
                         <Printer className="w-3.5 h-3.5" />
                       </button>
-                      {statusKey !== 'cancelled' && !r.invoice_id && (
-                        <Link
-                          to={`/pos?prebooking_id=${r.id}`}
-                          title="Convert to Bill in POS"
-                          className="p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border border-border-soft hover:bg-surface-subtle text-ink-muted hover:text-emerald-400"
-                        >
-                          <Receipt className="w-3.5 h-3.5" />
-                        </Link>
-                      )}
                       {statusKey !== 'completed' && statusKey !== 'cancelled' && !r.van_issue_id && (
                         <button
                           type="button"
@@ -860,35 +874,11 @@ function CustomerPrebookingPanel() {
                       {canCreate && statusKey === 'pending' && (
                         <button
                           type="button"
-                          title="Edit"
+                          title="Edit Pre-Booking"
                           onClick={() => openEdit(r)}
                           className="p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border border-border-soft hover:bg-surface-subtle text-ink-muted hover:text-gold"
                         >
-                          <Plus className="w-3.5 h-3.5 rotate-45" />
-                        </button>
-                      )}
-                      {canManageStatus &&
-                        PREBOOKING_NEXT_STATUS[statusKey]
-                          ?.filter((s) => s !== 'cancelled')
-                          .map((next) => (
-                            <button
-                              key={next}
-                              type="button"
-                              title={`Mark ${next}`}
-                              onClick={() => statusMutation.mutate({ id: r.id, status: next })}
-                              className="p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border border-border-soft hover:bg-surface-subtle text-ink-muted hover:text-emerald-400"
-                            >
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                            </button>
-                          ))}
-                      {canManageStatus && PREBOOKING_NEXT_STATUS[statusKey]?.includes('cancelled') && (
-                        <button
-                          type="button"
-                          title="Cancel Pre-booking"
-                          onClick={() => cancelMutation.mutate(r.id)}
-                          className="p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border border-rose-200 hover:bg-surface-subtle text-danger"
-                        >
-                          <Ban className="w-3.5 h-3.5" />
+                          <Pencil className="w-3.5 h-3.5" />
                         </button>
                       )}
                     </div>
@@ -961,15 +951,6 @@ function CustomerPrebookingPanel() {
                           >
                             <Printer className="w-3.5 h-3.5" />
                           </button>
-                          {statusKey !== 'cancelled' && !r.invoice_id && (
-                            <Link
-                              to={`/pos?prebooking_id=${r.id}`}
-                              title="Convert to Bill in POS"
-                              className="p-1 rounded hover:bg-surface-subtle text-ink-muted hover:text-emerald-400 transition inline-block align-middle"
-                            >
-                              <Receipt className="w-3.5 h-3.5" />
-                            </Link>
-                          )}
                           {statusKey !== 'completed' && statusKey !== 'cancelled' && !r.van_issue_id && (
                             <button
                               title="Dispatch to Van"
@@ -981,33 +962,11 @@ function CustomerPrebookingPanel() {
                           )}
                           {canCreate && statusKey === 'pending' && (
                             <button
-                              title="Edit"
+                              title="Edit Pre-Booking"
                               onClick={() => openEdit(r)}
                               className="p-1 rounded hover:bg-surface-subtle text-ink-muted hover:text-gold transition"
                             >
-                              <Plus className="w-3.5 h-3.5 rotate-45" />
-                            </button>
-                          )}
-                          {canManageStatus &&
-                            PREBOOKING_NEXT_STATUS[statusKey]
-                              ?.filter((s) => s !== 'cancelled')
-                              .map((next) => (
-                                <button
-                                  key={next}
-                                  title={`Mark ${next}`}
-                                  onClick={() => statusMutation.mutate({ id: r.id, status: next })}
-                                  className="p-1 rounded hover:bg-surface-subtle text-ink-muted hover:text-emerald-400 transition"
-                                >
-                                  <CheckCircle2 className="w-3.5 h-3.5" />
-                                </button>
-                              ))}
-                          {canManageStatus && PREBOOKING_NEXT_STATUS[statusKey]?.includes('cancelled') && (
-                            <button
-                              title="Cancel Pre-booking"
-                              onClick={() => cancelMutation.mutate(r.id)}
-                              className="p-1 rounded hover:bg-surface-subtle text-danger hover:text-red-400 transition"
-                            >
-                              <Ban className="w-3.5 h-3.5" />
+                              <Pencil className="w-3.5 h-3.5" />
                             </button>
                           )}
                         </td>

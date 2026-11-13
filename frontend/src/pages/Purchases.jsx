@@ -493,7 +493,55 @@ export default function Purchases() {
           <span className="text-xs font-bold text-gray-500">{purchases.length} பதிவுகள் (Records)</span>
         </div>
 
-        <table className="data-table w-full">
+        {/* Mobile & Tablet Card View (< md) */}
+        <div className="md:hidden divide-y divide-border-soft max-h-[calc(100dvh-240px)] overflow-y-auto">
+          {purchases.map((p) => {
+            const bal = Number(p.balance_due || 0);
+            return (
+              <div key={p.id} className="p-3 space-y-2 hover:bg-slate-50">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-mono font-bold text-sm text-brand-700">{p.purchase_no}</div>
+                    <div className="font-bold text-xs text-gray-900 mt-0.5">{p.party_name}</div>
+                    <div className="text-[11px] text-gray-500">{formatDateDMY(p.purchase_date)}</div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="font-mono font-bold text-sm text-gray-900">{formatINR(p.total)}</div>
+                    <div className="text-[11px] font-semibold">
+                      {bal > 0 ? (
+                        <span className="text-rose-600">Due: {formatINR(bal)}</span>
+                      ) : (
+                        <span className="text-emerald-600">Paid</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between text-xs pt-1 border-t border-border-soft/60">
+                  <span className="text-emerald-600 font-medium">Paid: {formatINR(p.paid_amount)}</span>
+                  <button
+                    className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors inline-flex items-center justify-center min-h-[32px] min-w-[32px]"
+                    onClick={() => handleDelete(p.id)}
+                    title={t('common.delete')}
+                    type="button"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+          {purchases.length === 0 && (
+            <div className="py-6 text-center text-gray-400 font-medium text-xs">
+              கொள்முதல் பதிவுகள் எதுவும் இல்லை
+            </div>
+          )}
+        </div>
+
+        {/* Desktop Table View (>= md) */}
+        <div className="hidden md:block overflow-x-auto">
+          <table className="data-table w-full">
           <thead>
             <tr className="bg-slate-100 text-slate-700 font-bold text-xs uppercase">
               <th>{t('purchases.purchase_no')}</th>
@@ -545,6 +593,7 @@ export default function Purchases() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

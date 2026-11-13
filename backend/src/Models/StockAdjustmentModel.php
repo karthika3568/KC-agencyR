@@ -39,6 +39,34 @@ class StockAdjustmentModel
     ): int {
         $this->pdo->beginTransaction();
         try {
+            if ($adjustmentType !== 'addition') {
+                $stockStmt = $this->pdo->prepare(
+                    'SELECT quantity_on_hand FROM stock_ledger
+                     WHERE item_id = :item_id AND owner_type = :owner_type AND owner_id = :owner_id
+                     FOR UPDATE'
+                );
+                $stockStmt->execute(['item_id' => $itemId, 'owner_type' => $ownerType, 'owner_id' => $ownerId]);
+                $stockRow = $stockStmt->fetch();
+                $available = $stockRow !== false ? (float) $stockRow['quantity_on_hand'] : 0.0;
+                if ($available < $qty || $available <= 0) {
+                    $itemStmt = $this->pdo->prepare(
+                        'SELECT i.item_name, COALESCE(su.short_code, \'PCS\') AS unit_code
+                         FROM items i
+                         LEFT JOIN stock_units su ON su.id = i.base_unit_id
+                         WHERE i.id = :id'
+                    );
+                    $itemStmt->execute(['id' => $itemId]);
+                    $itemInfo = $itemStmt->fetch();
+                    $itemName = $itemInfo ? $itemInfo['item_name'] : "Item #{$itemId}";
+                    $unit = $itemInfo ? $itemInfo['unit_code'] : 'PCS';
+                    $availDisp = round($available, 3);
+                    $reqDisp = round($qty, 3);
+                    throw new \RuntimeException(
+                        "Insufficient stock for \"{$itemName}\". Available: {$availDisp} {$unit}, Requested: {$reqDisp} {$unit}."
+                    );
+                }
+            }
+
             $stmt = $this->pdo->prepare(
                 'INSERT INTO stock_adjustments (item_id, owner_type, owner_id, adjustment_type, qty, reason, remarks, created_by)
                  VALUES (:item_id, :owner_type, :owner_id, :adjustment_type, :qty, :reason, :remarks, :created_by)'

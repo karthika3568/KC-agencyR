@@ -311,6 +311,19 @@ export function StockAdjustmentPanel({ canManage }) {
       return;
     }
 
+    if (adjustmentType === 'deduction') {
+      const selectedItem = items.find((i) => i.id === Number(itemId));
+      const available = Number(selectedItem?.quantity_on_hand ?? selectedItem?.stock ?? 0);
+      if (available <= 0) {
+        setFormError(`Cannot deduct stock for "${selectedItem?.item_name || 'Item'}". Available stock is ${available}.`);
+        return;
+      }
+      if (Number(qty) > available) {
+        setFormError(`Insufficient stock for "${selectedItem?.item_name || 'Item'}". Available: ${available} PCS, Requested: ${qty} PCS.`);
+        return;
+      }
+    }
+
     setFormError('');
     createMutation.mutate({
       item_id: Number(itemId),
@@ -372,12 +385,36 @@ export function StockAdjustmentPanel({ canManage }) {
                   className="input w-full"
                 >
                   <option value="">-- Select Item --</option>
-                  {items.map((i) => (
-                    <option key={i.id} value={i.id}>
-                      {i.item_name} ({i.item_code})
-                    </option>
-                  ))}
+                  {items.map((i) => {
+                    const stock = Number(i.quantity_on_hand ?? i.stock ?? 0);
+                    const stockStr = stock < 0
+                      ? ` [Negative Stock: ${stock}]`
+                      : stock === 0
+                      ? ` [Out of Stock: 0]`
+                      : ` [Stock: ${stock}]`;
+                    const isUnavailable = adjustmentType === 'deduction' && stock <= 0;
+                    return (
+                      <option key={i.id} value={i.id} disabled={isUnavailable}>
+                        {i.item_name} ({i.item_code}){stockStr}
+                      </option>
+                    );
+                  })}
                 </select>
+                {itemId && (() => {
+                  const selItem = items.find((i) => i.id === Number(itemId));
+                  const stock = Number(selItem?.quantity_on_hand ?? selItem?.stock ?? 0);
+                  return (
+                    <span className={`text-[10.5px] block mt-1 font-medium ${
+                      stock < 0
+                        ? 'text-rose-500'
+                        : stock === 0
+                        ? 'text-rose-400'
+                        : 'text-emerald-500'
+                    }`}>
+                      Current Available Stock: {stock} {selItem?.base_unit_code || 'PCS'}
+                    </span>
+                  );
+                })()}
               </div>
 
               <div className="grid grid-cols-2 gap-2">
@@ -569,7 +606,6 @@ export function VanStockPanel({ canManage }) {
   const [selectedItemIds, setSelectedItemIds] = useState([]);
   const [exportError, setExportError] = useState('');
   const [exporting, setExporting] = useState(false);
-  const [shortageWarning, setShortageWarning] = useState(null);
 
   useUnsavedChangesGuard(
     Boolean(selectedOrderId || notes.trim() || lines.some((l) => l.item_id)),
@@ -668,17 +704,7 @@ export function VanStockPanel({ canManage }) {
   const submitPayload = async (payload) => {
     try {
       await mutation.mutateAsync(payload);
-      setShortageWarning(null);
     } catch (err) {
-      // A stock-insufficiency warning (Issue Stock to Van only) comes back
-      // as 409 with a `shortages` list — not a hard error. Surface it as a
-      // Continue/Cancel confirmation instead of a dead-end error message;
-      // any other failure (validation, server error) still just shows the
-      // inline error banner.
-      if (mode === 'issue' && err?.response?.status === 409 && err?.response?.data?.warning === 'insufficient_stock') {
-        setShortageWarning({ payload, shortages: err.response.data.shortages });
-        return;
-      }
       setFormError(err?.response?.data?.error || 'Failed to process van stock');
     }
   };
@@ -686,7 +712,6 @@ export function VanStockPanel({ canManage }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setFormError('');
-    setShortageWarning(null);
     if (!employeeId) {
       setFormError('Please select a salesman.');
       return;
@@ -695,6 +720,37 @@ export function VanStockPanel({ canManage }) {
     if (validLines.length === 0) {
       setFormError('Please add at least one item line.');
       return;
+    }
+
+    if (mode === 'issue') {
+      for (const line of validLines) {
+        const item = items.find((i) => i.id === Number(line.item_id));
+        const available = Number(item?.quantity_on_hand ?? item?.stock ?? 0);
+        const reqQty = Number(line.qty);
+        if (available <= 0) {
+          setFormError(`Insufficient stock. Available: ${available} PCS, Requested: ${reqQty} PCS.`);
+          return;
+        }
+        if (reqQty > available) {
+          setFormError(`Insufficient stock for "${item?.item_name || 'Item'}". Available: ${available} PCS, Requested: ${reqQty} PCS.`);
+          return;
+        }
+      }
+    } else if (mode === 'return') {
+      for (const line of validLines) {
+        const item = items.find((i) => i.id === Number(line.item_id));
+        const vanItem = pending.find((p) => p.item_id === Number(line.item_id));
+        const available = vanItem ? Number(vanItem.quantity_on_hand) : 0;
+        const reqQty = Number(line.qty);
+        if (available <= 0) {
+          setFormError(`Cannot return "${item?.item_name || 'Item'}". Only 0 currently in van stock.`);
+          return;
+        }
+        if (reqQty > available) {
+          setFormError(`Cannot return ${reqQty} of "${item?.item_name || 'Item'}". Only ${available} currently in van stock.`);
+          return;
+        }
+      }
     }
 
     const payload = {
@@ -713,11 +769,6 @@ export function VanStockPanel({ canManage }) {
     await submitPayload(payload);
   };
 
-  const confirmShortageAndIssue = async () => {
-    if (!shortageWarning) return;
-    await submitPayload({ ...shortageWarning.payload, confirm_insufficient: true });
-  };
-
   const users = usersQuery.data || [];
   const items = itemsQuery.data || [];
   const pending = pendingQuery.data || [];
@@ -725,6 +776,13 @@ export function VanStockPanel({ canManage }) {
   const selectedEmployee = canManage
     ? users.find((u) => String(u.id) === String(employeeId))
     : user;
+
+  const orderShortages = (selectedOrder && mode === 'issue') ? (selectedOrder.items?.filter((it) => {
+    const curItem = items.find((i) => i.id === it.item_id);
+    const avail = curItem ? Number(curItem.quantity_on_hand ?? curItem.stock ?? 0) : Number(it.available_stock ?? 0);
+    return avail < Number(it.qty) || avail <= 0;
+  }) || []) : [];
+  const hasOrderShortage = mode === 'issue' && Boolean(selectedOrderId && orderShortages.length > 0);
 
   const {
     page: pendingPage,
@@ -993,9 +1051,29 @@ export function VanStockPanel({ canManage }) {
                         {selectedOrder.customer_phone && (
                           <div className="text-[10.5px] text-ink-muted">Phone: {selectedOrder.customer_phone}</div>
                         )}
-                        <div className="text-[10px] text-indigo-300 bg-indigo-500/10 px-2 py-1 rounded">
-                          ✓ {selectedOrder.items?.length || 0} order item(s) mapped automatically. You can adjust quantities or click <b>"+ Add Extra Item to Van"</b> below.
-                        </div>
+                        {orderShortages.length > 0 ? (
+                          <div className="text-[10.5px] text-rose-400 bg-rose-500/15 border border-rose-500/30 px-2 py-1.5 rounded space-y-1 font-medium">
+                            <div className="flex items-center gap-1 font-bold">
+                              <AlertTriangle size={13} className="shrink-0" />
+                              <span>Cannot dispatch order: Insufficient branch stock</span>
+                            </div>
+                            <ul className="list-disc list-inside text-[10px] pl-1 space-y-0.5">
+                              {orderShortages.map((s) => {
+                                const cur = items.find((i) => i.id === s.item_id);
+                                const a = cur ? Number(cur.quantity_on_hand ?? cur.stock ?? 0) : Number(s.available_stock ?? 0);
+                                return (
+                                  <li key={s.id || s.item_id}>
+                                    {s.item_name}: Available {a} PCS, Requested {s.qty} PCS
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          </div>
+                        ) : (
+                          <div className="text-[10px] text-indigo-300 bg-indigo-500/10 px-2 py-1 rounded">
+                            ✓ {selectedOrder.items?.length || 0} order item(s) mapped automatically. All items in stock and ready to issue.
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1033,21 +1111,38 @@ export function VanStockPanel({ canManage }) {
                     )}
                   </div>
                   {lines.map((line, idx) => (
-                    <div key={idx} className="flex items-center gap-2">
+                    <div key={idx} className="flex flex-wrap items-center gap-2">
                       <select
                         value={line.item_id}
                         onChange={(e) => updateLine(idx, { item_id: e.target.value })}
-                        className="input text-xs flex-1"
+                        className="input text-xs flex-1 min-w-[140px]"
                       >
                         <option value="">Select Item</option>
                         {items.map((i) => {
                           const vanItem = mode === 'return' ? pending.find((p) => p.item_id === i.id) : null;
-                          const suffix = mode === 'return'
-                            ? (vanItem ? ` [In Van: ${vanItem.quantity_on_hand}]` : ' [In Van: 0]')
-                            : (i.item_code ? ` (${i.item_code})` : '');
+                          const branchStock = Number(i.quantity_on_hand ?? i.stock ?? 0);
+                          const vanStock = vanItem ? Number(vanItem.quantity_on_hand) : 0;
+
+                          let stockStr = '';
+                          let isUnavailable = false;
+                          if (mode === 'return') {
+                            stockStr = ` [In Van: ${vanStock}]`;
+                            isUnavailable = vanStock <= 0;
+                          } else {
+                            if (branchStock < 0) {
+                              stockStr = ` [Negative Stock: ${branchStock}]`;
+                              isUnavailable = true;
+                            } else if (branchStock === 0) {
+                              stockStr = ` [Out of Stock: 0]`;
+                              isUnavailable = true;
+                            } else {
+                              stockStr = ` [Stock: ${branchStock}]`;
+                              isUnavailable = false;
+                            }
+                          }
                           return (
-                            <option key={i.id} value={i.id}>
-                              {i.item_name}{suffix}
+                            <option key={i.id} value={i.id} disabled={isUnavailable}>
+                              {i.item_name} ({i.item_code}){stockStr}
                             </option>
                           );
                         })}
@@ -1061,6 +1156,27 @@ export function VanStockPanel({ canManage }) {
                         onChange={(e) => updateLine(idx, { qty: e.target.value })}
                         className="input text-xs w-20"
                       />
+                      {line.item_id && (() => {
+                        const curItem = items.find((it) => it.id === Number(line.item_id));
+                        const vanItem = mode === 'return' ? pending.find((p) => p.item_id === Number(line.item_id)) : null;
+                        const avail = mode === 'return' ? (vanItem ? Number(vanItem.quantity_on_hand) : 0) : Number(curItem?.quantity_on_hand ?? curItem?.stock ?? 0);
+                        const isOver = Number(line.qty) > avail;
+                        const isZeroOrNeg = avail <= 0;
+                        return (
+                          <span
+                            className={`text-[10px] px-1.5 py-0.5 rounded font-medium whitespace-nowrap ${
+                              isZeroOrNeg
+                                ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                                : isOver
+                                ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                                : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                            }`}
+                            title={isZeroOrNeg ? 'No available stock' : isOver ? 'Quantity exceeds available stock' : 'Stock available'}
+                          >
+                            {mode === 'return' ? `Van: ${avail}` : avail < 0 ? `Negative: ${avail}` : avail === 0 ? 'Out of stock: 0' : `Avail: ${avail}`}
+                          </span>
+                        );
+                      })()}
                       {line.fromOrder && (
                         <span className="text-[9px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-1 py-0.5 rounded whitespace-nowrap">
                           Order
@@ -1104,7 +1220,7 @@ export function VanStockPanel({ canManage }) {
                     type="submit"
                     variant="primary"
                     loading={mutation.isPending}
-                    disabled={!employeeId}
+                    disabled={!employeeId || hasOrderShortage}
                     className="w-full"
                   >
                     {mode === 'issue'
@@ -1509,25 +1625,6 @@ export function VanStockPanel({ canManage }) {
         <PrintPreviewModal
           stockIssue={printingIssue}
           onClose={() => setPrintingIssue(null)}
-        />
-      )}
-
-      {shortageWarning && (
-        <ConfirmDialog
-          variant="warning"
-          title="Stock Warning"
-          message="The requested quantity exceeds available stock for one or more items. Do you want to continue anyway?"
-          details={shortageWarning.shortages.map((s) => (
-            <div key={s.item_id} className="border-b border-[#EAF1FA] last:border-0 pb-1.5 last:pb-0">
-              <span className="font-bold text-[#0B1B45]">{s.item_name}:</span> only {s.available} unit(s) available,
-              but {s.requested} requested — exceeds by {s.excess} unit(s).
-            </div>
-          ))}
-          confirmLabel="Continue"
-          cancelLabel="Cancel"
-          loading={mutation.isPending}
-          onConfirm={confirmShortageAndIssue}
-          onCancel={() => setShortageWarning(null)}
         />
       )}
     </div>

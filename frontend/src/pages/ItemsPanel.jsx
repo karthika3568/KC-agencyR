@@ -533,7 +533,7 @@ export function ItemsPanel({ canManage }) {
     }
   };
 
-  const isMobileItems = useMediaQuery('(max-width: 767px)');
+  const isMobileItems = useMediaQuery('(max-width: 1023px)');
   const items = itemsQuery.data || [];
   const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);

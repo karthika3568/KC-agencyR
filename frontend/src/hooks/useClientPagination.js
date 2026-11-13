@@ -17,11 +17,11 @@ export function useClientPagination(items = [], pageSize = 10) {
   }, [totalPages, page]);
 
   const safePage = Math.min(Math.max(1, page), totalPages);
+  const startIndex = (safePage - 1) * pageSize;
 
   const pagedItems = useMemo(() => {
-    const start = (safePage - 1) * pageSize;
-    return items.slice(start, start + pageSize);
-  }, [items, safePage, pageSize]);
+    return items.slice(startIndex, startIndex + pageSize);
+  }, [items, startIndex, pageSize]);
 
   const resetPage = () => setPage(1);
 
@@ -32,6 +32,7 @@ export function useClientPagination(items = [], pageSize = 10) {
     pageSize,
     total,
     totalPages,
+    startIndex,
     pagedItems,
     paginatedItems: pagedItems,
   };

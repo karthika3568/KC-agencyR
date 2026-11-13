@@ -119,9 +119,83 @@ function StockIssuesTab() {
         </div>
       )}
 
-      {/* Issues Table */}
+      {/* Issues Table & Mobile Cards */}
       <div className="card overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Mobile & Tablet Card View (< md) */}
+        <div className="md:hidden divide-y divide-border-soft max-h-[calc(100dvh-240px)] overflow-y-auto">
+          {issuesQuery.isLoading ? (
+            <div className="px-4 py-8 text-center text-xs text-ink-muted">Loading stock issues...</div>
+          ) : pagination.paginatedItems.length === 0 ? (
+            <div className="px-4 py-8 text-center text-xs text-ink-muted">
+              No stock issue transactions recorded.
+            </div>
+          ) : (
+            pagination.paginatedItems.map((issue) => (
+              <div key={issue.id} className="p-3 space-y-2.5 hover:bg-lavender-50/30 transition-colors">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-extrabold text-[#8244AD] font-mono text-sm">
+                      {issue.issue_no}
+                    </div>
+                    <div className="text-xs font-bold text-ink mt-0.5 break-words">
+                      {issue.employee_name}
+                    </div>
+                    <div className="text-[11px] text-ink-muted mt-0.5">
+                      {issue.issued_at || '-'}
+                    </div>
+                  </div>
+                  <span className="rounded-full bg-lavender-100 px-2.5 py-0.5 text-[10.5px] font-bold text-primary shrink-0">
+                    {issue.item_count || (issue.items ? issue.items.length : 0)} items
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 rounded-xl bg-surface-subtle/50 p-2 text-xs">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-ink-muted">Total Quantity</div>
+                    <div className="font-extrabold text-ink">{Number(issue.total_qty || 0)}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-ink-muted">Total Amount</div>
+                    <div className="font-black text-ink">₹{Number(issue.total_amount || 0).toFixed(2)}</div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-1.5 pt-1 border-t border-border-soft/60">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedIssue(issue)}
+                    className="inline-flex items-center gap-1 rounded-lg border border-border-soft px-2.5 py-1.5 text-xs font-semibold text-ink-muted hover:bg-lavender-100 hover:text-primary transition-colors min-h-[34px]"
+                    title="View Items"
+                  >
+                    <Eye size={14} />
+                    <span>View</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handlePrint(issue)}
+                    className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors min-h-[34px]"
+                    title="Print Issue Slip"
+                  >
+                    <Printer size={14} />
+                    <span>Print</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDownloadPdf(issue)}
+                    className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors min-h-[34px]"
+                    title="Download PDF"
+                  >
+                    <Download size={14} />
+                    <span>PDF</span>
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Desktop Table View (>= md) */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-[#FAF8FF] border-b border-border-soft text-ink-muted font-bold uppercase text-[10.5px]">
               <tr>
@@ -412,7 +486,125 @@ function StockReturnsTab() {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
+          {/* Mobile & Tablet Card View (< lg for 11-column table) */}
+          <div className="lg:hidden divide-y divide-border-soft max-h-[calc(100dvh-240px)] overflow-y-auto">
+            {returnsQuery.isLoading ? (
+              <div className="px-4 py-8 text-center text-xs text-ink-muted">Loading stock return transactions...</div>
+            ) : returnsPagination.paginatedItems.length === 0 ? (
+              <div className="px-4 py-8 text-center text-xs text-ink-muted">
+                {search ? 'No return transactions match your search.' : 'No stock return transactions recorded yet.'}
+              </div>
+            ) : (
+              returnsPagination.paginatedItems.map((ret) => {
+                const isExpanded = !!expandedReturns[ret.id];
+                const items = ret.items || [];
+                const singleItem = items.length === 1 ? items[0] : null;
+
+                return (
+                  <div key={ret.id} className="p-3 space-y-2.5 hover:bg-lavender-50/30 transition-colors">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-extrabold text-[#8244AD] font-mono text-sm">
+                          {ret.return_no || `#${ret.id}`}
+                        </div>
+                        <div className="text-xs font-bold text-ink mt-0.5 break-words">
+                          {ret.employee_name || '-'}
+                        </div>
+                        <div className="text-[11px] text-ink-muted mt-0.5">
+                          {ret.returned_at || '-'}
+                        </div>
+                      </div>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200 shrink-0">
+                        <CheckCircle2 size={10} />
+                        Completed
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-1.5 rounded-xl bg-surface-subtle/50 p-2 text-xs">
+                      <div>
+                        <div className="text-[10px] uppercase tracking-wider text-ink-muted">Items</div>
+                        <div className="font-bold text-ink truncate">
+                          {singleItem ? singleItem.item_name : `${items.length} items`}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] uppercase tracking-wider text-ink-muted">Qty Returned</div>
+                        <div className="font-extrabold text-ink">
+                          {Number(ret.total_qty || 0)} {singleItem ? singleItem.unit_code : ''}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] uppercase tracking-wider text-ink-muted">Total Value</div>
+                        <div className="font-black text-ink">
+                          ₹{Number(ret.total_amount || 0).toFixed(2)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-ink-muted pt-1 border-t border-border-soft/60">
+                      <div>
+                        Reason: <span className="font-semibold text-ink">{ret.notes || '—'}</span>
+                        {ret.returned_by_name && (
+                          <span className="ml-2">· By: <span className="font-semibold text-ink">{ret.returned_by_name}</span></span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        {items.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => toggleExpand(ret.id)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-border-soft px-2 py-1 text-xs font-semibold text-ink-muted hover:bg-lavender-100 hover:text-primary transition-colors min-h-[32px]"
+                          >
+                            {isExpanded ? <ChevronDown size={13} className="text-primary" /> : <ChevronRight size={13} />}
+                            <span>{isExpanded ? 'Hide' : 'Items'}</span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedReturn(ret)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-border-soft px-2 py-1 text-xs font-semibold text-ink-muted hover:bg-lavender-100 hover:text-primary transition-colors min-h-[32px]"
+                          title="View Return Details"
+                        >
+                          <Eye size={13} />
+                          <span>Details</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Inline Items Details in Mobile Card when Expanded */}
+                    {isExpanded && items.length > 0 && (
+                      <div className="rounded-xl border border-border-soft bg-surface-subtle/30 p-2.5 space-y-1.5 mt-2">
+                        <div className="text-[11px] font-bold text-ink border-b border-border-soft pb-1">
+                          Returned Items ({items.length})
+                        </div>
+                        <div className="divide-y divide-border-soft/60">
+                          {items.map((line, idx) => (
+                            <div key={idx} className="py-1.5 flex items-start justify-between gap-2 text-xs">
+                              <div className="min-w-0 flex-1">
+                                <div className="font-bold text-ink break-words">{line.item_name}</div>
+                                <div className="text-[10px] text-ink-muted font-mono">{line.item_code}</div>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <div className="font-extrabold text-ink">
+                                  {Number(line.qty || 0)} {line.unit_code}
+                                </div>
+                                <div className="text-[11px] font-bold text-[#8244AD]">
+                                  ₹{Number(line.line_amount || 0).toFixed(2)}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Desktop Table View (>= lg) */}
+          <div className="hidden lg:block overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-[#FAF8FF] border-b border-border-soft text-ink-muted font-bold uppercase text-[10.5px]">
                 <tr>
@@ -611,7 +803,49 @@ function StockReturnsTab() {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
+          {/* Mobile & Tablet Card View (< md) */}
+          <div className="md:hidden divide-y divide-border-soft max-h-[calc(100dvh-240px)] overflow-y-auto">
+            {balancesQuery.isLoading ? (
+              <div className="p-6 text-center text-xs text-ink-muted">Loading van stock balances...</div>
+            ) : balancesPagination.paginatedItems.length === 0 ? (
+              <div className="p-6 text-center text-xs text-ink-muted">
+                {balanceSearch ? 'No van stock balances match your filter.' : 'No active van stock balances found.'}
+              </div>
+            ) : (
+              balancesPagination.paginatedItems.map((r, idx) => (
+                <div key={idx} className="p-3 space-y-2 hover:bg-lavender-50/30 transition-colors">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold text-ink break-words">{r.item_name}</div>
+                      <div className="text-[11px] text-ink-muted font-mono mt-0.5">SKU: {r.item_code}</div>
+                    </div>
+                    <span className="rounded-full bg-lavender-100 px-2 py-0.5 text-[10.5px] font-bold text-primary shrink-0">
+                      {r.branch_name || 'Main Branch'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 rounded-xl bg-surface-subtle/50 p-2 text-xs">
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider text-ink-muted">Salesman / Van</div>
+                      <div className="font-semibold text-primary truncate">{r.owner_name}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider text-ink-muted">On-hand Qty</div>
+                      <div className="font-extrabold text-ink">{r.quantity_on_hand} {r.unit_code}</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs pt-1 border-t border-border-soft/60">
+                    <span className="text-[11px] text-ink-muted font-medium">Stock Value:</span>
+                    <span className="font-extrabold text-[#8244AD]">₹{Number(r.stock_value || 0).toFixed(2)}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Desktop Table View (>= md) */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-[#FAF8FF] border-b border-border-soft text-ink-muted font-bold uppercase text-[10.5px]">
                 <tr>

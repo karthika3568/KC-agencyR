@@ -702,7 +702,83 @@ function CategoriesPanel({ canManage }) {
             </div>
           </div>
 
-          <div className="overflow-x-auto max-h-[calc(100vh-210px)] overflow-y-auto">
+          {/* Mobile & Tablet Card View (< md) */}
+          <div className="md:hidden divide-y divide-border-soft max-h-[calc(100dvh-240px)] overflow-y-auto">
+            {pagedCategories.map((c, index) => {
+              const cActive = c.is_active === undefined ? true : Boolean(Number(c.is_active));
+              return (
+                <div
+                  key={c.id}
+                  tabIndex={0}
+                  data-catalog-nav="true"
+                  data-catalog-row="true"
+                  className="p-3 space-y-2 hover:bg-slate-50/50 transition-colors focus:outline-none focus:ring-2 focus:ring-[#6F2DA8]/60 focus:bg-[#EDE8FF]/30"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-bold text-slate-900 break-words flex items-center gap-1.5">
+                        <span className="text-slate-400 font-semibold text-xs">#{startIndex + index + 1}</span>
+                        <span>{c.name}</span>
+                      </div>
+                      <div className="text-[11px] text-slate-500 mt-0.5">
+                        Created: {c.created_at ? new Date(c.created_at).toLocaleDateString() : 'N/A'}
+                      </div>
+                    </div>
+                    {cActive ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10.5px] font-bold text-emerald-700 border border-emerald-200 shrink-0">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                        Active
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10.5px] font-bold text-slate-500 border border-slate-200 shrink-0">
+                        <span className="h-1.5 w-1.5 rounded-full bg-slate-400"></span>
+                        Inactive
+                      </span>
+                    )}
+                  </div>
+
+                  {canManage && (
+                    <div className="flex items-center justify-end gap-1.5 pt-1.5 border-t border-border-soft/60">
+                      <button
+                        type="button"
+                        data-catalog-nav="true"
+                        data-catalog-action="true"
+                        onClick={() => handleEdit(c)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-border-soft bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors min-h-[34px]"
+                        title="Edit Category"
+                      >
+                        <Edit2 size={13} />
+                        <span>Edit</span>
+                      </button>
+                      <button
+                        type="button"
+                        data-catalog-nav="true"
+                        data-catalog-action="true"
+                        onClick={() => {
+                          if (confirm(`Are you sure you want to delete category "${c.name}"?`)) {
+                            removeMutation.mutate(c.id);
+                          }
+                        }}
+                        className="inline-flex items-center gap-1 rounded-lg border border-border-soft bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-rose-50 hover:text-rose-600 transition-colors min-h-[34px]"
+                        title="Delete Category"
+                      >
+                        <Trash2 size={13} />
+                        <span>Delete</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {filteredCategories.length === 0 && (
+              <div className="px-3 py-6 text-center text-slate-400 font-medium text-xs">
+                No categories found matching your criteria.
+              </div>
+            )}
+          </div>
+
+          {/* Desktop Table View (>= md) */}
+          <div className="hidden md:block overflow-x-auto max-h-[calc(100vh-210px)] overflow-y-auto">
             <table className="w-full text-left text-xs">
               <thead className="sticky top-0 bg-slate-50 z-10">
                 <tr className="border-b border-border-soft bg-slate-50/95 text-[10.5px] font-bold uppercase tracking-wider text-slate-500">
@@ -1081,7 +1157,81 @@ function BrandsPanel({ canManage }) {
             </div>
           </div>
 
-          <div className="overflow-x-auto max-h-[calc(100vh-210px)] overflow-y-auto">
+          {/* Mobile & Tablet Card View (< md) */}
+          <div className="md:hidden divide-y divide-border-soft max-h-[calc(100dvh-240px)] overflow-y-auto">
+            {pagedBrands.map((b, index) => {
+              const bActive = b.is_active === undefined ? true : Boolean(Number(b.is_active));
+              return (
+                <div
+                  key={b.id}
+                  tabIndex={0}
+                  data-catalog-nav="true"
+                  data-catalog-row="true"
+                  className="p-3 space-y-2 hover:bg-slate-50/50 transition-colors focus:outline-none focus:ring-2 focus:ring-[#6F2DA8]/60 focus:bg-[#EDE8FF]/30"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-bold text-slate-900 break-words flex items-center gap-1.5">
+                        <span className="text-slate-400 font-semibold text-xs">#{startIndex + index + 1}</span>
+                        <span>{b.name}</span>
+                      </div>
+                      <div className="text-[11px] text-slate-600 font-mono mt-0.5">
+                        Code: {b.code || '-'}
+                      </div>
+                    </div>
+                    {bActive ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10.5px] font-bold text-emerald-700 border border-emerald-200 shrink-0">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span> Active
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10.5px] font-bold text-slate-500 border border-slate-200 shrink-0">
+                        <span className="h-1.5 w-1.5 rounded-full bg-slate-400"></span> Inactive
+                      </span>
+                    )}
+                  </div>
+
+                  {canManage && (
+                    <div className="flex items-center justify-end gap-1.5 pt-1.5 border-t border-border-soft/60">
+                      <button
+                        type="button"
+                        data-catalog-nav="true"
+                        data-catalog-action="true"
+                        onClick={() => handleEdit(b)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-border-soft bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors min-h-[34px]"
+                        title="Edit Brand"
+                      >
+                        <Edit2 size={13} />
+                        <span>Edit</span>
+                      </button>
+                      <button
+                        type="button"
+                        data-catalog-nav="true"
+                        data-catalog-action="true"
+                        onClick={() => {
+                          if (confirm(`Are you sure you want to delete brand "${b.name}"?`)) {
+                            removeMutation.mutate(b.id);
+                          }
+                        }}
+                        className="inline-flex items-center gap-1 rounded-lg border border-border-soft bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-rose-50 hover:text-rose-600 transition-colors min-h-[34px]"
+                        title="Delete Brand"
+                      >
+                        <Trash2 size={13} />
+                        <span>Delete</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {filtered.length === 0 && (
+              <div className="px-3 py-6 text-center text-slate-400 font-medium text-xs">
+                No brands found matching your criteria.
+              </div>
+            )}
+          </div>
+
+          {/* Desktop Table View (>= md) */}
+          <div className="hidden md:block overflow-x-auto max-h-[calc(100vh-210px)] overflow-y-auto">
             <table className="w-full text-left text-xs">
               <thead className="sticky top-0 bg-slate-50 z-10">
                 <tr className="border-b border-border-soft bg-slate-50/95 text-[10.5px] font-bold uppercase tracking-wider text-slate-500">
@@ -1417,7 +1567,86 @@ function StockUnitsPanel({ canManage }) {
             </div>
           </div>
 
-          <div className="overflow-x-auto max-h-[calc(100vh-210px)] overflow-y-auto">
+          {/* Mobile & Tablet Card View (< md) */}
+          <div className="md:hidden divide-y divide-border-soft max-h-[calc(100dvh-240px)] overflow-y-auto">
+            {pagedStockUnits.map((r, index) => {
+              const rActive = r.is_active === undefined ? true : Boolean(Number(r.is_active));
+              return (
+                <div
+                  key={r.id}
+                  tabIndex={0}
+                  data-catalog-nav="true"
+                  data-catalog-row="true"
+                  className="p-3 space-y-2 hover:bg-slate-50/50 transition-colors focus:outline-none focus:ring-2 focus:ring-[#6F2DA8]/60 focus:bg-[#EDE8FF]/30"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-bold text-slate-900 break-words flex items-center gap-1.5">
+                        <span className="text-slate-400 font-semibold text-xs">#{startIndex + index + 1}</span>
+                        <span>{r.name}</span>
+                      </div>
+                      <div className="text-xs font-bold text-indigo-600 font-mono mt-0.5">
+                        Code: {r.short_code}
+                      </div>
+                    </div>
+                    {rActive ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10.5px] font-bold text-emerald-700 border border-emerald-200 shrink-0">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span> Active
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10.5px] font-bold text-slate-500 border border-slate-200 shrink-0">
+                        <span className="h-1.5 w-1.5 rounded-full bg-slate-400"></span> Inactive
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs text-slate-600 bg-surface-subtle/40 rounded-lg p-2">
+                    <span className="text-[11px] text-slate-500">Allows Decimals:</span>
+                    <span className="font-semibold text-slate-800">{r.is_decimal ? 'Yes' : 'No'}</span>
+                  </div>
+
+                  {canManage && (
+                    <div className="flex items-center justify-end gap-1.5 pt-1.5 border-t border-border-soft/60">
+                      <button
+                        type="button"
+                        data-catalog-nav="true"
+                        data-catalog-action="true"
+                        onClick={() => handleEdit(r)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-border-soft bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors min-h-[34px]"
+                        title="Edit Unit"
+                      >
+                        <Edit2 size={13} />
+                        <span>Edit</span>
+                      </button>
+                      <button
+                        type="button"
+                        data-catalog-nav="true"
+                        data-catalog-action="true"
+                        onClick={() => {
+                          if (confirm(`Are you sure you want to delete unit "${r.name}"?`)) {
+                            removeMutation.mutate(r.id);
+                          }
+                        }}
+                        className="inline-flex items-center gap-1 rounded-lg border border-border-soft bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-rose-50 hover:text-rose-600 transition-colors min-h-[34px]"
+                        title="Delete Unit"
+                      >
+                        <Trash2 size={13} />
+                        <span>Delete</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {filtered.length === 0 && (
+              <div className="px-3 py-6 text-center text-slate-400 font-medium text-xs">
+                No units found matching your criteria.
+              </div>
+            )}
+          </div>
+
+          {/* Desktop Table View (>= md) */}
+          <div className="hidden md:block overflow-x-auto max-h-[calc(100vh-210px)] overflow-y-auto">
             <table className="w-full text-left text-xs">
               <thead className="sticky top-0 bg-slate-50 z-10">
                 <tr className="border-b border-border-soft bg-slate-50/95 text-[10.5px] font-bold uppercase tracking-wider text-slate-500">
@@ -1809,7 +2038,92 @@ function TaxCodesPanel({ canManage }) {
             </div>
           </div>
 
-          <div className="overflow-x-auto max-h-[calc(100vh-210px)] overflow-y-auto">
+          {/* Mobile & Tablet Card View (< md) */}
+          <div className="md:hidden divide-y divide-border-soft max-h-[calc(100dvh-240px)] overflow-y-auto">
+            {pagedTaxCodes.map((r, index) => {
+              const rActive = r.is_active === undefined ? true : Boolean(Number(r.is_active));
+              return (
+                <div
+                  key={r.id}
+                  tabIndex={0}
+                  data-catalog-nav="true"
+                  data-catalog-row="true"
+                  className="p-3 space-y-2 hover:bg-slate-50/50 transition-colors focus:outline-none focus:ring-2 focus:ring-[#6F2DA8]/60 focus:bg-[#EDE8FF]/30"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-bold text-slate-900 break-words flex items-center gap-1.5">
+                        <span className="text-slate-400 font-semibold text-xs">#{startIndex + index + 1}</span>
+                        <span>{r.name}</span>
+                      </div>
+                      <div className="text-xs font-bold text-indigo-600 font-mono mt-0.5">
+                        Code: {r.code}
+                      </div>
+                    </div>
+                    {rActive ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10.5px] font-bold text-emerald-700 border border-emerald-200 shrink-0">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span> Active
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10.5px] font-bold text-slate-500 border border-slate-200 shrink-0">
+                        <span className="h-1.5 w-1.5 rounded-full bg-slate-400"></span> Inactive
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs bg-surface-subtle/40 rounded-lg p-2">
+                    <div>
+                      <span className="text-[10px] uppercase tracking-wider text-slate-500 block">GST Rate</span>
+                      <span className="font-extrabold text-slate-900">{r.gst_percent}%</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase tracking-wider text-slate-500 block">CGST / SGST</span>
+                      <span className="font-semibold text-slate-700">{r.cgst_percent}% / {r.sgst_percent}%</span>
+                    </div>
+                  </div>
+
+                  {canManage && (
+                    <div className="flex items-center justify-end gap-1.5 pt-1.5 border-t border-border-soft/60">
+                      <button
+                        type="button"
+                        data-catalog-nav="true"
+                        data-catalog-action="true"
+                        onClick={() => handleEdit(r)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-border-soft bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors min-h-[34px]"
+                        title="Edit Tax Code"
+                      >
+                        <Edit2 size={13} />
+                        <span>Edit</span>
+                      </button>
+                      <button
+                        type="button"
+                        data-catalog-nav="true"
+                        data-catalog-action="true"
+                        onClick={() => {
+                          if (confirm(`Are you sure you want to delete tax code "${r.name}"?`)) {
+                            removeMutation.mutate(r.id);
+                          }
+                        }}
+                        className="inline-flex items-center gap-1 rounded-lg border border-border-soft bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-rose-50 hover:text-rose-600 transition-colors min-h-[34px]"
+                        title="Delete Tax Code"
+                      >
+                        <Trash2 size={13} />
+                        <span>Delete</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {filtered.length === 0 && (
+              <div className="px-3 py-6 text-center text-slate-400 font-medium text-xs">
+                No tax codes found matching your criteria.
+              </div>
+            )}
+          </div>
+
+          {/* Desktop Table View (>= md) */}
+          <div className="hidden md:block overflow-x-auto max-h-[calc(100vh-210px)] overflow-y-auto">
             <table className="w-full text-left text-xs">
               <thead className="sticky top-0 bg-slate-50 z-10">
                 <tr className="border-b border-border-soft bg-slate-50/95 text-[10.5px] font-bold uppercase tracking-wider text-slate-500">

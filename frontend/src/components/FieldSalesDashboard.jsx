@@ -287,11 +287,19 @@ function MobileCustomerOrderModal({ onClose }) {
                         className="flex-1 rounded-lg border border-border-soft bg-white px-2.5 py-1.5 text-xs text-ink font-medium focus:border-primary focus:outline-none"
                       >
                         <option value="">-- Choose Product --</option>
-                        {items.map((i) => (
-                          <option key={i.id} value={i.id}>
-                            {i.item_name} ({i.item_code})
-                          </option>
-                        ))}
+                        {items.map((i) => {
+                          const stock = Number(i.quantity_on_hand ?? i.stock ?? 0);
+                          const stockStr = stock < 0
+                            ? ` [Negative Stock: ${stock}]`
+                            : stock === 0
+                            ? ` [Out of Stock: 0]`
+                            : ` [Stock: ${stock}]`;
+                          return (
+                            <option key={i.id} value={i.id}>
+                              {i.item_name} ({i.item_code}){stockStr}
+                            </option>
+                          );
+                        })}
                       </select>
 
                       {lines.length > 1 && (

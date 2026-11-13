@@ -1028,7 +1028,8 @@ export function TopNav({ onToggleSidebar, onToggleMobile } = {}) {
       >
         {/* Mobile & Portrait Tablet Compact Action Strip (< lg) */}
         <div className="flex lg:hidden w-full items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 min-w-0">
+          {/* Modules & Find buttons hidden on mobile screens (< sm) to eliminate duplication with Hamburger Menu */}
+          <div className="hidden sm:flex items-center gap-1.5 min-w-0">
             <button
               type="button"
               onClick={() => setMobileDrawerOpen(true)}
@@ -1049,18 +1050,23 @@ export function TopNav({ onToggleSidebar, onToggleMobile } = {}) {
             </button>
           </div>
 
-          {checkPermission(user, 'pos.access', '/pos') && (
+          {checkPermission(user, 'pos.access', '/pos') ? (
             <NavLink
               to="/pos"
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 min-h-[32px] text-xs font-bold transition-colors whitespace-nowrap shrink-0 ${
+              className={`flex items-center justify-center gap-2 rounded-lg px-3.5 py-1.5 min-h-[32px] w-full sm:w-auto text-xs font-bold transition-all shadow-xs ${
                 isPosActive
                   ? 'bg-[#924ebf] text-white ring-2 ring-white/30 shadow-sm'
-                  : 'bg-[#8244AD] hover:bg-[#924ebf] text-white shadow-xs'
+                  : 'bg-[#8244AD] hover:bg-[#924ebf] text-white'
               }`}
+              title="Open Point of Sale Terminal"
             >
-              <ShoppingCart size={13} />
+              <ShoppingCart size={14} className="shrink-0" />
               <span>POS Billing</span>
             </NavLink>
+          ) : (
+            <div className="flex sm:hidden items-center justify-center w-full text-xs font-medium text-[#D8CEE2]/80">
+              <span>KC Agency</span>
+            </div>
           )}
         </div>
 

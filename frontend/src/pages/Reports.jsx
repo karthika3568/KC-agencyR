@@ -672,8 +672,93 @@ function SalesWiseReportPanel({ report, canExport }) {
         )}
       </div>
 
-      <div className="overflow-x-auto card">
-        <table className="w-full min-w-[650px] text-sm">
+      <div className="card overflow-hidden">
+        {/* Mobile & Tablet Card View (< md) */}
+        <div className="md:hidden divide-y divide-border-soft max-h-[calc(100dvh-240px)] overflow-y-auto">
+          {query.isLoading && (
+            <div className="p-6 text-center text-xs text-ink-muted">Loading…</div>
+          )}
+          {query.isError && (
+            <div className="p-6 text-center text-xs text-red-400">
+              {query.error?.response?.data?.error || 'Failed to load this report.'}
+            </div>
+          )}
+          {!query.isLoading && !query.isError && filteredRows.length === 0 && (
+            <div className="p-6 text-center text-xs text-ink-muted">No data for this range.</div>
+          )}
+          {!query.isLoading &&
+            !query.isError &&
+            pagedRows.map((r, i) => {
+              const rowKey = selection.getKey(r, i);
+              const isSelected = selection.selectedKeys.has(rowKey);
+              const colEntries = Object.entries(report.columns);
+              const [firstKey, firstLabel] = colEntries[0] || [];
+              const restCols = colEntries.slice(1);
+
+              return (
+                <div
+                  key={rowKey}
+                  onClick={() => selection.toggleSelectRow(rowKey)}
+                  className={`p-3 space-y-2 transition-colors cursor-pointer ${
+                    isSelected ? 'bg-gold/10' : 'hover:bg-page'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2 min-w-0 flex-1">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => selection.toggleSelectRow(rowKey)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="mt-1 h-4 w-4 rounded border-border-soft text-gold focus:ring-gold shrink-0 cursor-pointer"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[10px] uppercase tracking-wider text-ink-muted">{firstLabel}</div>
+                        <div className="font-bold text-sm text-ink break-words">
+                          {NUMERIC_REPORT_KEYS.has(firstKey)
+                            ? Number(r[firstKey] ?? 0).toFixed(2)
+                            : (r[firstKey] ?? '-')}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs pl-6">
+                    {restCols.map(([k, label]) => (
+                      <div key={k} className="min-w-0">
+                        <div className="text-[10px] uppercase tracking-wider text-ink-muted truncate">{label}</div>
+                        <div className={`break-words ${NUMERIC_REPORT_KEYS.has(k) ? 'font-extrabold text-ink' : 'font-medium text-ink'}`}>
+                          {NUMERIC_REPORT_KEYS.has(k) ? Number(r[k] ?? 0).toFixed(2) : (r[k] ?? '-')}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+
+          {!query.isLoading && !query.isError && filteredRows.length > 0 && (
+            <div className="bg-surface-subtle p-3 border-t-2 border-border-soft space-y-1">
+              <div className="text-xs font-bold text-ink">
+                {selectedCount > 0 ? `Total (${selectedCount} selected)` : 'Grand Total'}
+              </div>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                {Object.entries(report.columns)
+                  .filter(([k]) => NUMERIC_REPORT_KEYS.has(k))
+                  .map(([k, label]) => (
+                    <div key={k} className="flex justify-between gap-2">
+                      <span className="text-ink-muted truncate">{label}:</span>
+                      <span className="font-bold text-ink">{totals[k].toFixed(2)}</span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Desktop Table View (>= md) */}
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full min-w-[650px] text-sm">
           <thead>
             <tr className="border-b border-border-soft text-left text-xs uppercase text-ink-muted">
               <th className="w-10 px-3 py-2 text-center">
@@ -749,6 +834,7 @@ function SalesWiseReportPanel({ report, canExport }) {
             </tfoot>
           )}
         </table>
+        </div>
         <Pagination page={page} pageSize={10} total={total} onPageChange={setPage} />
       </div>
     </div>
@@ -1235,8 +1321,88 @@ function PricingPanel({ type, label, canExport }) {
         </div>
       )}
 
-      <div className="overflow-x-auto card">
-        <table className="w-full min-w-[650px] text-sm">
+      <div className="card overflow-hidden">
+        {/* Mobile & Tablet Card View (< md) */}
+        <div className="md:hidden divide-y divide-border-soft max-h-[calc(100dvh-240px)] overflow-y-auto">
+          {query.isLoading && (
+            <div className="p-6 text-center text-xs text-ink-muted">Loading items…</div>
+          )}
+          {!query.isLoading && rows.length === 0 && (
+            <div className="p-6 text-center text-xs text-ink-muted">No items found.</div>
+          )}
+          {!query.isLoading &&
+            pagedRows.map((r) => {
+              const edited = Object.prototype.hasOwnProperty.call(edits, r.id);
+              const value = edited ? edits[r.id] : r.price ?? '';
+              const isSelected = selection.selectedKeys.has(r.id);
+
+              return (
+                <div
+                  key={r.id}
+                  onClick={() => selection.toggleSelectRow(r.id)}
+                  className={`p-3 space-y-2 transition-colors cursor-pointer ${
+                    isSelected ? 'bg-gold/10' : edited ? 'bg-amber-500/10 ring-1 ring-amber-500/30' : 'hover:bg-page'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2 min-w-0 flex-1">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => selection.toggleSelectRow(r.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="mt-1 h-4 w-4 rounded border-border-soft text-gold focus:ring-gold shrink-0 cursor-pointer"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-bold text-ink break-words">{r.item_name}</div>
+                        <div className="text-[11px] text-ink-muted font-mono mt-0.5">{r.item_code}</div>
+                      </div>
+                    </div>
+                    {edited && (
+                      <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-300">
+                        Modified
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-1.5 rounded-lg bg-surface-subtle/40 p-2 text-[11px] ml-6">
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider text-ink-muted">Unit</div>
+                      <div className="font-semibold text-ink">{r.unit_code || '—'}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider text-ink-muted">MRP</div>
+                      <div className="font-semibold text-ink">₹{r.mrp}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider text-ink-muted">Normal S.Rate</div>
+                      <div className="font-semibold text-ink">₹{r.net_srate}</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-border-soft/60 ml-6" onClick={(e) => e.stopPropagation()}>
+                    <label className="text-xs font-semibold text-ink">{label} Price:</label>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-ink-muted">₹</span>
+                      <input
+                        type="number"
+                        step="any"
+                        min="0"
+                        value={value}
+                        placeholder="Not set"
+                        onChange={(e) => handleChange(r.id, e.target.value)}
+                        className="input w-28 text-right text-xs font-semibold focus:ring-primary"
+                      />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+        </div>
+
+        {/* Desktop Table View (>= md) */}
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full min-w-[650px] text-sm">
           <thead>
             <tr className="border-b border-border-soft text-left text-xs uppercase text-ink-muted">
               <th className="w-10 px-3 py-2 text-center">
@@ -1306,6 +1472,7 @@ function PricingPanel({ type, label, canExport }) {
             })}
           </tbody>
         </table>
+        </div>
         <Pagination page={page} pageSize={10} total={total} onPageChange={setPage} />
       </div>
     </div>

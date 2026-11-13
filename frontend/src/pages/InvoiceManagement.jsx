@@ -613,7 +613,19 @@ function EditModal({ id, onClose }) {
             <div className="mb-3 flex items-center gap-2">
               <select onChange={(e) => { if (e.target.value) { addLine(e.target.value); e.target.value = ''; } }} className="input flex-1" defaultValue="">
                 <option value="" disabled>+ Add an item…</option>
-                {items.map((i) => <option key={i.id} value={i.id}>{i.item_name}</option>)}
+                {items.map((i) => {
+                  const stock = Number(i.quantity_on_hand ?? i.stock ?? 0);
+                  const stockStr = stock < 0
+                    ? ` [Negative Stock: ${stock}]`
+                    : stock === 0
+                    ? ` [Out of Stock: 0]`
+                    : ` [Stock: ${stock}]`;
+                  return (
+                    <option key={i.id} value={i.id} disabled={stock <= 0}>
+                      {i.item_name} ({i.item_code}){stockStr}
+                    </option>
+                  );
+                })}
               </select>
             </div>
 

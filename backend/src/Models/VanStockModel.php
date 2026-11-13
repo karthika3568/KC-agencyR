@@ -21,15 +21,11 @@ class VanStockModel
     }
 
     /**
-     * Returns ['issue_id' => int] on success, or ['warning' => 'insufficient_stock',
-     * 'shortages' => [...]] when a requested quantity exceeds what's actually
-     * on hand at the branch right now — a warning, never a hard block: pass
-     * $confirmInsufficient=true (the caller already showed the user the
-     * shortages and they chose Continue) to issue anyway. Checked fresh
-     * against the locked stock_ledger rows on every call, inside the same
-     * transaction as the write, so a stock change between the warning and
-     * the confirm click is still caught and the issue still can't race
-     * another concurrent issue past the same stock.
+     * Issues stock from branch to employee/salesman.
+     * Enforces strict stock validation: transfers that exceed available branch stock
+     * or where available stock is zero or negative are strictly rejected.
+     * Concurrency-safe: locks stock_ledger rows FOR UPDATE inside an atomic transaction.
+     * Rolls back completely on any shortage.
      */
     public function issue(
         int $branchId,
@@ -63,15 +59,19 @@ class VanStockModel
                 $issueQtyByItem[$itemId] = ($issueQtyByItem[$itemId] ?? 0.0) + $qty;
             }
 
-            // 2. Lock branch/warehouse stock_ledger rows FOR UPDATE and collect
-            // (not throw) any shortages — Stock Warning, not a block.
+            // 2. Lock branch stock_ledger rows FOR UPDATE and validate every product separately
             $stockStmt = $this->pdo->prepare(
                 'SELECT quantity_on_hand FROM stock_ledger
                  WHERE item_id = :item_id AND owner_type = \'branch\' AND owner_id = :branch_id
                  FOR UPDATE'
             );
 
-            $itemStmt = $this->pdo->prepare('SELECT item_name FROM items WHERE id = :id');
+            $itemStmt = $this->pdo->prepare(
+                'SELECT i.item_name, COALESCE(su.short_code, \'PCS\') AS unit_code
+                 FROM items i
+                 LEFT JOIN stock_units su ON su.id = i.base_unit_id
+                 WHERE i.id = :id'
+            );
 
             $shortages = [];
             foreach ($issueQtyByItem as $itemId => $requiredQty) {
@@ -79,24 +79,39 @@ class VanStockModel
                 $stockRow = $stockStmt->fetch();
                 $available = $stockRow !== false ? (float) $stockRow['quantity_on_hand'] : 0.0;
 
-                if ($available < $requiredQty) {
+                // Reject if available stock is less than required, or if available stock is zero or negative
+                if ($available < $requiredQty || $available <= 0) {
                     $itemStmt->execute(['id' => $itemId]);
-                    $itemName = $itemStmt->fetchColumn() ?: "Item #{$itemId}";
+                    $itemInfo = $itemStmt->fetch();
+                    $itemName = $itemInfo ? $itemInfo['item_name'] : "Item #{$itemId}";
+                    $unit = $itemInfo ? $itemInfo['unit_code'] : 'PCS';
                     $shortages[] = [
                         'item_id' => $itemId,
                         'item_name' => $itemName,
+                        'unit' => $unit,
                         'available' => round($available, 3),
                         'requested' => round($requiredQty, 3),
-                        'excess' => round($requiredQty - $available, 3),
                     ];
                 }
             }
 
-            if (!empty($shortages) && !$confirmInsufficient) {
-                if ($mustCommit) {
+            // If any product in a multi-product transfer fails validation, the entire transfer must roll back
+            if (!empty($shortages)) {
+                if ($mustCommit && $this->pdo->inTransaction()) {
                     $this->pdo->rollBack();
                 }
-                return ['warning' => 'insufficient_stock', 'shortages' => $shortages];
+                if (count($shortages) === 1) {
+                    $s = $shortages[0];
+                    throw new \RuntimeException(
+                        "Insufficient stock for \"{$s['item_name']}\". Available: {$s['available']} {$s['unit']}, Requested: {$s['requested']} {$s['unit']}."
+                    );
+                } else {
+                    $details = implode(', ', array_map(
+                        fn($s) => "\"{$s['item_name']}\" (Available: {$s['available']} {$s['unit']}, Requested: {$s['requested']} {$s['unit']})",
+                        $shortages
+                    ));
+                    throw new \RuntimeException("Insufficient stock for multiple items: {$details}.");
+                }
             }
 
             // 3. Create issue note header
@@ -162,7 +177,11 @@ class VanStockModel
             throw new \InvalidArgumentException('At least one item is required for stock return');
         }
 
-        $this->pdo->beginTransaction();
+        $mustCommit = false;
+        if (!$this->pdo->inTransaction()) {
+            $this->pdo->beginTransaction();
+            $mustCommit = true;
+        }
         try {
             // 1. Group & validate return quantities per item
             $returnQtyByItem = [];
@@ -227,10 +246,14 @@ class VanStockModel
                 $stock->applyMovement($itemId, 'branch', $branchId, $qty, 'salesman_return', 'stock_return_notes', $returnId, null, null, $returnedBy);
             }
 
-            $this->pdo->commit();
+            if ($mustCommit) {
+                $this->pdo->commit();
+            }
             return $returnId;
         } catch (\Throwable $e) {
-            $this->pdo->rollBack();
+            if ($mustCommit && $this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
             throw $e;
         }
     }

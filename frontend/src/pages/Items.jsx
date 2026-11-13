@@ -49,8 +49,75 @@ export default function Items() {
 
       <input className="input max-w-sm" placeholder={t('common.search')} value={q} onChange={(e) => setQ(e.target.value)} />
 
-      <div className="card overflow-x-auto">
-        <table className="data-table">
+      <div className="card overflow-hidden">
+        {/* Mobile & Tablet Card View (< md) */}
+        <div className="md:hidden divide-y divide-border-soft max-h-[calc(100dvh-240px)] overflow-y-auto">
+          {items.map((it) => (
+            <div key={it.id} className="p-3 space-y-2 hover:bg-page/50">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-bold text-ink break-words">{it.name_en || it.name_ta}</div>
+                  {it.name_ta && it.name_en && (
+                    <div className="text-xs text-ink-muted">{it.name_ta}</div>
+                  )}
+                  <div className="text-[11px] text-ink-muted font-mono mt-0.5">Code: {it.code}</div>
+                </div>
+                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-bold ${
+                  it.active ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200'
+                }`}>
+                  {it.active ? t('common.active') : t('common.inactive')}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-1.5 rounded-lg bg-surface-subtle/40 p-2 text-[11px]">
+                <div>
+                  <div className="text-[10px] uppercase text-ink-muted">{t('items.unit')}</div>
+                  <div className="font-semibold text-ink">{it.unit}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase text-ink-muted">{t('items.default_rate')}</div>
+                  <div className="font-semibold text-ink">{it.default_rate ?? '—'}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase text-ink-muted">{t('items.charge_item')}</div>
+                  <div className="font-semibold text-ink">{it.is_charge_item ? t('common.yes') : t('common.no')}</div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-1.5 pt-1.5 border-t border-border-soft/60">
+                <button
+                  className="inline-flex items-center gap-1 rounded-lg border border-border-soft bg-slate-50 px-2.5 py-1 text-xs font-semibold text-amber-600 hover:bg-amber-50 min-h-[32px]"
+                  onClick={() => setForm(it)}
+                  title={t('common.edit')}
+                  type="button"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  <span>{t('common.edit')}</span>
+                </button>
+                <button
+                  className="inline-flex items-center gap-1 rounded-lg border border-border-soft bg-slate-50 px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 min-h-[32px]"
+                  onClick={() => handleDelete(it.id)}
+                  title={t('common.delete')}
+                  type="button"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  <span>{t('common.delete')}</span>
+                </button>
+              </div>
+            </div>
+          ))}
+          {items.length === 0 && (
+            <div className="p-6 text-center text-xs text-ink-muted">No items found.</div>
+          )}
+        </div>
+
+        {/* Desktop Table View (>= md) */}
+        <div className="hidden md:block overflow-x-auto">
+          <table className="data-table">
           <thead>
             <tr>
               <th>{t('items.code')}</th>
@@ -101,6 +168,7 @@ export default function Items() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       {form && (

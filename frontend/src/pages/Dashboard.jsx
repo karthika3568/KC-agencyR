@@ -653,24 +653,30 @@ function StandardDashboard() {
         </Card>
       )}
 
-      {/* 2. Category Filter Pills Bar */}
-      <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-0.5 text-xs">
+      {/* 2. Responsive Category Filter Navigation */}
+      <div
+        role="navigation"
+        aria-label="Module category navigation"
+        className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs"
+      >
         {visibleCategories.map((cat) => {
           const Icon = cat.icon;
           const isActive = selectedCategory === cat.id;
           return (
             <button
               key={cat.id}
+              type="button"
               data-dashboard-nav="true"
               data-dashboard-filter="true"
+              aria-pressed={isActive}
               onClick={() => setSelectedCategory(cat.id)}
-              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap border focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-2 focus-visible:ring-2 focus-visible:ring-[#6F2DA8] focus-visible:ring-offset-2 focus:border-[#6F2DA8] ${
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 sm:px-3 py-1.5 text-xs font-semibold transition-all whitespace-nowrap border focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-2 focus-visible:ring-2 focus-visible:ring-[#6F2DA8] focus-visible:ring-offset-2 focus:border-[#6F2DA8] active:scale-95 ${
                 isActive
-                  ? 'bg-[#351442] text-white border-[#351442] shadow-sm font-semibold'
+                  ? 'bg-[#351442] text-white border-[#351442] shadow-sm font-semibold ring-1 ring-[#351442]/20'
                   : 'bg-white text-[#6F5B85] border-[#DDD0FF] hover:bg-[#FAF8FF] hover:border-[#C4B5FD] hover:text-[#5C238C] font-medium'
               }`}
             >
-              <Icon size={13} className={isActive ? 'text-white' : 'text-[#6F5B85]'} />
+              <Icon size={13} className={`shrink-0 ${isActive ? 'text-white' : 'text-[#6F5B85]'}`} />
               <span>{cat.label}</span>
             </button>
           );
@@ -678,7 +684,7 @@ function StandardDashboard() {
       </div>
 
       {/* 3. Responsive Module Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
+      <div className="grid grid-cols-1 min-[360px]:grid-cols-2 md:grid-cols-2 min-[840px]:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
         {filteredModules.map((item) => {
           const Icon = item.icon;
 
@@ -693,7 +699,7 @@ function StandardDashboard() {
                 role="button"
                 aria-label={`${item.label} - ${item.headerTitle}`}
                 onClick={() => navigate(item.to)}
-                className="group relative cursor-pointer col-span-1 sm:col-span-2 md:col-span-2 lg:col-span-2 row-span-2 rounded-2xl border border-[#DDD0FF] bg-gradient-to-br from-[#EDE8FF] via-[#F8F5FF] to-white p-3.5 sm:p-4 shadow-sm transition-all hover:border-primary/40 hover:shadow-soft-md active:scale-[0.99] flex flex-col justify-between overflow-hidden focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-2 focus:border-[#6F2DA8] focus-visible:ring-2 focus-visible:ring-[#6F2DA8] focus-visible:ring-offset-2 focus:shadow-md"
+                className="group relative cursor-pointer col-span-1 min-[360px]:col-span-2 md:col-span-2 min-[840px]:col-span-3 lg:col-span-2 lg:row-span-2 rounded-2xl border border-[#DDD0FF] bg-gradient-to-br from-[#EDE8FF] via-[#F8F5FF] to-white p-3.5 sm:p-4 shadow-sm transition-all hover:border-primary/40 hover:shadow-soft-md active:scale-[0.99] flex flex-col justify-between overflow-hidden focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-2 focus:border-[#6F2DA8] focus-visible:ring-2 focus-visible:ring-[#6F2DA8] focus-visible:ring-offset-2 focus:shadow-md"
               >
                 {/* Background subtle glow */}
                 <div className="pointer-events-none absolute -right-10 -bottom-10 h-36 w-36 rounded-full bg-primary/5 blur-xl transition-transform group-hover:scale-125" />
@@ -772,7 +778,7 @@ function StandardDashboard() {
               role="button"
               aria-label={`${item.label} - ${item.subtitle}`}
               onClick={() => navigate(item.to)}
-              className="group relative cursor-pointer rounded-xl sm:rounded-2xl border border-border-soft bg-white p-2.5 sm:p-3 shadow-sm transition-all hover:border-primary/40 hover:shadow-soft-md active:scale-95 flex flex-col justify-between min-h-[76px] sm:min-h-[82px] overflow-hidden focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-2 focus:border-[#6F2DA8] focus-visible:ring-2 focus-visible:ring-[#6F2DA8] focus-visible:ring-offset-2 focus:shadow-md"
+              className="group relative cursor-pointer rounded-2xl border border-border-soft bg-white p-3 shadow-sm transition-all hover:border-primary/40 hover:shadow-soft-md active:scale-[0.98] flex flex-col justify-between h-full min-h-[96px] sm:min-h-[92px] lg:min-h-[82px] overflow-hidden focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-2 focus:border-[#6F2DA8] focus-visible:ring-2 focus-visible:ring-[#6F2DA8] focus-visible:ring-offset-2 focus:shadow-md"
             >
               {/* Subtle corner tint gradient matching reference */}
               <div
@@ -782,22 +788,21 @@ function StandardDashboard() {
               {/* Card Header: Icon + Arrow */}
               <div className="relative z-10 flex items-center justify-between">
                 <div
-                  className={`flex h-8 w-8 items-center justify-center rounded-lg border ${item.iconColor} shadow-xs transition-transform group-hover:scale-105`}
+                  className={`flex h-[34px] w-[34px] lg:h-8 lg:w-8 items-center justify-center rounded-xl border ${item.iconColor} shadow-xs transition-transform group-hover:scale-105 shrink-0`}
                 >
-                  <Icon size={16} />
+                  <Icon className="w-[18px] h-[18px] lg:w-4 lg:h-4 shrink-0" />
                 </div>
                 <ChevronRight
-                  size={14}
-                  className="text-ink-light transition-all group-hover:translate-x-0.5 group-hover:text-primary"
+                  className="w-4 h-4 lg:w-3.5 lg:h-3.5 text-ink-light shrink-0 transition-all group-hover:translate-x-0.5 group-hover:text-primary"
                 />
               </div>
 
               {/* Card Footer: Title + Subtitle */}
-              <div className="relative z-10 mt-1.5">
-                <h3 className="text-xs sm:text-[13px] font-bold text-ink group-hover:text-primary transition-colors truncate leading-tight">
+              <div className="relative z-10 mt-2 lg:mt-1.5 min-w-0">
+                <h3 className="text-[14.5px] lg:text-[13px] font-bold text-ink group-hover:text-primary transition-colors leading-snug lg:leading-tight break-words lg:truncate">
                   {item.label}
                 </h3>
-                <p className="text-[10px] sm:text-[11px] text-ink-muted truncate mt-0.5">
+                <p className="text-[11.5px] lg:text-[11px] text-ink-muted leading-tight mt-1 lg:mt-0.5 break-words lg:truncate">
                   {item.subtitle}
                 </p>
               </div>

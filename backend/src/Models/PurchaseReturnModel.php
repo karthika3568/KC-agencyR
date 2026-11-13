@@ -89,6 +89,42 @@ class PurchaseReturnModel
                 ));
             }
 
+            // Lock and validate branch stock for each item before creating purchase return
+            $stockStmt = $this->pdo->prepare(
+                'SELECT quantity_on_hand FROM stock_ledger
+                 WHERE item_id = :item_id AND owner_type = \'branch\' AND owner_id = :branch_id
+                 FOR UPDATE'
+            );
+            $itemStmt = $this->pdo->prepare(
+                'SELECT i.item_name, COALESCE(su.short_code, \'PCS\') AS unit_code
+                 FROM items i
+                 LEFT JOIN stock_units su ON su.id = i.base_unit_id
+                 WHERE i.id = :id'
+            );
+
+            $reqByItem = [];
+            foreach ($lines as $line) {
+                $itemId = (int) $line['item_id'];
+                $reqByItem[$itemId] = ($reqByItem[$itemId] ?? 0.0) + (float) $line['qty'];
+            }
+
+            foreach ($reqByItem as $itemId => $reqQty) {
+                $stockStmt->execute(['item_id' => $itemId, 'branch_id' => (int) $header['branch_id']]);
+                $stockRow = $stockStmt->fetch();
+                $available = $stockRow !== false ? (float) $stockRow['quantity_on_hand'] : 0.0;
+                if ($available < $reqQty || $available <= 0) {
+                    $itemStmt->execute(['id' => $itemId]);
+                    $itemInfo = $itemStmt->fetch();
+                    $itemName = $itemInfo ? $itemInfo['item_name'] : "Item #{$itemId}";
+                    $unit = $itemInfo ? $itemInfo['unit_code'] : 'PCS';
+                    $availDisp = round($available, 3);
+                    $reqDisp = round($reqQty, 3);
+                    throw new \RuntimeException(
+                        "Insufficient stock for \"{$itemName}\". Available: {$availDisp} {$unit}, Requested: {$reqDisp} {$unit}."
+                    );
+                }
+            }
+
             $stmt = $this->pdo->prepare(
                 'INSERT INTO purchase_returns (purchase_id, supplier_id, branch_id, reason, return_total, refund_amount, created_by)
                  VALUES (:purchase_id, :supplier_id, :branch_id, :reason, :return_total, :refund_amount, :created_by)'

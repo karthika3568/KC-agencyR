@@ -4,6 +4,7 @@ import { Tag, AlertCircle, Search, X } from 'lucide-react';
 import { pricingApi } from '../api/catalog';
 import { Button } from '../components/Button.jsx';
 import { Pagination } from '../components/Pagination';
+import { Tabs } from '../components/Tabs.jsx';
 import { useClientPagination } from '../hooks/useClientPagination';
 import { handleFormKeyDown } from '../utils/formNavigation';
 import { useUnsavedChangesGuard } from '../utils/escNavigation.jsx';
@@ -129,7 +130,76 @@ function PricingPanel({ type, label }) {
       )}
 
       <div data-form-container="true" onKeyDown={handleFormKeyDown} className="card overflow-hidden">
-        <div className="max-h-[calc(100vh-200px)] overflow-x-auto overflow-y-auto">
+        {/* Mobile & Tablet Card View (< md) */}
+        <div className="md:hidden divide-y divide-border-soft max-h-[calc(100dvh-240px)] overflow-y-auto">
+          {query.isLoading && (
+            <div className="p-6 text-center text-xs text-ink-muted">Loading items…</div>
+          )}
+          {!query.isLoading && !query.isError && rows.length === 0 && (
+            <div className="p-6 text-center text-xs text-ink-muted">No items found.</div>
+          )}
+          {!query.isLoading &&
+            !query.isError &&
+            pagedRows.map((r) => {
+              const edited = Object.prototype.hasOwnProperty.call(edits, r.id);
+              const value = edited ? edits[r.id] : r.price ?? '';
+              return (
+                <div
+                  key={r.id}
+                  className={`p-3 space-y-2 transition-colors ${
+                    edited ? 'bg-amber-500/10 ring-1 ring-amber-500/30' : 'hover:bg-page/50'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold text-ink break-words">{r.item_name}</div>
+                      <div className="text-[11px] text-ink-muted font-mono mt-0.5">{r.item_code}</div>
+                    </div>
+                    {edited && (
+                      <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-300">
+                        Modified
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-1.5 rounded-lg bg-surface-subtle/40 p-2 text-[11px]">
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider text-ink-muted">Unit</div>
+                      <div className="font-semibold text-ink">{r.unit_code || '—'}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider text-ink-muted">MRP</div>
+                      <div className="font-semibold text-ink">₹{r.mrp}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider text-ink-muted">Normal S.Rate</div>
+                      <div className="font-semibold text-ink">₹{r.net_srate}</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-border-soft/60">
+                    <label className="text-xs font-semibold text-ink">{label} Price:</label>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-ink-muted">₹</span>
+                      <input
+                        type="number"
+                        step="any"
+                        min="0"
+                        data-table-nav="true"
+                        value={value}
+                        placeholder="Not set"
+                        onChange={(e) => handleChange(r.id, e.target.value)}
+                        className="input w-32 text-right text-xs font-semibold focus:ring-primary"
+                      />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+        </div>
+
+        {/* Desktop Table View (>= md) */}
+        <div className="hidden md:block max-h-[calc(100vh-200px)] overflow-x-auto overflow-y-auto">
           <table className="w-full min-w-[540px] text-xs">
             <thead className="sticky top-0 bg-page z-10 shadow-sm">
               <tr className="border-b border-border-soft text-left uppercase text-ink-muted font-medium bg-surface-subtle/30">
@@ -191,6 +261,19 @@ function PricingPanel({ type, label }) {
 export function PriceAdjustment() {
   const [activeTab, setActiveTab] = useState('wholesale');
 
+  const tabs = [
+    {
+      key: 'wholesale',
+      label: 'Wholesale Price',
+      content: <PricingPanel type="wholesale" label="Wholesale" />,
+    },
+    {
+      key: 'retail',
+      label: 'Retail Price',
+      content: <PricingPanel type="retail" label="Retail" />,
+    },
+  ];
+
   return (
     <div className="space-y-2.5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border-soft pb-2">
@@ -203,39 +286,9 @@ export function PriceAdjustment() {
             Manage wholesale &amp; retail selling prices across your product catalog
           </p>
         </div>
-
-        {/* Sub-nav tabs */}
-        <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
-          <button
-            type="button"
-            onClick={() => setActiveTab('wholesale')}
-            className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${
-              activeTab === 'wholesale'
-                ? 'bg-slate-900 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-            }`}
-          >
-            Wholesale Price
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('retail')}
-            className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${
-              activeTab === 'retail'
-                ? 'bg-slate-900 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-            }`}
-          >
-            Retail Price
-          </button>
-        </div>
       </div>
 
-      {activeTab === 'wholesale' ? (
-        <PricingPanel type="wholesale" label="Wholesale" />
-      ) : (
-        <PricingPanel type="retail" label="Retail" />
-      )}
+      <Tabs activeKey={activeTab} onTabChange={setActiveTab} tabs={tabs} />
     </div>
   );
 }

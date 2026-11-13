@@ -193,7 +193,40 @@ function SequencesPanel({ canManage }) {
     <div data-form-container="true" onKeyDown={handleFormKeyDown} className="card p-3.5 space-y-2">
       <div className="font-semibold text-ink text-xs sm:text-sm">Invoice Sequence Prefixes</div>
       <p className="text-xs text-ink-muted">Only the prefix can be changed — the running number keeps counting so numbering never repeats.</p>
-      <div className="overflow-x-auto">
+      {/* Mobile Card View (< sm) */}
+      <div className="sm:hidden divide-y divide-border-soft/60">
+        {sequences.map((s) => (
+          <div key={s.id} className="py-2.5 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="capitalize font-bold text-xs text-ink">{s.series.replace('_', '-')}</span>
+              <span className="text-[11px] text-ink-muted font-mono">Next: #{s.current_number + 1}</span>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 flex-1">
+                <span className="text-[11px] text-ink-muted">Prefix:</span>
+                <input
+                  value={edits[s.id] ?? s.prefix}
+                  onChange={(e) => setEdits((prev) => ({ ...prev, [s.id]: e.target.value }))}
+                  disabled={!canManage}
+                  className="input w-32 disabled:bg-page text-xs py-1"
+                />
+              </div>
+              {canManage && (
+                <button
+                  type="button"
+                  onClick={() => saveMutation.mutate({ id: s.id, prefix: edits[s.id] ?? s.prefix })}
+                  className="rounded-lg bg-indigo-50 border border-indigo-200 px-3 py-1 text-xs font-semibold text-indigo-600 hover:bg-indigo-100 min-h-[32px]"
+                >
+                  Save
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop Table View (>= sm) */}
+      <div className="hidden sm:block overflow-x-auto">
         <table className="w-full min-w-[480px] text-xs">
         <thead>
           <tr className="border-b border-border-soft text-left uppercase text-ink-muted bg-surface-subtle/30 font-medium">
