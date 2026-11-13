@@ -660,7 +660,7 @@ function GrnPanel({ canManage, canEdit, canViewCost, canDelete }) {
   return (
     <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
       {/* Left Column Form */}
-      <div className="lg:col-span-5">
+      <div className="min-w-0 lg:col-span-5">
         {(canManage || editingGrn) && (
           <GrnFormCard
             key={editingGrn?.id ?? 'create'}
@@ -674,7 +674,7 @@ function GrnPanel({ canManage, canEdit, canViewCost, canDelete }) {
       </div>
 
       {/* Right Column Table */}
-      <div className="lg:col-span-7 space-y-2.5">
+      <div className="min-w-0 lg:col-span-7 space-y-2.5">
         <div className="card p-2.5 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="relative w-full sm:w-64">
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
@@ -705,7 +705,71 @@ function GrnPanel({ canManage, canEdit, canViewCost, canDelete }) {
             </div>
           </div>
           {exportError && <div className="mx-3.5 mt-2 text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{exportError}</div>}
-          <div className="max-h-[calc(100vh-230px)] overflow-x-auto overflow-y-auto">
+          <div className="md:hidden divide-y divide-border-soft/60 max-h-[calc(100dvh-240px)] overflow-y-auto">
+            {pagedPurchases.map((p) => (
+              <div key={p.id} className={`p-3 space-y-2 ${p.status === 'cancelled' ? 'opacity-50 line-through' : ''}`}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start gap-2 min-w-0 flex-1">
+                    <input type="checkbox" className="mt-1 shrink-0" checked={selectedIds.includes(p.id)} onChange={() => toggleSelect(p.id)} />
+                    <div className="min-w-0 flex-1">
+                      <div className="font-mono font-bold text-sm text-ink break-words">{p.grn_no}</div>
+                      {p.supplier_invoice_no && <div className="text-[11px] text-ink-muted font-mono">{p.supplier_invoice_no}</div>}
+                      <div className="text-xs font-medium text-ink mt-0.5 break-words">{p.supplier_name}</div>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    {canViewCost && (
+                      <>
+                        <div className="text-sm font-bold text-ink">₹{Number(p.grand_total).toFixed(2)}</div>
+                        <div className="text-[11px] font-semibold">
+                          {Number(p.pending_balance) > 0 ? (
+                            <span className="text-red-400">Due: ₹{Number(p.pending_balance).toFixed(2)}</span>
+                          ) : (
+                            <span className="text-emerald-400">Paid</span>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-border-soft/50">
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium capitalize border ${
+                    p.status === 'active'
+                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                      : 'bg-gray-500/10 text-gray-400 border-gray-500/20'
+                  }`}>
+                    {p.status === 'active' ? 'Active' : p.status}
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {canEdit && p.status === 'active' && (
+                      <button
+                        type="button"
+                        onClick={() => openEdit(p)}
+                        className="p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border border-border-soft hover:bg-surface-subtle text-ink-muted hover:text-cyan-400"
+                        title="Edit GRN"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {canDelete && p.status === 'active' && (
+                      <button
+                        type="button"
+                        onClick={() => deleteMutation.mutate(p.id)}
+                        className="p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border border-rose-200 hover:bg-surface-subtle text-ink-muted hover:text-red-400"
+                        title="Delete GRN"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+            {filteredPurchases.length === 0 && (
+              <div className="px-4 py-8 text-center text-ink-muted text-xs">No GRN records found.</div>
+            )}
+          </div>
+          <div className="hidden md:block max-h-[calc(100vh-230px)] overflow-x-auto overflow-y-auto">
             <table className="w-full min-w-[700px] text-left text-xs">
               <thead className="sticky top-0 bg-page z-10">
                 <tr className="border-b border-border-soft uppercase text-ink-muted font-medium">
@@ -985,7 +1049,7 @@ function SupplierPaymentsPanel({ canManage }) {
   return (
     <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
       {/* Left Column Form */}
-      <div className="lg:col-span-5">
+      <div className="min-w-0 lg:col-span-5">
         {canManage && (
           <div className="card p-3.5 space-y-2.5 lg:sticky lg:top-3">
             <div className="border-b border-border-soft pb-2">
@@ -1107,7 +1171,7 @@ function SupplierPaymentsPanel({ canManage }) {
       </div>
 
       {/* Right Column Table */}
-      <div className="lg:col-span-7 space-y-2.5">
+      <div className="min-w-0 lg:col-span-7 space-y-2.5">
         <div className="card p-2.5 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="relative w-full sm:w-72">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
@@ -1138,7 +1202,35 @@ function SupplierPaymentsPanel({ canManage }) {
             </div>
           </div>
           {exportError && <div className="mx-3.5 mt-2 text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-800/40">{exportError}</div>}
-          <div className="max-h-[calc(100vh-240px)] overflow-x-auto overflow-y-auto">
+          <div className="md:hidden divide-y divide-border-soft/60 max-h-[calc(100dvh-250px)] overflow-y-auto">
+            {pagedPayments.map((p) => (
+              <div key={p.id} className="p-3 space-y-1.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start gap-2 min-w-0 flex-1">
+                    <input type="checkbox" className="mt-1 shrink-0" checked={selectedPaymentIds.includes(p.id)} onChange={() => togglePaymentSelect(p.id)} />
+                    <div className="min-w-0 flex-1">
+                      <div className="font-mono font-bold text-sm text-ink break-words">{p.payment_code}</div>
+                      <div className="text-xs font-medium text-ink break-words">{p.supplier_name}</div>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="text-sm font-bold text-emerald-400">₹{Number(p.amount).toFixed(2)}</div>
+                    <div className="text-[11px] text-ink-muted">{p.paid_at}</div>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-[11px] pl-6">
+                  <span className="px-1.5 py-0.5 rounded text-[10px] uppercase font-medium bg-slate-800 text-slate-300 border border-slate-700">
+                    {p.payment_mode?.replace('_', ' ')}
+                  </span>
+                  <span className="text-ink-muted font-mono">Ref: {p.reference_no || '-'}</span>
+                </div>
+              </div>
+            ))}
+            {filteredPayments.length === 0 && (
+              <div className="px-3 py-6 text-center text-ink-muted text-xs">No supplier payment records logged yet.</div>
+            )}
+          </div>
+          <div className="hidden md:block max-h-[calc(100vh-240px)] overflow-x-auto overflow-y-auto">
             <table className="w-full min-w-[700px] text-left text-xs">
               <thead className="sticky top-0 bg-page z-10 shadow-sm">
                 <tr className="border-b border-border-soft bg-surface-subtle/30 text-ink-muted font-medium">

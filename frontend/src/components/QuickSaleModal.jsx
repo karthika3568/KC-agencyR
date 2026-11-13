@@ -690,7 +690,59 @@ export function QuickSaleModal({
                   </p>
                 </div>
               ) : (
-                <table className="w-full min-w-[450px] text-left text-xs">
+                <>
+                  <div className="sm:hidden divide-y divide-border-soft/60">
+                    {addedItems.map((item) => (
+                      <div key={item.key || `${item.id}-${item.unit_id}`} className="p-2.5 space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="font-semibold text-ink text-xs break-words">{item.name}</div>
+                            {item.is_manual ? (
+                              <div className="text-[11px] text-ink-muted">
+                                {item.qty} × ₹{Number(item.rate).toFixed(2)} = ₹{Number(item.amount).toFixed(2)}
+                              </div>
+                            ) : (
+                              item.barcode && <div className="text-[10px] text-ink-muted">{item.barcode}</div>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveItem(item)}
+                            className="p-1.5 min-h-[34px] min-w-[34px] flex items-center justify-center rounded text-ink-muted hover:text-rose-600 hover:bg-rose-50 transition-colors shrink-0"
+                            title="Remove"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                        <div className="flex items-center justify-between gap-2 text-xs">
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleBumpItemQty(item, -1)}
+                              className="h-8 w-8 rounded border border-border-soft flex items-center justify-center hover:bg-page text-ink-muted hover:text-ink"
+                              title="Decrease"
+                            >
+                              <Minus size={12} />
+                            </button>
+                            <span className="w-7 text-center font-bold text-ink">{item.qty}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleBumpItemQty(item, 1)}
+                              className="h-8 w-8 rounded border border-border-soft flex items-center justify-center hover:bg-page text-ink-muted hover:text-ink"
+                              title="Increase"
+                            >
+                              <Plus size={12} />
+                            </button>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-[10px] text-ink-muted">@ Rs. {item.rate.toFixed(2)}</div>
+                            <div className="font-bold text-ink">Rs. {item.amount.toFixed(2)}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <table className="hidden sm:table w-full min-w-[450px] text-left text-xs">
                   <thead className="sticky top-0 bg-page/90 backdrop-blur-xs text-[10px] uppercase font-semibold text-ink-muted border-b border-border-soft">
                     <tr>
                       <th className="py-2 px-3">Item</th>
@@ -756,6 +808,7 @@ export function QuickSaleModal({
                     ))}
                   </tbody>
                 </table>
+                </>
               )}
             </div>
           </div>

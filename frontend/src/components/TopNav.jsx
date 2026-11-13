@@ -658,15 +658,15 @@ export function TopNav({ onToggleSidebar, onToggleMobile } = {}) {
     );
 
     return (
-      <header className="sticky top-0 z-40 w-full shrink-0 shadow-md bg-[#351442] text-white">
-        <div className="flex h-14 w-full items-center justify-between px-3 sm:px-5 lg:px-6 gap-2 sm:gap-4">
+      <header className="sticky top-0 z-40 w-full shrink-0 shadow-md bg-[#351442] text-white pt-[env(safe-area-inset-top)]">
+        <div className="flex h-14 w-full items-center justify-between px-2.5 sm:px-5 lg:px-6 gap-2 sm:gap-4">
           {/* Left: KC Agency Brand Wordmark & Logo */}
-          <Link to="/" className="flex items-center gap-2.5 transition-transform hover:opacity-95 shrink-0 group">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#8244AD] to-[#511E69] text-white shadow-sm border border-white/10 group-hover:scale-105 transition-transform">
+          <Link to="/" className="flex items-center gap-2 sm:gap-2.5 transition-transform hover:opacity-95 min-w-0 shrink group">
+            <div className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#8244AD] to-[#511E69] text-white shadow-sm border border-white/10 group-hover:scale-105 transition-transform">
               <svg
                 viewBox="0 0 24 24"
                 fill="none"
-                className="h-5 w-5"
+                className="h-4 w-4 sm:h-5 sm:w-5"
                 stroke="currentColor"
                 strokeWidth="2.5"
                 strokeLinecap="round"
@@ -677,17 +677,17 @@ export function TopNav({ onToggleSidebar, onToggleMobile } = {}) {
               </svg>
             </div>
             <div className="flex flex-col leading-tight min-w-0">
-              <span className="text-base font-extrabold tracking-tight text-white">
+              <span className="text-sm sm:text-base font-extrabold tracking-tight text-white whitespace-nowrap truncate">
                 KC Agency
               </span>
-              <span className="text-[9.5px] font-semibold uppercase tracking-wider text-[#D8CEE2]">
+              <span className="hidden min-[380px]:block text-[9.5px] font-semibold uppercase tracking-wider text-[#D8CEE2] whitespace-nowrap truncate">
                 Field Sales
               </span>
             </div>
           </Link>
 
-          {/* Center: Six Direct Links — NO DROPDOWNS, NO EXPANDABLES, NO NESTING */}
-          <nav aria-label="Field Sales Navigation" className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar py-1">
+          {/* Center (Tablet Landscape & Desktop): Six Direct Links — NO DROPDOWNS, NO EXPANDABLES */}
+          <nav aria-label="Field Sales Navigation" className="hidden md:flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar py-1">
             {visibleFieldSalesNav.map((item) => {
               const Icon = item.icon;
               const isActive = item.to === '/'
@@ -712,71 +712,139 @@ export function TopNav({ onToggleSidebar, onToggleMobile } = {}) {
             })}
           </nav>
 
-          {/* Right: User Profile Area */}
-          <div className="relative shrink-0" ref={profileRef}>
-            <button
-              type="button"
-              onClick={() => setShowProfileMenu(!showProfileMenu)}
-              className="flex items-center gap-2 rounded-full p-1 sm:px-2 sm:py-1 hover:bg-white/10 transition-colors"
-              title="User Account Menu"
-            >
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#8244AD] text-xs font-bold text-white shadow-sm border border-white/20">
-                {initials}
-              </div>
-              <div className="hidden text-left leading-tight sm:block">
-                <div className="text-xs font-bold text-white">{user?.name || 'User'}</div>
-                <div className="text-[10px] font-medium text-[#D8CEE2]">{user?.role}</div>
-              </div>
-              <ChevronDown size={14} className="text-[#D8CEE2]" />
-            </button>
+          {/* Right: User Profile Area & Mobile Menu Button */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            <div className="relative shrink-0" ref={profileRef}>
+              <button
+                type="button"
+                onClick={() => setShowProfileMenu(!showProfileMenu)}
+                className="flex items-center gap-2 rounded-full p-1 sm:px-2 sm:py-1 min-h-[36px] min-w-[36px] hover:bg-white/10 transition-colors"
+                title="User Account Menu"
+              >
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#8244AD] text-xs font-bold text-white shadow-sm border border-white/20">
+                  {initials}
+                </div>
+                <div className="hidden text-left leading-tight sm:block">
+                  <div className="text-xs font-bold text-white">{user?.name || 'User'}</div>
+                  <div className="text-[10px] font-medium text-[#D8CEE2]">{user?.role}</div>
+                </div>
+                <ChevronDown size={14} className="text-[#D8CEE2] hidden sm:block" />
+              </button>
 
-            {showProfileMenu && (
-              <div className="absolute right-0 top-full mt-2 w-56 rounded-2xl border border-border-soft bg-white p-2 shadow-soft-lg z-50 text-ink animate-in fade-in slide-in-from-top-1">
-                <div className="border-b border-border-soft px-3 py-2">
-                  <div className="text-xs font-bold text-ink">{user?.name}</div>
-                  <div className="text-[10px] text-ink-muted">{user?.email || user?.username}</div>
-                  <div className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-primary-soft px-2 py-0.5 text-[10px] font-semibold text-primary">
-                    <ShieldCheck size={11} />
-                    {user?.role}
+              {showProfileMenu && (
+                <div className="absolute right-0 top-full mt-2 w-56 rounded-2xl border border-border-soft bg-white p-2 shadow-soft-lg z-50 text-ink animate-in fade-in slide-in-from-top-1">
+                  <div className="border-b border-border-soft px-3 py-2">
+                    <div className="text-xs font-bold text-ink">{user?.name}</div>
+                    <div className="text-[10px] text-ink-muted truncate">{user?.email || user?.username}</div>
+                    <div className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-primary-soft px-2 py-0.5 text-[10px] font-semibold text-primary">
+                      <ShieldCheck size={11} />
+                      {user?.role}
+                    </div>
+                  </div>
+
+                  <div className="pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowProfileMenu(false);
+                        logout();
+                      }}
+                      className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors"
+                    >
+                      <LogOut size={15} />
+                      <span>Logout</span>
+                    </button>
                   </div>
                 </div>
+              )}
+            </div>
 
-                <div className="pt-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowProfileMenu(false);
-                      logout();
-                    }}
-                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors"
-                  >
-                    <LogOut size={15} />
-                    <span>Logout</span>
-                  </button>
-                </div>
-              </div>
-            )}
+            <button
+              type="button"
+              onClick={() => setMobileDrawerOpen(true)}
+              className="md:hidden flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[#D8CEE2] hover:bg-white/10 hover:text-white transition-colors"
+              title="Open Navigation Menu"
+              aria-label="Open Navigation Menu"
+            >
+              <Menu size={20} />
+            </button>
           </div>
         </div>
+
+        {/* Field Sales Mobile Drawer (< md) */}
+        {mobileDrawerOpen && (
+          <div className="fixed inset-0 z-50 flex md:hidden">
+            <div
+              onClick={() => setMobileDrawerOpen(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
+            />
+            <div className="relative z-50 flex h-full w-72 max-w-[85vw] flex-col bg-[#351442] text-[#D8CEE2] shadow-2xl">
+              <div className="flex items-center justify-between px-4 py-3.5 border-b border-white/10">
+                <span className="text-sm font-extrabold text-white">Field Sales Menu</span>
+                <button
+                  type="button"
+                  onClick={() => setMobileDrawerOpen(false)}
+                  className="p-1.5 rounded-lg text-[#D8CEE2] hover:bg-white/10 hover:text-white"
+                  title="Close Navigation"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto px-3 py-3 space-y-1.5">
+                {visibleFieldSalesNav.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = item.to === '/' ? location.pathname === '/' : location.pathname.startsWith(item.to);
+                  return (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      end={item.to === '/'}
+                      onClick={() => setMobileDrawerOpen(false)}
+                      className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-xs font-semibold ${
+                        isActive ? 'bg-[#8244AD] text-white font-bold' : 'text-[#D8CEE2] hover:bg-white/10 hover:text-white'
+                      }`}
+                    >
+                      <Icon size={16} />
+                      <span>{item.label}</span>
+                    </NavLink>
+                  );
+                })}
+              </div>
+              <div className="border-t border-white/10 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-[#2B0E36]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileDrawerOpen(false);
+                    logout();
+                  }}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-rose-500/15 px-3 py-2 text-xs font-bold text-rose-300 hover:bg-rose-500/25"
+                >
+                  <LogOut size={15} />
+                  <span>Logout</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </header>
     );
   }
 
   return (
-    <header className="sticky top-0 z-40 w-full shrink-0 shadow-sm">
+    <header className="sticky top-0 z-40 w-full shrink-0 shadow-sm pt-[env(safe-area-inset-top)] bg-white">
       {/* ======================================================== */}
       {/* ROW 1: Brand Logo, Module Search, Branch Switcher & Profile */}
       {/* ======================================================== */}
-      <div className="flex h-14 w-full items-center justify-between border-b border-border-soft bg-white px-3 sm:px-5 lg:px-6">
+      <div className="flex h-14 w-full items-center justify-between gap-1.5 sm:gap-3 border-b border-border-soft bg-white px-2.5 sm:px-5 lg:px-6">
         {/* Left: KC Agency Brand Wordmark & Logo Emblem */}
-        <div className="flex items-center gap-3">
-          <Link to="/" className="flex items-center gap-2.5 transition-transform hover:opacity-95 group">
+        <div className="flex items-center gap-2 min-w-0 shrink">
+          <Link to="/" className="flex items-center gap-2 sm:gap-2.5 transition-transform hover:opacity-95 min-w-0 group">
             {/* Stylized Logo Emblem */}
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#8244AD] to-[#511E69] text-white shadow-sm border border-white/10 group-hover:scale-105 transition-transform">
+            <div className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#8244AD] to-[#511E69] text-white shadow-sm border border-white/10 group-hover:scale-105 transition-transform">
               <svg
                 viewBox="0 0 24 24"
                 fill="none"
-                className="h-5 w-5"
+                className="h-4 w-4 sm:h-5 sm:w-5"
                 stroke="currentColor"
                 strokeWidth="2.5"
                 strokeLinecap="round"
@@ -789,10 +857,10 @@ export function TopNav({ onToggleSidebar, onToggleMobile } = {}) {
 
             {/* Brand Title and Subtitle */}
             <div className="flex flex-col leading-tight min-w-0">
-              <span className="text-base font-extrabold tracking-tight text-[#351442]">
+              <span className="text-sm sm:text-base font-extrabold tracking-tight text-[#351442] whitespace-nowrap truncate">
                 KC Agency
               </span>
-              <span className="text-[9.5px] font-semibold uppercase tracking-wider text-[#8244AD]">
+              <span className="hidden sm:block text-[9.5px] font-semibold uppercase tracking-wider text-[#8244AD] whitespace-nowrap truncate">
                 Distributor Billing &amp; Inventory
               </span>
             </div>
@@ -860,18 +928,18 @@ export function TopNav({ onToggleSidebar, onToggleMobile } = {}) {
         </div>
 
         {/* Right Actions: Branch Switcher, User Profile & Mobile Toggle */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0 min-w-0">
           {/* Branch Selector Pill */}
           {canSwitch && branches.length > 0 && (
-            <div className="flex items-center gap-1.5 rounded-full border border-border-soft bg-white px-3 py-1.5 shadow-xs hover:border-primary/40 transition-colors">
-              <MapPin size={14} className="text-primary shrink-0" />
+            <div className="flex items-center gap-1 rounded-full border border-border-soft bg-white px-2 sm:px-3 py-1 sm:py-1.5 min-h-[34px] max-w-[118px] min-[380px]:max-w-[140px] sm:max-w-[210px] shadow-xs hover:border-primary/40 transition-colors">
+              <MapPin size={13} className="text-primary shrink-0" />
               <select
                 value={selectedBranchId ?? ''}
                 onChange={(e) => {
                   setSelectedBranchId(Number(e.target.value));
                   queryClient.invalidateQueries();
                 }}
-                className="cursor-pointer appearance-none bg-transparent pr-4 text-xs font-bold text-ink focus:outline-none"
+                className="min-w-0 flex-1 truncate cursor-pointer appearance-none bg-transparent pr-3.5 text-[11px] sm:text-xs font-bold text-ink focus:outline-none py-0.5"
                 title="Switch Active Branch"
               >
                 {branches.map((b) => (
@@ -880,16 +948,16 @@ export function TopNav({ onToggleSidebar, onToggleMobile } = {}) {
                   </option>
                 ))}
               </select>
-              <ChevronDown size={12} className="text-ink-muted pointer-events-none -ml-3" />
+              <ChevronDown size={12} className="text-ink-muted pointer-events-none -ml-3 shrink-0" />
             </div>
           )}
 
           {/* User Profile Pill & Dropdown */}
-          <div className="relative" ref={profileRef}>
+          <div className="relative shrink-0" ref={profileRef}>
             <button
               type="button"
               onClick={() => setShowProfileMenu(!showProfileMenu)}
-              className="flex items-center gap-2.5 rounded-full p-1 sm:px-2 sm:py-1 hover:bg-lavender-50 transition-colors"
+              className="flex items-center gap-2 rounded-full p-1 sm:px-2 sm:py-1 min-h-[36px] min-w-[36px] hover:bg-lavender-50 transition-colors"
               title="User Account Menu"
             >
               {/* Circular Purple Avatar */}
@@ -913,7 +981,7 @@ export function TopNav({ onToggleSidebar, onToggleMobile } = {}) {
               <div className="absolute right-0 top-full mt-2 w-56 rounded-2xl border border-border-soft bg-white p-2 shadow-soft-lg z-50 animate-in fade-in slide-in-from-top-1">
                 <div className="border-b border-border-soft px-3 py-2">
                   <div className="text-xs font-bold text-ink">{user?.name}</div>
-                  <div className="text-[10px] text-ink-muted">{user?.email || user?.username}</div>
+                  <div className="text-[10px] text-ink-muted truncate">{user?.email || user?.username}</div>
                   <div className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-primary-soft px-2 py-0.5 text-[10px] font-semibold text-primary">
                     <ShieldCheck size={11} />
                     {user?.role}
@@ -941,7 +1009,7 @@ export function TopNav({ onToggleSidebar, onToggleMobile } = {}) {
           <button
             type="button"
             onClick={() => setMobileDrawerOpen(true)}
-            className="lg:hidden flex h-9 w-9 items-center justify-center rounded-xl text-ink-muted hover:bg-lavender-100 hover:text-ink transition-colors"
+            className="lg:hidden flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-ink-muted hover:bg-lavender-100 hover:text-ink transition-colors"
             title="Open Navigation Menu"
             aria-label="Open Navigation Menu"
           >
@@ -956,10 +1024,48 @@ export function TopNav({ onToggleSidebar, onToggleMobile } = {}) {
       <nav
         ref={navRef}
         aria-label="Main Navigation"
-        className="relative flex h-11 w-full items-center justify-between bg-[#351442] px-3 sm:px-5 lg:px-6 text-[#D8CEE2] shadow-xs"
+        className="relative flex h-11 w-full items-center justify-between bg-[#351442] px-2.5 sm:px-5 lg:px-6 text-[#D8CEE2] shadow-xs"
       >
-        {/* Horizontal Navigation Items */}
-        <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto lg:overflow-visible no-scrollbar py-1">
+        {/* Mobile & Portrait Tablet Compact Action Strip (< lg) */}
+        <div className="flex lg:hidden w-full items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <button
+              type="button"
+              onClick={() => setMobileDrawerOpen(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/15 px-2.5 py-1.5 min-h-[32px] text-xs font-semibold text-white transition-colors whitespace-nowrap"
+            >
+              <LayoutDashboard size={14} className="shrink-0 text-[#D8CEE2]" />
+              <span>Modules</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobileDrawerOpen(true)}
+              className="md:hidden flex items-center gap-1 rounded-lg bg-white/10 hover:bg-white/15 px-2.5 py-1.5 min-h-[32px] text-xs font-medium text-[#D8CEE2] hover:text-white transition-colors whitespace-nowrap"
+              title="Search Modules"
+              aria-label="Search Modules"
+            >
+              <Search size={13} className="shrink-0" />
+              <span>Find</span>
+            </button>
+          </div>
+
+          {checkPermission(user, 'pos.access', '/pos') && (
+            <NavLink
+              to="/pos"
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 min-h-[32px] text-xs font-bold transition-colors whitespace-nowrap shrink-0 ${
+                isPosActive
+                  ? 'bg-[#924ebf] text-white ring-2 ring-white/30 shadow-sm'
+                  : 'bg-[#8244AD] hover:bg-[#924ebf] text-white shadow-xs'
+              }`}
+            >
+              <ShoppingCart size={13} />
+              <span>POS Billing</span>
+            </NavLink>
+          )}
+        </div>
+
+        {/* Desktop & Tablet Landscape Horizontal Navigation Items (lg+) */}
+        <div className="hidden lg:flex items-center gap-1 sm:gap-1.5 lg:overflow-visible py-1">
           {TOP_NAV_GROUPS.map((group) => {
             // Direct Link (Dashboard, Reports)
             if (group.isDirect) {
@@ -1090,8 +1196,8 @@ export function TopNav({ onToggleSidebar, onToggleMobile } = {}) {
           })}
         </div>
 
-        {/* Right: Quick POS Billing Action */}
-        <div className="hidden sm:flex items-center pl-2">
+        {/* Right: Quick POS Billing Action (Desktop / lg+) */}
+        <div className="hidden lg:flex items-center pl-2">
           {checkPermission(user, 'pos.access', '/pos') && (
             <NavLink
               to="/pos"
@@ -1124,7 +1230,7 @@ export function TopNav({ onToggleSidebar, onToggleMobile } = {}) {
           />
 
           {/* Drawer Menu Panel */}
-          <div className="relative z-50 flex h-full w-72 flex-col bg-[#351442] text-[#D8CEE2] shadow-2xl animate-in slide-in-from-left">
+          <div className="relative z-50 flex h-full w-72 max-w-[85vw] flex-col bg-[#351442] text-[#D8CEE2] shadow-2xl animate-in slide-in-from-left">
             {/* Drawer Header */}
             <div className="flex items-center justify-between px-4 py-3.5 border-b border-white/10">
               <div className="flex items-center gap-2.5">
@@ -1139,80 +1245,130 @@ export function TopNav({ onToggleSidebar, onToggleMobile } = {}) {
               <button
                 type="button"
                 onClick={() => setMobileDrawerOpen(false)}
-                className="p-1.5 rounded-lg text-[#D8CEE2] hover:bg-white/10 hover:text-white"
+                className="p-1.5 rounded-lg text-[#D8CEE2] hover:bg-white/10 hover:text-white min-h-[36px] min-w-[36px] flex items-center justify-center"
                 title="Close Navigation"
               >
                 <X size={18} />
               </button>
             </div>
 
+            {/* Mobile Module Search Input */}
+            <div className="px-3 pt-3 pb-1">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A899B8]" size={14} />
+                <input
+                  type="text"
+                  placeholder="Jump to module..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full rounded-xl border border-white/15 bg-white/10 pl-8 pr-7 py-2 text-xs text-white placeholder:text-[#A899B8] focus:bg-white/15 focus:border-[#8244AD] focus:outline-none"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#A899B8] hover:text-white"
+                    aria-label="Clear module search"
+                  >
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+            </div>
+
             {/* Mobile Module Navigation List */}
-            <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
-              {TOP_NAV_GROUPS.map((group) => {
-                if (group.isDirect) {
-                  if (!checkPermission(user, group.perm)) return null;
-                  const Icon = group.icon;
-                  const isActive = group.to === '/' ? location.pathname === '/' : location.pathname.startsWith(group.to);
-                  return (
-                    <NavLink
-                      key={group.id}
-                      to={group.to}
-                      end={group.to === '/'}
-                      onClick={() => setMobileDrawerOpen(false)}
-                      className={`flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold ${
-                        isActive ? 'bg-[#8244AD] text-white font-bold' : 'text-[#D8CEE2] hover:bg-white/10 hover:text-white'
-                      }`}
-                    >
-                      <Icon size={16} />
-                      <span>{group.label}</span>
-                    </NavLink>
-                  );
-                }
-
-                const visibleItems = (group.items || []).filter((item) => checkPermission(user, item.perm, item.to));
-                if (visibleItems.length === 0) return null;
-
-                const GroupIcon = group.icon;
-                return (
-                  <div key={group.id} className="space-y-1">
-                    <div className="flex items-center gap-2 px-3 pt-2 text-[10px] font-bold uppercase tracking-wider text-[#A899B8]">
-                      <GroupIcon size={13} />
-                      <span>{group.label}</span>
-                    </div>
-                    <div className="space-y-0.5 pl-2">
-                      {visibleItems.map((item) => {
-                        const ItemIcon = item.icon;
-                        const isItemActive = item.to === '/' ? location.pathname === '/' : location.pathname.startsWith(item.to);
-                        return (
-                          <Link
-                            key={item.to}
-                            to={item.to}
-                            onClick={() => setMobileDrawerOpen(false)}
-                            className={`flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium ${
-                              isItemActive ? 'bg-[#8244AD] text-white font-bold' : 'text-[#D8CEE2]/85 hover:bg-white/10 hover:text-white'
-                            }`}
-                          >
-                            <ItemIcon size={15} />
-                            <span>{item.label}</span>
-                          </Link>
-                        );
-                      })}
-                    </div>
+            <div className="flex-1 overflow-y-auto px-3 py-2 space-y-3">
+              {searchQuery.trim() ? (
+                <div className="space-y-1">
+                  <div className="px-2 pt-1 text-[10px] font-bold uppercase tracking-wider text-[#A899B8]">
+                    Search Results ({searchResults.length})
                   </div>
-                );
-              })}
+                  {searchResults.length === 0 ? (
+                    <div className="px-3 py-4 text-xs text-[#A899B8]">No matching modules.</div>
+                  ) : (
+                    searchResults.map((m) => (
+                      <button
+                        key={m.to}
+                        type="button"
+                        onClick={() => {
+                          handleSelectModule(m.to);
+                          setMobileDrawerOpen(false);
+                        }}
+                        className="w-full flex flex-col rounded-xl px-3 py-2 text-left text-[#D8CEE2] hover:bg-white/10 hover:text-white transition-colors"
+                      >
+                        <span className="text-xs font-bold text-white">{m.label}</span>
+                        <span className="text-[10px] text-[#A899B8]">{m.desc}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              ) : (
+                TOP_NAV_GROUPS.map((group) => {
+                  if (group.isDirect) {
+                    if (!checkPermission(user, group.perm)) return null;
+                    const Icon = group.icon;
+                    const isActive = group.to === '/' ? location.pathname === '/' : location.pathname.startsWith(group.to);
+                    return (
+                      <NavLink
+                        key={group.id}
+                        to={group.to}
+                        end={group.to === '/'}
+                        onClick={() => setMobileDrawerOpen(false)}
+                        className={`flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold ${
+                          isActive ? 'bg-[#8244AD] text-white font-bold' : 'text-[#D8CEE2] hover:bg-white/10 hover:text-white'
+                        }`}
+                      >
+                        <Icon size={16} />
+                        <span>{group.label}</span>
+                      </NavLink>
+                    );
+                  }
+
+                  const visibleItems = (group.items || []).filter((item) => checkPermission(user, item.perm, item.to));
+                  if (visibleItems.length === 0) return null;
+
+                  const GroupIcon = group.icon;
+                  return (
+                    <div key={group.id} className="space-y-1">
+                      <div className="flex items-center gap-2 px-3 pt-2 text-[10px] font-bold uppercase tracking-wider text-[#A899B8]">
+                        <GroupIcon size={13} />
+                        <span>{group.label}</span>
+                      </div>
+                      <div className="space-y-0.5 pl-2">
+                        {visibleItems.map((item) => {
+                          const ItemIcon = item.icon;
+                          const isItemActive = item.to === '/' ? location.pathname === '/' : location.pathname.startsWith(item.to);
+                          return (
+                            <Link
+                              key={item.to}
+                              to={item.to}
+                              onClick={() => setMobileDrawerOpen(false)}
+                              className={`flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium ${
+                                isItemActive ? 'bg-[#8244AD] text-white font-bold' : 'text-[#D8CEE2]/85 hover:bg-white/10 hover:text-white'
+                              }`}
+                            >
+                              <ItemIcon size={15} />
+                              <span>{item.label}</span>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
 
             {/* Mobile Drawer Footer with User & Logout */}
-            <div className="border-t border-white/10 p-3 bg-[#2B0E36]">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#8244AD] text-xs font-bold text-white">
+            <div className="border-t border-white/10 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-[#2B0E36]">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#8244AD] text-xs font-bold text-white">
                     {initials}
                   </div>
-                  <div className="leading-tight">
-                    <div className="text-xs font-bold text-white">{user?.name}</div>
-                    <div className="text-[10px] text-[#A899B8]">{user?.role}</div>
+                  <div className="leading-tight min-w-0">
+                    <div className="text-xs font-bold text-white truncate">{user?.name}</div>
+                    <div className="text-[10px] text-[#A899B8] truncate">{user?.role}</div>
                   </div>
                 </div>
                 <button
@@ -1221,10 +1377,11 @@ export function TopNav({ onToggleSidebar, onToggleMobile } = {}) {
                     setMobileDrawerOpen(false);
                     logout();
                   }}
-                  className="rounded-lg p-2 text-rose-400 hover:bg-white/10 hover:text-rose-300"
+                  className="flex items-center gap-1.5 rounded-lg px-2.5 py-2 min-h-[36px] text-xs font-semibold text-rose-300 hover:bg-white/10 hover:text-rose-200 shrink-0"
                   title="Logout"
                 >
-                  <LogOut size={16} />
+                  <LogOut size={15} />
+                  <span>Logout</span>
                 </button>
               </div>
             </div>

@@ -64,7 +64,50 @@ export function CashHandover() {
         <div className="border-b border-border-soft px-3.5 py-2 text-xs sm:text-sm font-semibold text-ink">
           Pending Salesman Collections Ready for Handover
         </div>
-        <div className="max-h-[calc(50vh-90px)] overflow-x-auto overflow-y-auto">
+        <div className="md:hidden divide-y divide-border-soft/60 max-h-[calc(55dvh-90px)] overflow-y-auto">
+          {pagedPending.map((p) => (
+            <div key={p.employee_id} className="p-3 space-y-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-bold text-ink break-words">{p.employee_name}</div>
+                  <div className="text-[11px] text-ink-muted mt-0.5">
+                    Digital/UPI: ₹{p.digital_amount} · Total: ₹{p.total_amount}
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="text-[10px] uppercase text-ink-muted">Cash Collected</div>
+                  <div className="text-sm font-bold text-emerald-600">₹{p.cash_amount}</div>
+                </div>
+              </div>
+              {canSubmit && (
+                <div className="flex flex-wrap items-center gap-2 pt-1.5 border-t border-border-soft/50">
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder={p.cash_amount}
+                    value={submittedAmounts[p.employee_id] ?? ''}
+                    onChange={(e) => setSubmittedAmounts((prev) => ({ ...prev, [p.employee_id]: e.target.value }))}
+                    className="input flex-1 min-w-[110px] text-xs py-1.5"
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      submitMutation.mutate({
+                        employee_id: p.employee_id,
+                        submitted_amount: Number(submittedAmounts[p.employee_id] ?? p.cash_amount),
+                      })
+                    }
+                    className="rounded bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 min-h-[34px] text-xs font-semibold text-white shadow-xs shrink-0"
+                  >
+                    Handover Cash
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+          {pending.length === 0 && <div className="px-3 py-5 text-center text-xs text-ink-muted">Nothing pending handover.</div>}
+        </div>
+        <div className="hidden md:block max-h-[calc(50vh-90px)] overflow-x-auto overflow-y-auto">
           <table className="w-full min-w-[650px] text-xs">
             <thead className="sticky top-0 bg-page z-10 shadow-sm">
               <tr className="border-b border-border-soft text-left uppercase text-ink-muted font-medium bg-surface-subtle/30">
@@ -132,7 +175,47 @@ export function CashHandover() {
         <div className="border-b border-border-soft px-3.5 py-2 text-xs sm:text-sm font-semibold text-ink">
           Reconciliation Audit Register
         </div>
-        <div className="max-h-[calc(50vh-90px)] overflow-x-auto overflow-y-auto">
+        <div className="md:hidden divide-y divide-border-soft/60 max-h-[calc(55dvh-90px)] overflow-y-auto">
+          {pagedRegister.map((h) => (
+            <div key={h.id} className="p-3 space-y-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="font-mono font-bold text-sm text-ink break-words">{h.handover_no}</div>
+                  <div className="text-xs font-medium text-ink break-words">{h.employee_name}</div>
+                  <div className="text-[11px] capitalize text-ink-muted">{h.status.replace('_', ' ')}</div>
+                </div>
+                <div className="text-right shrink-0 text-xs space-y-0.5">
+                  <div className="font-bold text-ink">Sub: ₹{h.submitted_amount}</div>
+                  <div className="text-ink-muted">Ver: {h.verified_amount ? `₹${h.verified_amount}` : '-'}</div>
+                  <div className={`font-semibold ${h.discrepancy && Math.abs(h.discrepancy) > 0.009 ? 'text-red-600' : 'text-emerald-600'}`}>
+                    Diff: {h.discrepancy ? `₹${h.discrepancy}` : '-'}
+                  </div>
+                </div>
+              </div>
+              {h.status === 'pending' && canVerify && (
+                <div className="flex flex-wrap items-center gap-2 pt-1.5 border-t border-border-soft/50">
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder="Counted"
+                    value={verifyAmounts[h.id] ?? ''}
+                    onChange={(e) => setVerifyAmounts((prev) => ({ ...prev, [h.id]: e.target.value }))}
+                    className="input flex-1 min-w-[100px] text-xs py-1.5"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => verifyMutation.mutate({ id: h.id, amount: Number(verifyAmounts[h.id] ?? h.submitted_amount) })}
+                    className="rounded bg-slate-800 hover:bg-slate-900 px-3 py-1.5 min-h-[34px] text-xs text-white shrink-0"
+                  >
+                    Verify
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+          {register.length === 0 && <div className="px-3 py-5 text-center text-xs text-ink-muted">No handovers yet.</div>}
+        </div>
+        <div className="hidden md:block max-h-[calc(50vh-90px)] overflow-x-auto overflow-y-auto">
           <table className="w-full min-w-[650px] text-xs">
             <thead className="sticky top-0 bg-page z-10 shadow-sm">
               <tr className="border-b border-border-soft text-left uppercase text-ink-muted font-medium bg-surface-subtle/30">

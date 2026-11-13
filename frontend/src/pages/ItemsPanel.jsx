@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Image as ImageIcon, Pencil, Trash2, Upload, X, Plus, RotateCcw } from 'lucide-react';
+import { useMediaQuery } from '../hooks/useMediaQuery';
 import { categoriesApi, brandsApi, taxCodesApi, stockUnitsApi, itemsApi, categoryBrandsApi } from '../api/catalog';
 import { suppliersApi } from '../api/parties';
 import { branchesApi } from '../api/branches';
@@ -37,17 +38,17 @@ function ItemFormModal({ item, onClose }) {
   const [form, setForm] = useState(() =>
     item
       ? {
-          item_name: item.item_name, category_id: item.category_id ?? '', brand_id: item.brand_id ?? '',
-          supplier_id: item.supplier_id ?? '',
-          hsn_code: item.hsn_code ?? '', barcode: item.barcode ?? '', base_unit_id: item.base_unit_id ?? '',
-          secondary_unit_id: item.secondary_unit_id ?? '', tax_code_id: item.tax_code_id ?? '',
-          purchase_price: item.purchase_price, cost_price: item.cost_price, wholesale_price: item.wholesale_price,
-          retail_price: item.retail_price, mrp: item.mrp, min_stock_threshold: item.min_stock_threshold,
-          net_srate: item.net_srate ?? '', net_purrate: item.net_purrate ?? '',
-          secondary_mrp: item.secondary_mrp ?? '', secondary_net_srate: item.secondary_net_srate ?? '',
-          secondary_net_purrate: item.secondary_net_purrate ?? '',
-          is_active: !!Number(item.is_active), opening_stock: item.opening_stock ?? '',
-        }
+        item_name: item.item_name, category_id: item.category_id ?? '', brand_id: item.brand_id ?? '',
+        supplier_id: item.supplier_id ?? '',
+        hsn_code: item.hsn_code ?? '', barcode: item.barcode ?? '', base_unit_id: item.base_unit_id ?? '',
+        secondary_unit_id: item.secondary_unit_id ?? '', tax_code_id: item.tax_code_id ?? '',
+        purchase_price: item.purchase_price, cost_price: item.cost_price, wholesale_price: item.wholesale_price,
+        retail_price: item.retail_price, mrp: item.mrp, min_stock_threshold: item.min_stock_threshold,
+        net_srate: item.net_srate ?? '', net_purrate: item.net_purrate ?? '',
+        secondary_mrp: item.secondary_mrp ?? '', secondary_net_srate: item.secondary_net_srate ?? '',
+        secondary_net_purrate: item.secondary_net_purrate ?? '',
+        is_active: !!Number(item.is_active), opening_stock: item.opening_stock ?? '',
+      }
       : emptyForm
   );
   const [selectedBranches, setSelectedBranches] = useState(item?.branch_ids ?? []);
@@ -532,18 +533,19 @@ export function ItemsPanel({ canManage }) {
     }
   };
 
+  const isMobileItems = useMediaQuery('(max-width: 767px)');
   const items = itemsQuery.data || [];
   const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const pagedItems = items.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   return (
-    <div className="flex flex-col gap-2.5">
+    <div className="flex flex-col gap-2.5 min-w-0 w-full">
       <Toast message={importSuccessMsg} onClose={() => setImportSuccessMsg('')} />
-      <div className="card overflow-hidden">
+      <div className="card overflow-hidden min-w-0 w-full">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-soft px-3.5 py-2">
           <span className="font-semibold text-ink text-sm sm:text-base">Items</span>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             <div className="flex overflow-hidden rounded-lg border border-border-soft text-xs">
               {[
                 ['active', 'Active'],
@@ -555,9 +557,8 @@ export function ItemsPanel({ canManage }) {
                   type="button"
                   data-catalog-nav="true"
                   onClick={() => handleStatusFilterChange(value)}
-                  className={`px-2.5 py-1 font-medium focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1 ${
-                    statusFilter === value ? 'bg-navbar text-gold' : 'bg-white text-ink-muted hover:bg-page'
-                  }`}
+                  className={`px-2.5 py-1 font-medium focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1 ${statusFilter === value ? 'bg-navbar text-gold' : 'bg-white text-ink-muted hover:bg-page'
+                    }`}
                 >
                   {label}
                 </button>
@@ -570,7 +571,7 @@ export function ItemsPanel({ canManage }) {
               placeholder="Search name / code / barcode"
               value={search}
               onChange={(e) => handleSearchChange(e.target.value)}
-              className="input w-48 sm:w-56 focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1"
+              className="input w-full sm:w-56 focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1"
             />
             <Button variant="success" size="sm" data-catalog-nav="true" onClick={() => itemsApi.downloadExport()}>Export Excel</Button>
             {canManage && (
@@ -579,36 +580,19 @@ export function ItemsPanel({ canManage }) {
           </div>
         </div>
 
-        <div className="max-h-[calc(100vh-240px)] overflow-x-auto overflow-y-auto">
-          <table className="w-full min-w-[750px] text-xs">
-            <thead className="sticky top-0 bg-page z-10">
-              <tr className="border-b border-border-soft text-left uppercase text-ink-muted">
-                <th className="px-3 py-1.5"></th>
-                <th className="px-3 py-1.5">Code</th>
-                <th className="px-3 py-1.5">Name</th>
-                <th className="px-3 py-1.5">Category</th>
-                <th className="px-3 py-1.5">Unit</th>
-                <th className="px-3 py-1.5">MRP</th>
-                <th className="px-3 py-1.5">NET_SRATE</th>
-                <th className="px-3 py-1.5">NET_PURRATE</th>
-                <th className="px-3 py-1.5">Stock</th>
-                <th className="px-3 py-1.5">GST%</th>
-                <th className="px-3 py-1.5">HSN</th>
-                {statusFilter === 'all' && <th className="px-3 py-1.5">Status</th>}
-                {canManage && <th className="px-3 py-1.5 text-right">Actions</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {pagedItems.map((item) => (
-                <tr
-                  key={item.id}
-                  tabIndex={0}
-                  data-catalog-nav="true"
-                  data-catalog-row="true"
-                  className="border-b border-border-soft hover:bg-page/50 focus:outline-none focus:ring-2 focus:ring-[#6F2DA8]/60 focus:bg-[#EDE8FF]/30 transition-colors"
-                >
-                  <td className="px-3 py-1">
-                    <div className="flex h-7 w-7 items-center justify-center overflow-hidden rounded bg-page">
+        {isMobileItems ? (
+          <div className="divide-y divide-border-soft max-h-[calc(100dvh-260px)] overflow-y-auto">
+            {pagedItems.map((item) => (
+              <div
+                key={item.id}
+                tabIndex={0}
+                data-catalog-nav="true"
+                data-catalog-row="true"
+                className="p-3 hover:bg-page/50 focus:outline-none focus:ring-2 focus:ring-[#6F2DA8]/60 space-y-2"
+              >
+                <div className="flex items-start justify-between gap-2.5">
+                  <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-page border border-border-soft/60">
                       {item.image ? (
                         <img
                           src={resolveImageUrl(item.image)}
@@ -617,91 +601,232 @@ export function ItemsPanel({ canManage }) {
                           onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextSibling.style.display = 'flex'; }}
                         />
                       ) : null}
-                      <ImageIcon size={14} className="text-ink-muted" style={{ display: item.image ? 'none' : 'flex' }} />
+                      <ImageIcon size={16} className="text-ink-muted" style={{ display: item.image ? 'none' : 'flex' }} />
                     </div>
-                  </td>
-                  <td className="px-3 py-1 text-ink-muted">{item.item_code}</td>
-                  <td className="px-3 py-1 font-medium text-ink">{item.item_name}</td>
-                  <td className="px-3 py-1 text-ink-muted">{item.category_name || '—'}</td>
-                  <td className="px-3 py-1 text-ink-muted">{item.base_unit_code}</td>
-                  <td className="px-3 py-1 text-ink-muted">{item.mrp}</td>
-                  <td className="px-3 py-1 text-ink-muted">{item.net_srate ?? item.retail_price}</td>
-                  <td className="px-3 py-1 text-ink-muted">{item.net_purrate ?? item.purchase_price}</td>
-                  <td className="px-3 py-1 font-medium text-ink">{item.stock ?? item.current_stock ?? item.opening_stock ?? 0}</td>
-                  <td className="px-3 py-1 text-ink-muted">{item.gst_percent ?? '—'}</td>
-                  <td className="px-3 py-1 text-ink-muted">{item.hsn_code || '—'}</td>
-                  {statusFilter === 'all' && (
-                    <td className="px-3 py-1">
-                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                        Number(item.is_active) ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-danger'
-                      }`}>
-                        {Number(item.is_active) ? 'Active' : 'Deactivated'}
-                      </span>
-                    </td>
-                  )}
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-bold text-ink break-words leading-snug">{item.item_name}</div>
+                      <div className="text-[11px] text-ink-muted mt-0.5 flex flex-wrap gap-x-2">
+                        <span className="font-mono">{item.item_code}</span>
+                        {item.category_name && <span>· {item.category_name}</span>}
+                        {item.base_unit_code && <span>· {item.base_unit_code}</span>}
+                      </div>
+                    </div>
+                  </div>
+
                   {canManage && (
-                    <td className="px-3 py-1 text-right">
-                      <div className="flex justify-end gap-1">
+                    <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        type="button"
+                        data-catalog-nav="true"
+                        data-catalog-action="true"
+                        onClick={() => openEdit(item)}
+                        title="Edit"
+                        className="rounded-lg border border-border-soft p-2 min-h-[36px] min-w-[36px] flex items-center justify-center text-ink-muted hover:bg-page hover:text-gold"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      {Number(item.is_active) ? (
                         <button
                           type="button"
                           data-catalog-nav="true"
                           data-catalog-action="true"
-                          onClick={() => openEdit(item)}
-                          title="Edit"
-                          className="rounded p-1 text-ink-muted hover:bg-page hover:text-gold focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1"
+                          onClick={() => handleDelete(item)}
+                          title="Deactivate"
+                          className="rounded-lg border border-rose-200 p-2 min-h-[36px] min-w-[36px] flex items-center justify-center text-ink-muted hover:bg-red-50 hover:text-danger"
                         >
-                          <Pencil size={13} />
+                          <Trash2 size={14} />
                         </button>
-                        {Number(item.is_active) ? (
-                          <button
-                            type="button"
-                            data-catalog-nav="true"
-                            data-catalog-action="true"
-                            onClick={() => handleDelete(item)}
-                            title="Deactivate"
-                            className="rounded p-1 text-ink-muted hover:bg-red-50 hover:text-danger focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-1"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            data-catalog-nav="true"
-                            data-catalog-action="true"
-                            onClick={() => handleReactivate(item)}
-                            title="Reactivate"
-                            className="rounded p-1 text-ink-muted hover:bg-emerald-50 hover:text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:ring-offset-1"
-                          >
-                            <RotateCcw size={13} />
-                          </button>
-                        )}
+                      ) : (
+                        <button
+                          type="button"
+                          data-catalog-nav="true"
+                          data-catalog-action="true"
+                          onClick={() => handleReactivate(item)}
+                          title="Reactivate"
+                          className="rounded-lg border border-emerald-200 p-2 min-h-[36px] min-w-[36px] flex items-center justify-center text-ink-muted hover:bg-emerald-50 hover:text-emerald-700"
+                        >
+                          <RotateCcw size={14} />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-3 gap-1.5 rounded-lg bg-page/70 p-2 text-[11px]">
+                  <div>
+                    <div className="text-[10px] uppercase text-ink-muted">MRP / S.Rate</div>
+                    <div className="font-semibold text-ink">₹{item.mrp} / ₹{item.net_srate ?? item.retail_price}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase text-ink-muted">Pur. Rate</div>
+                    <div className="font-semibold text-ink">₹{item.net_purrate ?? item.purchase_price}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase text-ink-muted">Stock</div>
+                    <div className="font-bold text-ink">{item.stock ?? item.current_stock ?? item.opening_stock ?? 0}</div>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-ink-muted">
+                  <span>GST: <strong className="text-ink">{item.gst_percent ?? '—'}%</strong> · HSN: <strong className="text-ink">{item.hsn_code || '—'}</strong></span>
+                  {statusFilter === 'all' && (
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${Number(item.is_active) ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-danger'
+                      }`}>
+                      {Number(item.is_active) ? 'Active' : 'Deactivated'}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+            {items.length === 0 && (
+              <div className="px-4 py-6 text-center text-xs text-ink-muted">No items found.</div>
+            )}
+          </div>
+        ) : (
+          <div className="max-h-[calc(100vh-240px)] overflow-x-auto overflow-y-auto">
+            <table className="w-full min-w-[750px] text-xs">
+              <thead className="sticky top-0 bg-page z-10">
+                <tr className="border-b border-border-soft text-left uppercase text-ink-muted">
+                  <th className="px-3 py-1.5"></th>
+                  <th className="px-3 py-1.5">Code</th>
+                  <th className="px-3 py-1.5">Name</th>
+                  <th className="px-3 py-1.5">Category</th>
+                  <th className="px-3 py-1.5">Unit</th>
+                  <th className="px-3 py-1.5">MRP</th>
+                  <th className="px-3 py-1.5">NET_SRATE</th>
+                  <th className="px-3 py-1.5">NET_PURRATE</th>
+                  <th className="px-3 py-1.5">Stock</th>
+                  <th className="px-3 py-1.5">GST%</th>
+                  <th className="px-3 py-1.5">HSN</th>
+                  {statusFilter === 'all' && <th className="px-3 py-1.5">Status</th>}
+                  {canManage && <th className="px-3 py-1.5 text-right">Actions</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {pagedItems.map((item) => (
+                  <tr
+                    key={item.id}
+                    tabIndex={0}
+                    data-catalog-nav="true"
+                    data-catalog-row="true"
+                    className="border-b border-border-soft hover:bg-page/50 focus:outline-none focus:ring-2 focus:ring-[#6F2DA8]/60 focus:bg-[#EDE8FF]/30 transition-colors"
+                  >
+                    <td className="px-3 py-1">
+                      <div className="flex h-7 w-7 items-center justify-center overflow-hidden rounded bg-page">
+                        {item.image ? (
+                          <img
+                            src={resolveImageUrl(item.image)}
+                            alt=""
+                            className="h-full w-full object-cover"
+                            onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextSibling.style.display = 'flex'; }}
+                          />
+                        ) : null}
+                        <ImageIcon size={14} className="text-ink-muted" style={{ display: item.image ? 'none' : 'flex' }} />
                       </div>
                     </td>
-                  )}
-                </tr>
-              ))}
-              {items.length === 0 && (
-                <tr>
-                  <td colSpan={11 + (canManage ? 1 : 0) + (statusFilter === 'all' ? 1 : 0)} className="px-4 py-6 text-center text-ink-muted">No items found.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                    <td className="px-3 py-1 text-ink-muted">{item.item_code}</td>
+                    <td className="px-3 py-1 font-medium text-ink">{item.item_name}</td>
+                    <td className="px-3 py-1 text-ink-muted">{item.category_name || '—'}</td>
+                    <td className="px-3 py-1 text-ink-muted">{item.base_unit_code}</td>
+                    <td className="px-3 py-1 text-ink-muted">{item.mrp}</td>
+                    <td className="px-3 py-1 text-ink-muted">{item.net_srate ?? item.retail_price}</td>
+                    <td className="px-3 py-1 text-ink-muted">{item.net_purrate ?? item.purchase_price}</td>
+                    <td className="px-3 py-1 font-medium text-ink">{item.stock ?? item.current_stock ?? item.opening_stock ?? 0}</td>
+                    <td className="px-3 py-1 text-ink-muted">{item.gst_percent ?? '—'}</td>
+                    <td className="px-3 py-1 text-ink-muted">{item.hsn_code || '—'}</td>
+                    {statusFilter === 'all' && (
+                      <td className="px-3 py-1">
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${Number(item.is_active) ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-danger'
+                          }`}>
+                          {Number(item.is_active) ? 'Active' : 'Deactivated'}
+                        </span>
+                      </td>
+                    )}
+                    {canManage && (
+                      <td className="px-3 py-1 text-right">
+                        <div className="flex justify-end gap-1">
+                          <button
+                            type="button"
+                            data-catalog-nav="true"
+                            data-catalog-action="true"
+                            onClick={() => openEdit(item)}
+                            title="Edit"
+                            className="rounded p-1 text-ink-muted hover:bg-page hover:text-gold focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1"
+                          >
+                            <Pencil size={13} />
+                          </button>
+                          {Number(item.is_active) ? (
+                            <button
+                              type="button"
+                              data-catalog-nav="true"
+                              data-catalog-action="true"
+                              onClick={() => handleDelete(item)}
+                              title="Deactivate"
+                              className="rounded p-1 text-ink-muted hover:bg-red-50 hover:text-danger focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-1"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              data-catalog-nav="true"
+                              data-catalog-action="true"
+                              onClick={() => handleReactivate(item)}
+                              title="Reactivate"
+                              className="rounded p-1 text-ink-muted hover:bg-emerald-50 hover:text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:ring-offset-1"
+                            >
+                              <RotateCcw size={13} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+                {items.length === 0 && (
+                  <tr>
+                    <td colSpan={11 + (canManage ? 1 : 0) + (statusFilter === 'all' ? 1 : 0)} className="px-4 py-6 text-center text-ink-muted">No items found.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         <Pagination page={currentPage} pageSize={PAGE_SIZE} total={items.length} onPageChange={setPage} />
       </div>
 
       {canManage && (
-        <div className="card p-4">
+        <div className="card p-4 min-w-0 w-full">
           <div className="mb-2 font-semibold text-ink">Bulk Import (Excel)</div>
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="success" size="sm" data-catalog-nav="true" onClick={() => itemsApi.downloadImportTemplate()}>Download Template</Button>
-            <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleImportFile} data-catalog-nav="true" className="text-sm focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1 rounded" />
-            <Button variant="secondary" size="sm" data-catalog-nav="true" disabled={!importFile || isPreviewing} onClick={handlePreview}>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={handleImportFile}
+              data-catalog-nav="true"
+              className="w-full max-w-full min-w-0 sm:w-auto text-sm focus:outline-none focus:ring-2 focus:ring-[#6F2DA8] focus:ring-offset-1 rounded"
+            />
+
+            <Button
+              variant="secondary"
+              size="sm"
+              data-catalog-nav="true"
+              disabled={!importFile || isPreviewing}
+              onClick={handlePreview}
+            >
               {isPreviewing ? 'Reading Excel...' : 'Preview'}
             </Button>
-            <Button size="sm" data-catalog-nav="true" disabled={!importFile || !importResult || importResult.valid_rows === 0 || isCommitting} onClick={handleCommit}>
+
+            <Button
+              size="sm"
+              data-catalog-nav="true"
+              disabled={!importFile || !importResult || importResult.valid_rows === 0 || isCommitting}
+              onClick={handleCommit}
+            >
               {isCommitting ? 'Importing...' : 'Commit Import'}
             </Button>
           </div>
@@ -787,13 +912,12 @@ export function ItemsPanel({ canManage }) {
                           </td>
                           <td className="px-3 py-1.5">
                             <span
-                              className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
-                                hasErr
+                              className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${hasErr
                                   ? 'bg-rose-100 text-rose-700'
                                   : r.action === 'update'
-                                  ? 'bg-blue-100 text-blue-700'
-                                  : 'bg-emerald-100 text-emerald-700'
-                              }`}
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : 'bg-emerald-100 text-emerald-700'
+                                }`}
                             >
                               {hasErr ? 'Invalid' : r.action === 'update' ? 'Valid (Update)' : 'Valid (Create)'}
                             </span>

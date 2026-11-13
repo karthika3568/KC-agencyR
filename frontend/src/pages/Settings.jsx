@@ -132,7 +132,7 @@ function PrintSettingsPanel({ canManage }) {
           <span className="text-xs font-medium text-ink-muted">Default print copies</span>
           <input type="number" min="1" value={form.default_print_copies} onChange={(e) => setForm({ ...form, default_print_copies: e.target.value })} disabled={!canManage} className="input disabled:bg-page text-xs py-1" />
         </label>
-        <label className="flex items-center gap-2 pt-4">
+        <label className="flex items-center gap-2 pt-1 sm:pt-4 sm:col-span-2 md:col-span-1">
           <input type="checkbox" checked={!!Number(form.show_upi_qr_on_thermal)} onChange={(e) => setForm({ ...form, show_upi_qr_on_thermal: e.target.checked ? 1 : 0 })} disabled={!canManage} />
           <span className="text-xs text-ink-muted">Show UPI QR on thermal receipt</span>
         </label>
@@ -148,11 +148,11 @@ function PrintSettingsPanel({ canManage }) {
           <span className="text-xs font-medium text-ink-muted">UPI ID</span>
           <input value={form.upi_id ?? ''} onChange={(e) => setForm({ ...form, upi_id: e.target.value })} disabled={!canManage} className="input disabled:bg-page text-xs py-1" />
         </label>
-        <label className="col-span-2 flex flex-col gap-0.5 sm:col-span-3">
+        <label className="col-span-1 flex flex-col gap-0.5 sm:col-span-2 md:col-span-3">
           <span className="text-xs font-medium text-ink-muted">Invoice footer note</span>
           <input value={form.invoice_footer_note ?? ''} onChange={(e) => setForm({ ...form, invoice_footer_note: e.target.value })} disabled={!canManage} className="input disabled:bg-page text-xs py-1" />
         </label>
-        <label className="col-span-2 flex flex-col gap-0.5 sm:col-span-3">
+        <label className="col-span-1 flex flex-col gap-0.5 sm:col-span-2 md:col-span-3">
           <span className="text-xs font-medium text-ink-muted">Terms &amp; conditions</span>
           <textarea value={form.terms_and_conditions ?? ''} onChange={(e) => setForm({ ...form, terms_and_conditions: e.target.value })} disabled={!canManage} className="input disabled:bg-page text-xs" rows={2} />
         </label>

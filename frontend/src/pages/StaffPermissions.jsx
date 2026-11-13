@@ -186,7 +186,7 @@ export function StaffPermissions() {
 
       <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
         {/* Left Column Form */}
-        <div className="lg:col-span-4">
+        <div className="min-w-0 lg:col-span-4">
           <div className="card p-3.5 space-y-2.5 lg:sticky lg:top-3">
             <div className="flex items-center justify-between border-b border-border-soft pb-2">
               <h2 className="font-semibold text-ink text-sm flex items-center gap-1.5">
@@ -334,8 +334,8 @@ export function StaffPermissions() {
         </div>
 
         {/* Right Column Table */}
-        <div className="lg:col-span-8 space-y-2.5">
-          <div className="card p-2.5 flex flex-col sm:flex-row items-center justify-between gap-2">
+        <div className="min-w-0 lg:col-span-8 space-y-2.5">
+          <div className="card p-2.5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
             <div className="relative w-full sm:w-72">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
               <input
@@ -346,23 +346,23 @@ export function StaffPermissions() {
                 className="input pl-9 w-full text-xs"
               />
             </div>
-            <div className="flex items-center gap-1.5 text-xs">
+            <div className="flex flex-wrap items-center gap-1.5 text-xs">
               <span className="text-ink-muted">Filter:</span>
               <button
                 onClick={() => setStatusFilter('all')}
-                className={`px-2 py-0.5 rounded transition ${statusFilter === 'all' ? 'bg-indigo-500/20 text-indigo-300 font-medium' : 'text-ink-muted hover:text-ink'}`}
+                className={`px-2 py-1 rounded transition ${statusFilter === 'all' ? 'bg-indigo-500/20 text-indigo-300 font-medium' : 'text-ink-muted hover:text-ink'}`}
               >
                 All ({staff.length})
               </button>
               <button
                 onClick={() => setStatusFilter('active')}
-                className={`px-2 py-0.5 rounded transition ${statusFilter === 'active' ? 'bg-emerald-500/20 text-emerald-300 font-medium' : 'text-ink-muted hover:text-ink'}`}
+                className={`px-2 py-1 rounded transition ${statusFilter === 'active' ? 'bg-emerald-500/20 text-emerald-300 font-medium' : 'text-ink-muted hover:text-ink'}`}
               >
                 Active ({staff.filter((s) => s.status === 'active' || s.status !== 'inactive').length})
               </button>
               <button
                 onClick={() => setStatusFilter('inactive')}
-                className={`px-2 py-0.5 rounded transition ${statusFilter === 'inactive' ? 'bg-gray-500/20 text-gray-300 font-medium' : 'text-ink-muted hover:text-ink'}`}
+                className={`px-2 py-1 rounded transition ${statusFilter === 'inactive' ? 'bg-gray-500/20 text-gray-300 font-medium' : 'text-ink-muted hover:text-ink'}`}
               >
                 Inactive ({staff.filter((s) => s.status === 'inactive').length})
               </button>
@@ -370,11 +370,92 @@ export function StaffPermissions() {
           </div>
 
           <div className="card overflow-hidden">
-            <div className="px-3.5 py-2 border-b border-border-soft flex items-center justify-between">
+            <div className="px-3.5 py-2 border-b border-border-soft flex items-center justify-between gap-2">
               <h3 className="font-semibold text-ink text-xs sm:text-sm">Staff Directory</h3>
               <span className="text-xs text-ink-muted">{filteredStaff.length} member(s)</span>
             </div>
-            <div className="max-h-[calc(100vh-230px)] overflow-x-auto overflow-y-auto">
+            <div className="md:hidden divide-y divide-border-soft/70 max-h-[calc(100dvh-250px)] overflow-y-auto">
+              {staffQuery.isLoading && (
+                <div className="px-3 py-8 text-center text-ink-muted text-xs flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Loading staff…
+                </div>
+              )}
+              {!staffQuery.isLoading && staffQuery.isError && (
+                <div className="px-3 py-8 text-center text-xs flex flex-col items-center gap-2 text-red-400">
+                  <AlertTriangle className="w-5 h-5" />
+                  Unable to load staff users. Please try again.
+                  <button
+                    type="button"
+                    onClick={() => staffQuery.refetch()}
+                    className="mt-1 px-3 py-1.5 rounded bg-red-500/10 border border-red-500/30 text-red-300 font-medium hover:bg-red-500/20"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+              {!staffQuery.isLoading && !staffQuery.isError && staff.length === 0 && (
+                <div className="px-3 py-8 text-center text-ink-muted text-xs flex flex-col items-center gap-2">
+                  <Users className="w-5 h-5" />
+                  No staff accounts yet — create the first one above.
+                </div>
+              )}
+              {!staffQuery.isLoading && !staffQuery.isError && staff.length > 0 && pagedStaff.map((u) => {
+                const isActive = u.status !== 'inactive';
+                return (
+                  <div key={u.id} className="p-3 space-y-2 hover:bg-surface-subtle/20">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold text-sm text-ink break-words">{u.name}</div>
+                        <div className="text-xs text-ink-muted break-all">{u.email}</div>
+                        {u.phone && <div className="text-[11px] text-ink-muted/80">{u.phone}</div>}
+                      </div>
+                      {isActive ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                          Active
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-500/10 text-gray-400 border border-gray-500/20 shrink-0">
+                          <span className="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
+                          Inactive
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-border-soft/50">
+                      <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                        <span className="px-2 py-0.5 rounded text-[10px] bg-indigo-500/15 text-indigo-300 font-medium border border-indigo-500/20">
+                          {u.role_name}
+                        </span>
+                        <span className="text-[11px] text-ink-muted">{u.branch_name || 'All Branches'}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        {canManageAccounts && (
+                          <button
+                            type="button"
+                            onClick={() => handleEdit(u)}
+                            className="p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border border-border-soft hover:bg-surface-subtle text-ink-muted hover:text-cyan-400 transition"
+                            title="Edit Staff"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {canManagePermissions && (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedUserForPerms(u)}
+                            className="px-2.5 py-1.5 min-h-[36px] rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-medium hover:bg-amber-500/20 transition"
+                          >
+                            Permissions
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="hidden md:block max-h-[calc(100vh-230px)] overflow-x-auto overflow-y-auto">
               <table className="w-full min-w-[650px] text-left text-xs">
                 <thead className="sticky top-0 bg-page z-10 shadow-sm">
                   <tr className="border-b border-border-soft bg-surface-subtle/30 text-ink-muted font-medium">
@@ -667,12 +748,12 @@ function PermissionsPanel({ user, onClose }) {
           {!permsQuery.isLoading &&
             Object.entries(grouped).map(([module, perms]) => (
               <div key={module} className="rounded-xl border border-slate-200 bg-white p-3.5 space-y-3 shadow-2xs">
-                <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-2">
-                  <div className="text-xs font-black uppercase tracking-wider text-[#351442] flex items-center gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2">
+                  <div className="text-xs font-black uppercase tracking-wider text-[#351442] flex flex-wrap items-center gap-2">
                     <span className="text-sm font-black">{module}</span>
                     <span className="text-xs text-slate-600 font-bold lowercase">({perms.length} actions)</span>
                   </div>
-                  <div className="flex items-center gap-1.5 text-xs">
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs">
                     <button
                       type="button"
                       onClick={() => setModulePermissions(perms, true)}
@@ -748,7 +829,7 @@ function PermissionsPanel({ user, onClose }) {
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-slate-200 flex items-center justify-between gap-2 bg-slate-50/80">
+        <div className="p-4 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 bg-slate-50/80">
           <div className="text-xs">
             {pendingCount > 0 ? (
               <span className="font-black text-amber-900 bg-amber-100 border border-amber-300 px-2.5 py-1 rounded-md">

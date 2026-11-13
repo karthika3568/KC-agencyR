@@ -236,7 +236,66 @@ function GenericTable({ rows, columns, totalKeys, selection }) {
 
   return (
     <div className="card overflow-hidden">
-      <div className="max-h-[calc(100vh-220px)] overflow-x-auto overflow-y-auto">
+      <div className="md:hidden divide-y divide-border-soft/60 max-h-[calc(100dvh-250px)] overflow-y-auto">
+        {pagedRows.map((r, i) => {
+          const rowKey = selection?.getKey ? selection.getKey(r, i) : i;
+          const isSelected = selection?.selectedKeys.has(rowKey);
+          return (
+            <div
+              key={rowKey}
+              onClick={() => selection?.toggleSelectRow(rowKey)}
+              className={`p-3 space-y-2 transition-colors cursor-pointer ${isSelected ? 'bg-gold/10' : 'hover:bg-page'}`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start gap-2 min-w-0 flex-1">
+                  {selection && (
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => selection.toggleSelectRow(rowKey)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="mt-1 h-4 w-4 rounded border-border-soft text-gold focus:ring-gold shrink-0"
+                    />
+                  )}
+                  <div className="min-w-0 flex-1 font-bold text-sm text-ink break-words">
+                    {columns[0] ? (totalKeys?.includes(columns[0].key) ? Number(r[columns[0].key] ?? 0).toFixed(2) : (r[columns[0].key] ?? '-')) : ''}
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs pl-6">
+                {columns.slice(1).map((c) => (
+                  <div key={c.key} className="min-w-0">
+                    <div className="text-[10px] uppercase tracking-wider text-ink-muted truncate">{c.label}</div>
+                    <div className="font-semibold text-ink break-words">
+                      {totalKeys?.includes(c.key) ? Number(r[c.key] ?? 0).toFixed(2) : (r[c.key] ?? '-')}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+        {rows.length === 0 && (
+          <div className="px-3 py-6 text-center text-xs text-ink-muted">No data for this range.</div>
+        )}
+        {totals && rows.length > 0 && (
+          <div className="bg-surface-subtle p-3 border-t-2 border-border-soft space-y-1">
+            <div className="text-xs font-bold text-ink">
+              {selectedCount > 0 ? `Total (${selectedCount} selected)` : 'Grand Total'}
+            </div>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+              {columns.filter((c) => totalKeys.includes(c.key)).map((c) => (
+                <div key={c.key} className="flex justify-between gap-2">
+                  <span className="text-ink-muted truncate">{c.label}:</span>
+                  <span className="font-bold text-ink">{totals[c.key].toFixed(2)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="hidden md:block max-h-[calc(100vh-220px)] overflow-x-auto overflow-y-auto">
         <table className="w-full min-w-[650px] text-xs">
           <thead className="sticky top-0 bg-page z-10 shadow-sm">
             <tr className="border-b border-border-soft text-left uppercase text-ink-muted font-medium bg-surface-subtle/30">

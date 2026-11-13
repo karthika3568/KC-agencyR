@@ -106,17 +106,17 @@ export function CollectModal({ customer, onClose, onCollected }) {
 
         {mode === 'fifo' ? (
           <>
-            <div className="mb-3 flex gap-2">
-              <input type="number" step="any" placeholder="Amount collected" value={amount} onChange={(e) => setAmount(e.target.value)} className="input flex-1" />
-              <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="input w-32">
+            <div className="mb-3 flex flex-wrap gap-2">
+              <input type="number" step="any" placeholder="Amount collected" value={amount} onChange={(e) => setAmount(e.target.value)} className="input flex-1 min-w-[140px]" />
+              <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="input w-full sm:w-32">
                 <option value="cash">Cash</option>
                 <option value="upi">UPI</option>
                 <option value="card">Card</option>
                 <option value="other">Other</option>
               </select>
             </div>
-            <div className="mb-3 max-h-56 overflow-auto rounded border border-border-soft">
-              <table className="w-full text-xs">
+            <div className="mb-3 max-h-56 overflow-x-auto overflow-y-auto rounded border border-border-soft">
+              <table className="w-full min-w-[360px] text-xs">
                 <thead>
                   <tr className="bg-page text-left text-ink-muted">
                     <th className="px-3 py-1.5">Invoice</th><th className="px-3 py-1.5">Pending</th><th className="px-3 py-1.5">This Pay</th><th className="px-3 py-1.5">Rem</th>
@@ -260,11 +260,36 @@ export function Collections() {
 
       {canViewAll && (
         <div className="card overflow-hidden">
-          <div className="flex items-center justify-between border-b border-border-soft px-3.5 py-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-soft px-3.5 py-2">
             <span className="font-semibold text-ink text-xs sm:text-sm">Pending Credit Balances</span>
             <span className="text-xs font-medium text-ink-muted">Total pending: Rs. {pendingTotal.toFixed(2)}</span>
           </div>
-          <div className="max-h-[calc(50vh-90px)] overflow-x-auto overflow-y-auto">
+          <div className="md:hidden divide-y divide-border-soft/60 max-h-[calc(55dvh-90px)] overflow-y-auto">
+            {pagedPending.map((c) => (
+              <div key={c.customer_id} className="p-3 space-y-1.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-bold text-sm text-ink break-words">{c.ledger_name}</div>
+                    <div className="text-xs text-ink-muted">{c.phone || '-'} · {c.unpaid_invoice_count} unpaid bill(s)</div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="text-sm font-bold text-danger">₹{c.total_due}</div>
+                    {canCollect && (
+                      <button
+                        type="button"
+                        onClick={() => setSelected(c)}
+                        className="mt-1 px-2.5 py-1 rounded bg-primary-soft text-primary text-xs font-semibold hover:bg-lavender-200"
+                      >
+                        Collect
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+            {pending.length === 0 && <div className="px-3 py-5 text-center text-xs text-ink-muted">No customers with an outstanding balance.</div>}
+          </div>
+          <div className="hidden md:block max-h-[calc(50vh-90px)] overflow-x-auto overflow-y-auto">
             <table className="w-full min-w-[550px] text-xs">
               <thead className="sticky top-0 bg-page z-10 shadow-sm">
                 <tr className="border-b border-border-soft text-left uppercase text-ink-muted font-medium bg-surface-subtle/30">
@@ -298,11 +323,31 @@ export function Collections() {
       )}
 
       <div className="card overflow-hidden">
-        <div className="flex items-center justify-between border-b border-border-soft px-3.5 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-soft px-3.5 py-2">
           <span className="font-semibold text-ink text-xs sm:text-sm">Past Collection Receipts</span>
           <span className="text-xs font-medium text-ink-muted">Total collected: Rs. {historyTotal.toFixed(2)}</span>
         </div>
-        <div className="max-h-[calc(50vh-90px)] overflow-x-auto overflow-y-auto">
+        <div className="md:hidden divide-y divide-border-soft/60 max-h-[calc(55dvh-90px)] overflow-y-auto">
+          {pagedHistory.map((c) => (
+            <div key={c.id} className="p-3 space-y-1">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="font-mono font-bold text-sm text-ink break-words">{c.receipt_no}</div>
+                  <div className="text-xs font-medium text-ink break-words">{c.customer_name}</div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="text-sm font-bold text-emerald-600">₹{c.amount}</div>
+                  <div className="text-[11px] capitalize text-ink-muted">{c.payment_method}</div>
+                </div>
+              </div>
+              <div className="text-[11px] text-ink-muted">
+                By {c.collected_by_name} · {c.collected_at}
+              </div>
+            </div>
+          ))}
+          {history.length === 0 && <div className="px-3 py-5 text-center text-xs text-ink-muted">No collections yet.</div>}
+        </div>
+        <div className="hidden md:block max-h-[calc(50vh-90px)] overflow-x-auto overflow-y-auto">
           <table className="w-full min-w-[550px] text-xs">
             <thead className="sticky top-0 bg-page z-10 shadow-sm">
               <tr className="border-b border-border-soft text-left uppercase text-ink-muted font-medium bg-surface-subtle/30">

@@ -441,7 +441,7 @@ function CategoriesPanel({ canManage }) {
   return (
     <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
       {/* LEFT SIDE: Create / Edit Category Form */}
-      <div className="lg:col-span-4">
+      <div className="min-w-0 lg:col-span-4">
         <div className="card p-3.5 border border-border-soft bg-white shadow-xs rounded-xl lg:sticky lg:top-2">
           <div className="flex items-center justify-between border-b border-border-soft pb-2 mb-2.5">
             <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
@@ -663,7 +663,7 @@ function CategoriesPanel({ canManage }) {
       </div>
 
       {/* RIGHT SIDE: Category List (Get Categories Call & Table) */}
-      <div className="lg:col-span-8">
+      <div className="min-w-0 lg:col-span-8">
         <div className="card border border-border-soft bg-white shadow-xs rounded-xl overflow-hidden">
           <div className="px-3.5 py-2.5 border-b border-border-soft flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -920,7 +920,7 @@ function BrandsPanel({ canManage }) {
   return (
     <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
       {/* LEFT FORM */}
-      <div className="lg:col-span-4">
+      <div className="min-w-0 lg:col-span-4">
         <div className="card p-3.5 border border-border-soft bg-white shadow-xs rounded-xl lg:sticky lg:top-2">
           <div className="flex items-center justify-between border-b border-border-soft pb-2 mb-2.5">
             <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
@@ -1044,7 +1044,7 @@ function BrandsPanel({ canManage }) {
       </div>
 
       {/* RIGHT GET DATA TABLE */}
-      <div className="lg:col-span-8">
+      <div className="min-w-0 lg:col-span-8">
         <div className="card border border-border-soft bg-white shadow-xs rounded-xl overflow-hidden">
           <div className="px-3.5 py-2.5 border-b border-border-soft flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
@@ -1281,7 +1281,7 @@ function StockUnitsPanel({ canManage }) {
   return (
     <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
       {/* LEFT FORM */}
-      <div className="lg:col-span-4">
+      <div className="min-w-0 lg:col-span-4">
         <div className="card p-3.5 border border-border-soft bg-white shadow-xs rounded-xl lg:sticky lg:top-2">
           <div className="flex items-center justify-between border-b border-border-soft pb-2 mb-2.5">
             <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
@@ -1396,7 +1396,7 @@ function StockUnitsPanel({ canManage }) {
       </div>
 
       {/* RIGHT GET DATA TABLE */}
-      <div className="lg:col-span-8">
+      <div className="min-w-0 lg:col-span-8">
         <div className="card border border-border-soft bg-white shadow-xs rounded-xl overflow-hidden">
           <div className="px-3.5 py-2.5 border-b border-border-soft flex items-center justify-between">
             <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
@@ -1646,7 +1646,7 @@ function TaxCodesPanel({ canManage }) {
   return (
     <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
       {/* LEFT FORM */}
-      <div className="lg:col-span-4">
+      <div className="min-w-0 lg:col-span-4">
         <div className="card p-3.5 border border-border-soft bg-white shadow-xs rounded-xl lg:sticky lg:top-2">
           <div className="flex items-center justify-between border-b border-border-soft pb-2 mb-2.5">
             <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
@@ -1788,7 +1788,7 @@ function TaxCodesPanel({ canManage }) {
       </div>
 
       {/* RIGHT GET DATA TABLE */}
-      <div className="lg:col-span-8">
+      <div className="min-w-0 lg:col-span-8">
         <div className="card border border-border-soft bg-white shadow-xs rounded-xl overflow-hidden">
           <div className="px-3.5 py-2.5 border-b border-border-soft flex items-center justify-between">
             <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">

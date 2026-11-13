@@ -98,7 +98,7 @@ export function StockHubPanel() {
 
       <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
         {/* Left Column Controls */}
-        <div className="lg:col-span-4">
+        <div className="min-w-0 lg:col-span-4">
           <div className="card p-3.5 space-y-2.5 lg:sticky lg:top-3">
             <div className="border-b border-border-soft pb-2">
               <h2 className="font-semibold text-ink text-sm sm:text-base flex items-center gap-2">
@@ -130,7 +130,7 @@ export function StockHubPanel() {
         </div>
 
         {/* Right Column Table */}
-        <div className="lg:col-span-8 space-y-2.5">
+        <div className="min-w-0 lg:col-span-8 space-y-2.5">
           <div className="card p-2.5 flex flex-col sm:flex-row items-center justify-between gap-2">
             <div className="relative w-full sm:w-64">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
@@ -160,7 +160,38 @@ export function StockHubPanel() {
             <div className="px-3.5 py-2 border-b border-border-soft flex items-center justify-between">
               <h3 className="font-semibold text-ink text-xs sm:text-sm">Real-time Stock Inventory</h3>
             </div>
-            <div className="max-h-[calc(100vh-230px)] overflow-x-auto overflow-y-auto">
+            <div className="md:hidden divide-y divide-border-soft/60">
+              {pagedRows.map((r) => {
+                const isQtyLow = Number(r.quantity_on_hand) <= 0;
+                return (
+                  <div key={r.id} className="p-3 space-y-1.5 text-xs">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-ink break-words">{r.item_name}</p>
+                        <p className="text-[11px] font-mono text-ink-muted">{r.item_code}</p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className={`font-bold text-sm ${isQtyLow ? 'text-red-400' : 'text-emerald-400'}`}>
+                          {r.quantity_on_hand} <span className="text-[11px] font-normal text-ink-muted">{r.unit_code}</span>
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-ink-muted pt-0.5">
+                      <span className="px-2 py-0.5 rounded text-[10px] capitalize bg-slate-800 text-slate-300 border border-slate-700">
+                        {r.owner_type}
+                      </span>
+                      <span className="text-ink font-medium">{r.owner_name}</span>
+                    </div>
+                  </div>
+                );
+              })}
+              {filteredRows.length === 0 && (
+                <div className="px-4 py-8 text-center text-ink-muted text-xs">
+                  No stock records matching search filters.
+                </div>
+              )}
+            </div>
+            <div className="hidden md:block max-h-[calc(100vh-230px)] overflow-x-auto overflow-y-auto">
               <table className="w-full min-w-[650px] text-left text-xs">
                 <thead className="sticky top-0 bg-page z-10">
                   <tr className="border-b border-border-soft uppercase text-ink-muted font-medium">
@@ -320,7 +351,7 @@ export function StockAdjustmentPanel({ canManage }) {
 
       <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
         {/* Left Column Form */}
-        <div className="lg:col-span-4">
+        <div className="min-w-0 lg:col-span-4">
           <div className="card p-3.5 space-y-2.5 lg:sticky lg:top-3">
             <div className="border-b border-border-soft pb-2">
               <h2 className="font-semibold text-ink text-sm sm:text-base flex items-center gap-2">
@@ -413,7 +444,7 @@ export function StockAdjustmentPanel({ canManage }) {
         </div>
 
         {/* Right Column Table */}
-        <div className="lg:col-span-8 space-y-2.5">
+        <div className="min-w-0 lg:col-span-8 space-y-2.5">
           <div className="card p-2.5 flex flex-col sm:flex-row items-center justify-between gap-2">
             <div className="relative w-full sm:w-64">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
@@ -432,7 +463,35 @@ export function StockAdjustmentPanel({ canManage }) {
             <div className="px-3.5 py-2 border-b border-border-soft flex items-center justify-between">
               <h3 className="font-semibold text-ink text-xs sm:text-sm">Stock Adjustment History</h3>
             </div>
-            <div className="max-h-[calc(100vh-230px)] overflow-x-auto overflow-y-auto">
+            <div className="md:hidden divide-y divide-border-soft/60">
+              {pagedAdjustments.map((a) => (
+                <div key={a.id} className="p-3 space-y-1.5 text-xs">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-semibold text-ink break-words min-w-0">{a.item_name}</p>
+                    {a.adjustment_type === 'addition' ? (
+                      <span className="shrink-0 px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 capitalize">
+                        Addition
+                      </span>
+                    ) : (
+                      <span className="shrink-0 px-2 py-0.5 rounded text-[10px] bg-red-500/20 text-red-300 border border-red-500/30 capitalize">
+                        Deduction
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-ink-muted">
+                    <span>Qty: <strong className="text-ink">{a.qty}</strong> • <span className="capitalize">{a.reason?.replace('_', ' ')}</span></span>
+                    <span>{a.created_by_name}</span>
+                  </div>
+                  <p className="text-[10px] text-ink-muted">{a.created_at}</p>
+                </div>
+              ))}
+              {filteredAdjustments.length === 0 && (
+                <div className="px-4 py-8 text-center text-ink-muted text-xs">
+                  No adjustment records logged yet.
+                </div>
+              )}
+            </div>
+            <div className="hidden md:block max-h-[calc(100vh-230px)] overflow-x-auto overflow-y-auto">
               <table className="w-full min-w-[650px] text-left text-xs">
                 <thead className="sticky top-0 bg-page z-10">
                   <tr className="border-b border-border-soft uppercase text-ink-muted font-medium">
@@ -859,7 +918,7 @@ export function VanStockPanel({ canManage }) {
       <div className={`grid grid-cols-1 gap-3.5 ${canManage ? 'lg:grid-cols-12' : ''}`}>
         {/* Left Column Form */}
         {canManage && (
-          <div className="lg:col-span-5">
+          <div className="min-w-0 lg:col-span-5">
             <div className="card p-3.5 space-y-2.5 lg:sticky lg:top-3">
               <div className="border-b border-border-soft pb-2 flex items-center justify-between">
                 <h2 className="font-semibold text-ink text-sm sm:text-base flex items-center gap-2">
@@ -1059,7 +1118,7 @@ export function VanStockPanel({ canManage }) {
         )}
 
         {/* Right Column Table */}
-        <div className={canManage ? 'lg:col-span-7 space-y-2.5' : 'space-y-2.5'}>
+        <div className={canManage ? 'min-w-0 lg:col-span-7 space-y-2.5' : 'min-w-0 space-y-2.5'}>
           <div className="card overflow-hidden">
             <div className="px-3.5 py-2 border-b border-border-soft flex flex-wrap items-center justify-between gap-2">
               <h3 className="font-semibold text-ink text-xs sm:text-sm">Salesman Active Van Stock</h3>
@@ -1083,7 +1142,39 @@ export function VanStockPanel({ canManage }) {
               </div>
             )}
             {exportError && <div className="mx-3.5 mt-2 text-xs font-medium text-red-600 bg-white p-2 rounded border border-red-300 shadow-sm">{exportError}</div>}
-            <div className="max-h-[calc(100vh-320px)] overflow-x-auto overflow-y-auto">
+            <div className="md:hidden">
+              {pending.length > 0 && (
+                <div className="px-3 py-2 border-b border-border-soft flex items-center gap-2 text-xs text-ink-muted bg-page/40">
+                  <input type="checkbox" checked={selectedItemIds.length === pending.length} onChange={toggleSelectAll} />
+                  <span>Select all items ({pending.length})</span>
+                </div>
+              )}
+              <div className="divide-y divide-border-soft/60">
+                {pagedPending.map((p) => (
+                  <div key={p.item_id} className="p-3 flex items-start justify-between gap-2 text-xs">
+                    <div className="flex items-start gap-2.5 min-w-0">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5 shrink-0"
+                        checked={selectedItemIds.includes(p.item_id)}
+                        onChange={() => toggleSelectItem(p.item_id)}
+                      />
+                      <div className="min-w-0">
+                        <p className="font-semibold text-ink break-words">{p.item_name}</p>
+                        <p className="text-[11px] text-ink-muted">SKU: {p.item_code || '-'} • {p.unit_code || '-'}</p>
+                      </div>
+                    </div>
+                    <span className="font-bold text-emerald-400 shrink-0">{p.quantity_on_hand}</span>
+                  </div>
+                ))}
+                {(!employeeId || pending.length === 0) && (
+                  <div className="px-4 py-8 text-center text-ink-muted text-xs">
+                    {employeeId ? 'No active van stock assigned to this salesman.' : (canManage ? 'Select a salesman on the left form.' : 'No van stock found.')}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="hidden md:block max-h-[calc(100vh-320px)] overflow-x-auto overflow-y-auto">
               <table className="w-full min-w-[650px] text-left text-xs">
                 <thead className="sticky top-0 bg-page z-10">
                   <tr className="border-b border-border-soft uppercase text-ink-muted font-medium">
@@ -1142,7 +1233,96 @@ export function VanStockPanel({ canManage }) {
               {selectedIssueIds.length > 0 && <span className="text-xs text-ink-muted">{selectedIssueIds.length} selected</span>}
             </div>
             {issueExportError && <div className="mx-3.5 mt-2 text-xs font-medium text-red-600 bg-white p-2 rounded border border-red-300 shadow-sm">{issueExportError}</div>}
-            <div className="max-h-[calc(100vh-320px)] overflow-x-auto overflow-y-auto">
+            <div className="md:hidden">
+              {issues.length > 0 && (
+                <div className="px-3 py-2 border-b border-border-soft flex items-center gap-2 text-xs text-ink-muted bg-page/40">
+                  <input type="checkbox" checked={selectedIssueIds.length === issues.length} onChange={toggleSelectAllIssues} />
+                  <span>Select all issues ({issues.length})</span>
+                </div>
+              )}
+              <div className="divide-y divide-border-soft/60">
+                {pagedIssues.map((i) => {
+                  const isExpanded = expandedIssueIds.includes(i.id);
+                  return (
+                    <div key={i.id} className="p-3 space-y-2 text-xs">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-start gap-2 min-w-0">
+                          <input
+                            type="checkbox"
+                            className="mt-0.5 shrink-0"
+                            checked={selectedIssueIds.includes(i.id)}
+                            onChange={() => toggleSelectIssue(i.id)}
+                          />
+                          <div className="min-w-0">
+                            <p className="font-mono font-semibold text-ink">{i.issue_no}</p>
+                            <p className="text-[11px] text-ink-muted break-words">
+                              {i.customer_name || i.prebooking_no ? (
+                                <>
+                                  {i.prebooking_no ? `${i.prebooking_no} • ` : ''}
+                                  {i.customer_name || 'Customer'}
+                                </>
+                              ) : 'General Allocation'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="font-bold text-emerald-400">
+                            ₹{Number(i.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </p>
+                          <p className="text-[10px] text-ink-muted">{i.item_count} items • Qty {i.total_qty}</p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-ink-muted">
+                        <span>{i.employee_name}</span>
+                        <span>{i.issued_at}</span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => toggleExpandIssue(i.id)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 min-h-[34px] text-xs font-medium rounded border border-border-soft bg-page hover:bg-surface-subtle text-ink"
+                        >
+                          {isExpanded ? <ChevronDown className="w-3.5 h-3.5 text-indigo-400" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                          <span>{isExpanded ? 'Hide Items' : 'View Items'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPrintingIssue(i)}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 min-h-[34px] text-xs font-semibold rounded bg-emerald-600 hover:bg-emerald-700 text-white"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          <span>Print Bill</span>
+                        </button>
+                      </div>
+                      {isExpanded && (
+                        <div className="bg-surface border border-border-soft rounded-lg p-2.5 space-y-1.5">
+                          {i.items?.map((item, idx) => (
+                            <div key={item.id || idx} className="flex items-start justify-between gap-2 text-[11px] border-b border-border-soft/60 last:border-0 pb-1 last:pb-0">
+                              <div className="min-w-0">
+                                <p className="font-medium text-ink break-words">{idx + 1}. {item.item_name}</p>
+                                <p className="text-[10px] text-ink-muted">{item.item_code || '-'} • Qty {item.qty} {item.unit_code || ''}</p>
+                              </div>
+                              <span className="font-semibold text-ink shrink-0">
+                                ₹{Number(item.line_amount || (Number(item.qty || 0) * Number(item.unit_price || 0))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                          ))}
+                          {(!i.items || i.items.length === 0) && (
+                            <p className="text-[11px] italic text-ink-muted">No item lines recorded for this transaction.</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {issues.length === 0 && (
+                  <div className="px-4 py-8 text-center text-ink-muted text-xs">
+                    No issue transactions found.
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="hidden md:block max-h-[calc(100vh-320px)] overflow-x-auto overflow-y-auto">
               <table className="w-full min-w-[650px] text-left text-xs">
                 <thead className="sticky top-0 bg-page z-10">
                   <tr className="border-b border-border-soft uppercase text-ink-muted font-medium">
@@ -1254,7 +1434,8 @@ export function VanStockPanel({ canManage }) {
                                     <span>Print Bill</span>
                                   </button>
                                 </div>
-                                <table className="w-full text-left text-xs border border-border-soft rounded overflow-hidden">
+                                <div className="overflow-x-auto">
+                                  <table className="w-full min-w-[480px] text-left text-xs border border-border-soft rounded overflow-hidden">
                                   <thead className="bg-surface-subtle text-ink-muted uppercase text-[10px] font-semibold">
                                     <tr>
                                       <th className="px-2.5 py-1.5 w-10 text-center">#</th>
@@ -1301,6 +1482,7 @@ export function VanStockPanel({ canManage }) {
                                     </tr>
                                   </tfoot>
                                 </table>
+                                </div>
                               </div>
                             </td>
                           </tr>

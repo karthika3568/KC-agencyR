@@ -31,6 +31,7 @@ import { stockHubApi, customerPrebookingsApi } from '../api/purchasing';
 import { settingsApi } from '../api/admin';
 import { useBranchStore } from '../store/branchStore';
 import { usePermission } from '../hooks/usePermission';
+import { useMediaQuery } from '../hooks/useMediaQuery';
 import { priceLine, computeCartTotals, resolveSellingPrice } from '../utils/pricing';
 import { Badge } from '../components/Badge.jsx';
 import { Card } from '../components/Card.jsx';
@@ -104,6 +105,8 @@ export function POS() {
 
   const [billingFormat, setBillingFormat] = useState('local');
   const [priceType, setPriceType] = useState('normal');
+  const isCompactPos = useMediaQuery('(max-width: 767px)');
+  const isNarrowMobile = useMediaQuery('(max-width: 639px)');
   const [customerId, setCustomerId] = useState('');
   const prebookingId = searchParams.get('prebooking_id');
   const [linkedPrebooking, setLinkedPrebooking] = useState(null);
@@ -674,7 +677,7 @@ export function POS() {
   // Auto-scroll dropdown active row into view when customerSelectedIndex changes
   useEffect(() => {
     if (showCustomerDropdown && customerDropdownRef.current) {
-      const rows = customerDropdownRef.current.querySelectorAll('tbody tr');
+      const rows = customerDropdownRef.current.querySelectorAll('tbody tr, [data-dropdown-row="true"]');
       if (rows && rows[customerSelectedIndex]) {
         rows[customerSelectedIndex].scrollIntoView({ block: 'nearest' });
       }
@@ -684,7 +687,7 @@ export function POS() {
   // Auto-scroll dropdown active row into view when productSelectedIndex changes
   useEffect(() => {
     if (showProductDropdown && productDropdownRef.current) {
-      const rows = productDropdownRef.current.querySelectorAll('tbody tr');
+      const rows = productDropdownRef.current.querySelectorAll('tbody tr, [data-dropdown-row="true"]');
       if (rows && rows[productSelectedIndex]) {
         rows[productSelectedIndex].scrollIntoView({ block: 'nearest' });
       }
@@ -1192,15 +1195,15 @@ export function POS() {
   return (
     <div className="flex-1 min-h-0 flex flex-col justify-between overflow-y-auto lg:overflow-hidden gap-1.5 font-sans select-none text-ink pb-2 lg:pb-0">
       {/* 1. TOP CONTROLS BAR (GST / Non-GST & Normal / Retail / Wholesale) */}
-      <div className="flex flex-wrap items-center justify-between gap-2 bg-white px-3 py-1.5 rounded-xl border border-[#E5E7F5] shadow-2xs shrink-0">
+      <div className="flex flex-wrap items-center justify-between gap-2 bg-white px-2.5 sm:px-3 py-1.5 rounded-xl border border-[#E5E7F5] shadow-2xs shrink-0">
         {/* Left: GST Billing vs Non-GST / Estimate */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
           <div className="inline-flex rounded-full bg-[#F7F5FF] p-0.5 border border-[#E5E7F5]">
             <button
               type="button"
               disabled={!canGst}
               onClick={() => setBillType('gst')}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
+              className={`px-2.5 sm:px-3 py-1 rounded-full text-xs font-bold transition-all ${
                 billType === 'gst'
                   ? 'bg-[#6F2DA8] text-white shadow-soft'
                   : 'text-[#697797] hover:text-ink'
@@ -1212,7 +1215,7 @@ export function POS() {
               type="button"
               disabled={!canNonGst}
               onClick={() => setBillType('non_gst')}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
+              className={`px-2.5 sm:px-3 py-1 rounded-full text-xs font-bold transition-all ${
                 billType === 'non_gst'
                   ? 'bg-[#6F2DA8] text-white shadow-soft'
                   : 'text-[#697797] hover:text-ink'
@@ -1223,11 +1226,11 @@ export function POS() {
           </div>
 
           {/* Local vs Distance Billing Pill */}
-          <div className="hidden sm:inline-flex rounded-full bg-[#F7F5FF] p-0.5 border border-[#E5E7F5]">
+          <div className="inline-flex rounded-full bg-[#F7F5FF] p-0.5 border border-[#E5E7F5]">
             <button
               type="button"
               onClick={() => setBillingFormat('local')}
-              className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-all ${
+              className={`px-2 sm:px-2.5 py-1 rounded-full text-[11px] font-bold transition-all ${
                 billingFormat === 'local' ? 'bg-[#8244AD] text-white shadow-soft' : 'text-[#697797] hover:text-ink'
               }`}
             >
@@ -1236,7 +1239,7 @@ export function POS() {
             <button
               type="button"
               onClick={() => setBillingFormat('outstation')}
-              className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-all ${
+              className={`px-2 sm:px-2.5 py-1 rounded-full text-[11px] font-bold transition-all ${
                 billingFormat === 'outstation' ? 'bg-[#8244AD] text-white shadow-soft' : 'text-[#697797] hover:text-ink'
               }`}
             >
@@ -1245,12 +1248,12 @@ export function POS() {
           </div>
 
           {/* Hold Bills & Feedback messages */}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="secondary"
               size="sm"
               onClick={() => setShowHeldList((v) => !v)}
-              className="rounded-full text-xs py-0.5 px-2.5"
+              className="rounded-full text-xs py-1 px-2.5 min-h-[30px]"
             >
               Hold Bills ({heldInvoices.length})
             </Button>
@@ -1270,7 +1273,7 @@ export function POS() {
                 key={opt.key}
                 type="button"
                 onClick={() => changePriceType(opt.key)}
-                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
+                className={`px-2.5 sm:px-3 py-1 rounded-full text-xs font-bold transition-all ${
                   priceType === opt.key
                     ? 'bg-[#6F2DA8] text-white shadow-soft'
                     : 'text-[#697797] hover:text-ink'
@@ -1293,11 +1296,11 @@ export function POS() {
           {heldInvoices.length === 0 && <p className="text-xs text-ink-muted py-2">No held bills found.</p>}
           <div className="max-h-40 overflow-y-auto space-y-1.5">
             {heldInvoices.map((inv) => (
-              <div key={inv.id} className="flex items-center justify-between rounded-xl p-2 bg-[#F7F5FF] text-xs">
-                <span>
+              <div key={inv.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl p-2 bg-[#F7F5FF] text-xs">
+                <span className="min-w-0 break-words">
                   <strong>#{inv.id}</strong> · {inv.bill_type.toUpperCase()} · {inv.customer_name || 'Walk-in'} · ₹{inv.grand_total}
                 </span>
-                <div className="flex gap-2">
+                <div className="flex gap-2 shrink-0">
                   <button onClick={() => resumeHeld(inv.id)} className="font-bold text-[#6F2DA8] hover:underline">
                     Resume
                   </button>
@@ -1318,7 +1321,7 @@ export function POS() {
         {/* ================= COLUMN 1: Customer Selection ================= */}
         <div className="relative rounded-2xl border border-[#E5E7F5] bg-white p-3 shadow-2xs">
           {/* Header */}
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex flex-wrap items-center justify-between gap-1.5 mb-2">
             <div className="flex items-center gap-2">
               <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary-soft text-[#6F2DA8]">
                 <User size={14} />
@@ -1383,64 +1386,116 @@ export function POS() {
           {showCustomerDropdown && (
             <div
               ref={customerDropdownRef}
-              className="absolute left-3 right-3 top-[calc(100%-4px)] z-40 rounded-xl border border-[#E5E7F5] bg-white shadow-soft-lg overflow-x-auto max-h-52 overflow-y-auto scrollbar-thin"
+              className="absolute left-2 right-2 sm:left-3 sm:right-3 top-[calc(100%-4px)] z-40 rounded-xl border border-[#E5E7F5] bg-white shadow-soft-lg overflow-x-auto max-h-56 overflow-y-auto scrollbar-thin"
             >
-              <table className="w-full text-xs text-left">
-                <thead className="sticky top-0 bg-[#F7F5FF] border-b border-[#E5E7F5] z-10">
-                  <tr className="text-[#697797] font-bold text-[11px]">
-                    <th className="py-1.5 px-3">Customer Name</th>
-                    <th className="py-1.5 px-3">Phone</th>
-                    <th className="py-1.5 px-3 text-right">Area / Code</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#E5E7F5]/50">
+              {isNarrowMobile ? (
+                <div className="divide-y divide-[#E5E7F5]/60">
                   {displayedCustomers.map((c, index) => {
                     const isSelected = String(c.id) === String(customerId);
                     const isHighlighted = index === customerSelectedIndex;
                     const areaCode = `${c.address ? c.address.split(',')[0].trim() : 'Tenkasi'} / C${String(c.id).padStart(3, '0')}`;
 
                     return (
-                      <tr
+                      <div
                         key={c.id}
+                        data-dropdown-row="true"
                         onMouseDown={(e) => {
                           e.preventDefault();
                           selectCustomer(c);
                         }}
-                        onMouseMove={() => {
-                          if (customerSelectedIndex !== index) setCustomerSelectedIndex(index);
-                        }}
-                        className={`cursor-pointer transition-colors ${
+                        className={`cursor-pointer px-3 py-2 text-xs transition-colors ${
                           isHighlighted
-                            ? 'bg-[#6F2DA8] text-white font-bold shadow-2xs'
+                            ? 'bg-[#6F2DA8] text-white font-bold'
                             : isSelected
                             ? 'bg-[#EEE5FF] font-bold text-[#6F2DA8]'
                             : 'hover:bg-[#F7F5FF] text-ink'
                         }`}
                       >
-                        <td className="py-2 px-3 flex items-center gap-2">
-                          {isHighlighted ? (
-                            <CheckCircle2 size={15} className="text-white shrink-0" />
-                          ) : isSelected ? (
-                            <CheckCircle2 size={15} className="text-[#6F2DA8] shrink-0" />
-                          ) : (
-                            <User size={15} className="text-[#94A3B8] shrink-0" />
-                          )}
-                          <span className="truncate">{c.ledger_name || c.name}</span>
-                        </td>
-                        <td className={`py-2 px-3 ${isHighlighted ? 'text-white/90' : 'text-[#697797]'}`}>{c.phone || '-'}</td>
-                        <td className={`py-2 px-3 text-right font-mono ${isHighlighted ? 'text-white/90 font-bold' : 'text-[#697797]'}`}>{areaCode}</td>
-                      </tr>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                            {isHighlighted ? (
+                              <CheckCircle2 size={14} className="text-white shrink-0" />
+                            ) : isSelected ? (
+                              <CheckCircle2 size={14} className="text-[#6F2DA8] shrink-0" />
+                            ) : (
+                              <User size={14} className="text-[#94A3B8] shrink-0" />
+                            )}
+                            <span className="truncate font-semibold">{c.ledger_name || c.name}</span>
+                          </div>
+                          <span className={`font-mono text-[10px] shrink-0 ${isHighlighted ? 'text-white/90' : 'text-[#697797]'}`}>
+                            {c.phone || '-'}
+                          </span>
+                        </div>
+                        <div className={`mt-0.5 text-[10px] font-mono pl-5 ${isHighlighted ? 'text-white/80' : 'text-[#697797]'}`}>
+                          {areaCode}
+                        </div>
+                      </div>
                     );
                   })}
                   {displayedCustomers.length === 0 && (
-                    <tr>
-                      <td colSpan={3} className="py-6 text-center text-ink-muted">
-                        No matching customers found. Press Enter for Walk-in.
-                      </td>
-                    </tr>
+                    <div className="py-6 px-3 text-center text-xs text-ink-muted">
+                      No matching customers found. Press Enter for Walk-in.
+                    </div>
                   )}
-                </tbody>
-              </table>
+                </div>
+              ) : (
+                <table className="w-full text-xs text-left">
+                  <thead className="sticky top-0 bg-[#F7F5FF] border-b border-[#E5E7F5] z-10">
+                    <tr className="text-[#697797] font-bold text-[11px]">
+                      <th className="py-1.5 px-3">Customer Name</th>
+                      <th className="py-1.5 px-3">Phone</th>
+                      <th className="py-1.5 px-3 text-right">Area / Code</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#E5E7F5]/50">
+                    {displayedCustomers.map((c, index) => {
+                      const isSelected = String(c.id) === String(customerId);
+                      const isHighlighted = index === customerSelectedIndex;
+                      const areaCode = `${c.address ? c.address.split(',')[0].trim() : 'Tenkasi'} / C${String(c.id).padStart(3, '0')}`;
+
+                      return (
+                        <tr
+                          key={c.id}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            selectCustomer(c);
+                          }}
+                          onMouseMove={() => {
+                            if (customerSelectedIndex !== index) setCustomerSelectedIndex(index);
+                          }}
+                          className={`cursor-pointer transition-colors ${
+                            isHighlighted
+                              ? 'bg-[#6F2DA8] text-white font-bold shadow-2xs'
+                              : isSelected
+                              ? 'bg-[#EEE5FF] font-bold text-[#6F2DA8]'
+                              : 'hover:bg-[#F7F5FF] text-ink'
+                          }`}
+                        >
+                          <td className="py-2 px-3 flex items-center gap-2">
+                            {isHighlighted ? (
+                              <CheckCircle2 size={15} className="text-white shrink-0" />
+                            ) : isSelected ? (
+                              <CheckCircle2 size={15} className="text-[#6F2DA8] shrink-0" />
+                            ) : (
+                              <User size={15} className="text-[#94A3B8] shrink-0" />
+                            )}
+                            <span className="truncate">{c.ledger_name || c.name}</span>
+                          </td>
+                          <td className={`py-2 px-3 ${isHighlighted ? 'text-white/90' : 'text-[#697797]'}`}>{c.phone || '-'}</td>
+                          <td className={`py-2 px-3 text-right font-mono ${isHighlighted ? 'text-white/90 font-bold' : 'text-[#697797]'}`}>{areaCode}</td>
+                        </tr>
+                      );
+                    })}
+                    {displayedCustomers.length === 0 && (
+                      <tr>
+                        <td colSpan={3} className="py-6 text-center text-ink-muted">
+                          No matching customers found. Press Enter for Walk-in.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              )}
             </div>
           )}
 
@@ -1461,7 +1516,7 @@ export function POS() {
         {/* ================= COLUMN 2: Product Selection ================= */}
         <div className="relative rounded-2xl border border-[#E5E7F5] bg-white p-3 shadow-2xs">
           {/* Header */}
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex flex-wrap items-center justify-between gap-1.5 mb-2">
             <div className="flex items-center gap-2">
               <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary-soft text-[#6F2DA8]">
                 <Package size={14} />
@@ -1546,19 +1601,10 @@ export function POS() {
           {showProductDropdown && (
             <div
               ref={productDropdownRef}
-              className="absolute left-3 right-3 top-[calc(100%-4px)] z-40 rounded-xl border border-[#E5E7F5] bg-white shadow-soft-lg overflow-x-auto max-h-52 overflow-y-auto scrollbar-thin"
+              className="absolute left-2 right-2 sm:left-3 sm:right-3 top-[calc(100%-4px)] z-40 rounded-xl border border-[#E5E7F5] bg-white shadow-soft-lg overflow-x-auto max-h-56 overflow-y-auto scrollbar-thin"
             >
-              <table className="w-full text-xs text-left">
-                <thead className="sticky top-0 bg-[#F7F5FF] border-b border-[#E5E7F5] z-10">
-                  <tr className="text-[#697797] font-bold text-[11px]">
-                    <th className="py-1.5 px-3">Code</th>
-                    <th className="py-1.5 px-3">Product Name</th>
-                    <th className="py-1.5 px-3">MRP</th>
-                    <th className="py-1.5 px-3">Rate</th>
-                    <th className="py-1.5 px-3 text-right">Available Stock</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#E5E7F5]/50">
+              {isNarrowMobile ? (
+                <div className="divide-y divide-[#E5E7F5]/60">
                   {displayedProducts.map((item, index) => {
                     const stock = getItemStock(item);
                     const isHighlighted = index === productSelectedIndex;
@@ -1567,54 +1613,119 @@ export function POS() {
                     const mrp = Number(item.mrp || sellingRate).toFixed(2);
 
                     return (
-                      <tr
+                      <div
                         key={item.id}
+                        data-dropdown-row="true"
                         onMouseDown={(e) => {
                           e.preventDefault();
                           addItem(item);
                         }}
-                        onMouseMove={() => {
-                          hasUserNavigatedDropdownRef.current = true;
-                          if (productSelectedIndex !== index) setProductSelectedIndex(index);
-                        }}
-                        className={`cursor-pointer transition-colors ${
+                        className={`cursor-pointer px-3 py-2 text-xs transition-colors ${
                           isHighlighted
-                            ? 'bg-[#6F2DA8] text-white font-bold shadow-2xs'
+                            ? 'bg-[#6F2DA8] text-white font-bold'
                             : 'hover:bg-[#F7F5FF] text-ink'
                         }`}
                       >
-                        <td className={`py-2 px-3 font-mono ${isHighlighted ? 'text-white/90' : 'text-[#697797]'}`}>{code}</td>
-                        <td className="py-2 px-3 font-medium">
-                          <div className="flex items-center gap-1.5">
-                            {isHighlighted && <Check size={14} className="text-white shrink-0" />}
-                            <span className="truncate">{item.item_name}</span>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                            {isHighlighted && <Check size={13} className="text-white shrink-0" />}
+                            <span className="truncate font-semibold">{item.item_name}</span>
                           </div>
-                        </td>
-                        <td className={`py-2 px-3 ${isHighlighted ? 'text-white/90' : 'text-[#697797]'}`}>₹ {mrp}</td>
-                        <td className={`py-2 px-3 font-semibold ${isHighlighted ? 'text-white' : ''}`}>₹ {Number(sellingRate).toFixed(2)}</td>
-                        <td className="py-2 px-3 text-right">
                           <span
-                            className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
                               isHighlighted
                                 ? 'bg-white/20 text-white'
                                 : stock > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-700'
                             }`}
                           >
-                            {stock}
+                            Stock: {stock}
                           </span>
-                        </td>
-                      </tr>
+                        </div>
+                        <div className={`mt-1 flex items-center justify-between text-[11px] ${isHighlighted ? 'text-white/90' : 'text-[#697797]'}`}>
+                          <span className="font-mono">{code}</span>
+                          <div className="flex items-center gap-2.5">
+                            <span>MRP ₹{mrp}</span>
+                            <span className={`font-bold ${isHighlighted ? 'text-white' : 'text-ink'}`}>Rate ₹{Number(sellingRate).toFixed(2)}</span>
+                          </div>
+                        </div>
+                      </div>
                     );
                   })}
                   {displayedProducts.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="py-6 text-center text-ink-muted">
-                        No matching products found.
-                      </td>
-                    </tr>
+                    <div className="py-6 px-3 text-center text-xs text-ink-muted">
+                      No matching products found.
+                    </div>
                   )}
-                </tbody>
-              </table>
+                </div>
+              ) : (
+                <table className="w-full text-xs text-left">
+                  <thead className="sticky top-0 bg-[#F7F5FF] border-b border-[#E5E7F5] z-10">
+                    <tr className="text-[#697797] font-bold text-[11px]">
+                      <th className="py-1.5 px-3">Code</th>
+                      <th className="py-1.5 px-3">Product Name</th>
+                      <th className="py-1.5 px-3">MRP</th>
+                      <th className="py-1.5 px-3">Rate</th>
+                      <th className="py-1.5 px-3 text-right">Available Stock</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#E5E7F5]/50">
+                    {displayedProducts.map((item, index) => {
+                      const stock = getItemStock(item);
+                      const isHighlighted = index === productSelectedIndex;
+                      const code = item.item_code || `P${String(item.id).padStart(3, '0')}`;
+                      const sellingRate = resolveSellingPrice(item, item.base_unit_id, priceType).rate;
+                      const mrp = Number(item.mrp || sellingRate).toFixed(2);
+
+                      return (
+                        <tr
+                          key={item.id}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            addItem(item);
+                          }}
+                          onMouseMove={() => {
+                            hasUserNavigatedDropdownRef.current = true;
+                            if (productSelectedIndex !== index) setProductSelectedIndex(index);
+                          }}
+                          className={`cursor-pointer transition-colors ${
+                            isHighlighted
+                              ? 'bg-[#6F2DA8] text-white font-bold shadow-2xs'
+                              : 'hover:bg-[#F7F5FF] text-ink'
+                          }`}
+                        >
+                          <td className={`py-2 px-3 font-mono ${isHighlighted ? 'text-white/90' : 'text-[#697797]'}`}>{code}</td>
+                          <td className="py-2 px-3 font-medium">
+                            <div className="flex items-center gap-1.5">
+                              {isHighlighted && <Check size={14} className="text-white shrink-0" />}
+                              <span className="truncate">{item.item_name}</span>
+                            </div>
+                          </td>
+                          <td className={`py-2 px-3 ${isHighlighted ? 'text-white/90' : 'text-[#697797]'}`}>₹ {mrp}</td>
+                          <td className={`py-2 px-3 font-semibold ${isHighlighted ? 'text-white' : ''}`}>₹ {Number(sellingRate).toFixed(2)}</td>
+                          <td className="py-2 px-3 text-right">
+                            <span
+                              className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                isHighlighted
+                                  ? 'bg-white/20 text-white'
+                                  : stock > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-700'
+                              }`}
+                            >
+                              {stock}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {displayedProducts.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="py-6 text-center text-ink-muted">
+                          No matching products found.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              )}
             </div>
           )}
         </div>
@@ -1680,217 +1791,399 @@ export function POS() {
           </div>
         )}
 
-        {/* Internal Scrollable Table Container */}
+        {/* Internal Scrollable Table / Mobile Card Container */}
         <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto scrollbar-thin rounded-xl border border-[#E5E7F5]">
-          <table className="w-full text-xs text-left min-w-[900px]">
-            <thead className="sticky top-0 bg-[#F7F5FF] border-b border-[#E5E7F5] z-10">
-              <tr className="text-[#697797] font-bold text-[11px]">
-                <th className="py-2 px-2 text-center w-10">#</th>
-                <th className="py-2 px-3 w-20">Code</th>
-                <th className="py-2 px-3 min-w-[180px]">Product Name</th>
-                <th className="py-2 px-3 text-right w-24">MRP (₹)</th>
-                <th className="py-2 px-3 text-right w-24">Rate (₹)</th>
-                <th className="py-2 px-3 text-center w-24">Qty</th>
-                <th className="py-2 px-3 text-center w-28">Discount ₹</th>
-                <th className="py-2 px-3 text-center w-24">Discount %</th>
-                <th className="py-2 px-3 text-center w-24">Free Qty</th>
-                <th className="py-2 px-3 text-right w-28">Amount (₹)</th>
-                <th className="py-2 px-3 text-center w-20">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#E5E7F5]">
+          {isCompactPos ? (
+            <div className="divide-y divide-[#E5E7F5]">
               {pricedLines.map((line, idx) => {
                 const code = line.item?.item_code || `P${String(line.item?.id || idx + 1).padStart(3, '0')}`;
                 const name = line.item ? line.item.item_name : (line.name || line.item_name_snapshot);
                 const mrp = Number(line.priced.mrp).toFixed(2);
-                const rate = Number(line.rate).toFixed(2);
                 const lineTotal = Number(line.priced.line_total).toFixed(2);
 
                 return (
-                  <tr key={line.key} className="hover:bg-[#FAF8FF] transition-colors">
-                    {/* # Index */}
-                    <td className="py-2 px-2 text-center text-[#697797] font-medium">{idx + 1}</td>
-
-                    {/* Code */}
-                    <td className="py-2 px-3 font-mono text-[#697797]">{code}</td>
-
-                    {/* Product Name */}
-                    <td className="py-2 px-3 font-semibold text-ink">
-                      <div className="flex flex-col">
-                        <span>{name}</span>
-                        {line.item && (
-                          <div className="mt-0.5 flex items-center gap-1.5">
-                            {taxBadge(line.item, billType)}
-                            {Number(line.free_qty) > 0 && isFreeQtyAllowed && (
-                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
-                                Free: {line.free_qty}
-                              </span>
-                            )}
-                          </div>
-                        )}
+                  <div key={line.key} className="p-2.5 bg-white space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-mono text-[#697797]">
+                          <span className="font-bold text-[#6F2DA8]">#{idx + 1}</span>
+                          <span>· {code}</span>
+                          {line.item && taxBadge(line.item, billType)}
+                        </div>
+                        <div className="text-xs font-bold text-ink break-words leading-snug mt-0.5">{name}</div>
+                        <div className="text-[11px] text-[#697797] mt-0.5">
+                          MRP ₹ {mrp}
+                          {Number(line.free_qty) > 0 && isFreeQtyAllowed && (
+                            <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
+                              Free: {line.free_qty}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </td>
-
-                    {/* MRP */}
-                    <td className="py-2 px-3 text-right text-[#697797]">{mrp}</td>
-
-                    {/* Rate with 4-way arrow nav */}
-                    <td className="py-2 px-3 text-right font-medium">
-                      <input
-                        id={`bill-cell-${idx}-rate`}
-                        type="text"
-                        inputMode="decimal"
-                        value={line.rate ?? ''}
-                        readOnly={!canEditPrice}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === '' || /^[0-9]*\.?[0-9]*$/.test(val)) {
-                            updateLine(line.key, { rate: val });
-                          }
-                        }}
-                        onKeyDown={(e) => handleCellKeyDown(e, idx, 'rate')}
-                        className={`w-16 rounded-lg border px-1.5 py-0.5 text-right text-xs font-semibold outline-none transition-all ${
-                          canEditPrice
-                            ? 'border-[#E5E7F5] bg-white text-ink focus:border-[#6F2DA8] focus:ring-1 focus:ring-[#6F2DA8]/20'
-                            : 'border-transparent bg-transparent text-[#697797] cursor-default'
-                        }`}
-                      />
-                    </td>
-
-                    {/* Quantity with stepper & 4-way arrow nav */}
-                    <td className="py-2 px-3 text-center">
-                      <div className="inline-flex items-center rounded-lg border border-[#E5E7F5] bg-white">
-                        <button
-                          type="button"
-                          tabIndex={-1}
-                          onClick={() => bumpQty(line, -1)}
-                          disabled={Number(line.qty) <= 1}
-                          className="px-1.5 py-0.5 text-[#697797] hover:text-ink disabled:opacity-30"
-                        >
-                          <Minus size={10} />
-                        </button>
-                        <input
-                          id={`bill-cell-${idx}-qty`}
-                          type="text"
-                          inputMode="decimal"
-                          value={line.qty ?? ''}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            if (val === '' || /^[0-9]*\.?[0-9]*$/.test(val)) {
-                              updateLine(line.key, { qty: val });
-                            }
-                          }}
-                          onKeyDown={(e) => handleCellKeyDown(e, idx, 'qty')}
-                          className="w-12 text-center py-0.5 text-xs font-bold text-ink bg-transparent focus:outline-none"
-                        />
-                        <button
-                          type="button"
-                          tabIndex={-1}
-                          onClick={() => bumpQty(line, 1)}
-                          className="px-1.5 py-0.5 text-[#697797] hover:text-ink"
-                        >
-                          <Plus size={10} />
-                        </button>
-                      </div>
-                    </td>
-
-                    {/* Discount ₹ with 4-way arrow nav */}
-                    <td className="py-2 px-3 text-center">
-                      <input
-                        id={`bill-cell-${idx}-discount_amount`}
-                        type="text"
-                        inputMode="decimal"
-                        placeholder="0.00"
-                        value={line.discount_amount ?? ''}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === '' || /^[0-9]*\.?[0-9]*$/.test(val)) {
-                            updateLine(line.key, { discount_amount: val });
-                          }
-                        }}
-                        onKeyDown={(e) => handleCellKeyDown(e, idx, 'discount_amount')}
-                        className="w-20 rounded-lg border border-[#E5E7F5] px-1.5 py-0.5 text-right text-xs font-semibold text-ink focus:border-[#6F2DA8] focus:ring-1 focus:ring-[#6F2DA8]/20 outline-none"
-                      />
-                    </td>
-
-                    {/* Discount % with 4-way arrow nav */}
-                    <td className="py-2 px-3 text-center">
-                      <input
-                        id={`bill-cell-${idx}-discount_percent`}
-                        type="text"
-                        inputMode="decimal"
-                        placeholder="0.00"
-                        value={line.discount_percent ?? ''}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === '' || /^[0-9]*\.?[0-9]*$/.test(val)) {
-                            const num = parseFloat(val);
-                            if (val === '' || isNaN(num) || num <= 100) {
-                              updateLine(line.key, { discount_percent: val });
-                            }
-                          }
-                        }}
-                        onKeyDown={(e) => handleCellKeyDown(e, idx, 'discount_percent')}
-                        className="w-16 rounded-lg border border-[#E5E7F5] px-1.5 py-0.5 text-right text-xs font-semibold text-ink focus:border-[#6F2DA8] focus:ring-1 focus:ring-[#6F2DA8]/20 outline-none"
-                      />
-                    </td>
-
-                    {/* Free Qty with 4-way arrow nav */}
-                    <td className="py-2 px-3 text-center">
-                      <input
-                        id={`bill-cell-${idx}-free_qty`}
-                        type="text"
-                        inputMode="decimal"
-                        disabled={!isFreeQtyAllowed}
-                        value={line.free_qty ?? 0}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === '' || /^[0-9]*\.?[0-9]*$/.test(val)) {
-                            updateLine(line.key, { free_qty: val });
-                          }
-                        }}
-                        onKeyDown={(e) => handleCellKeyDown(e, idx, 'free_qty')}
-                        className="w-14 rounded-lg border border-[#E5E7F5] px-1 py-0.5 text-center text-xs text-ink disabled:bg-gray-50 disabled:opacity-50 focus:border-[#6F2DA8] outline-none"
-                      />
-                    </td>
-
-                    {/* Line Amount */}
-                    <td className="py-2 px-3 text-right font-bold text-ink">
-                      {lineTotal}
-                    </td>
-
-                    {/* Actions */}
-                    <td className="py-2 px-3 text-center">
-                      <div className="flex items-center justify-center gap-1">
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <div className="text-right">
+                          <div className="text-[10px] text-[#697797] font-semibold">Amount</div>
+                          <div className="text-sm font-black text-ink">₹ {lineTotal}</div>
+                        </div>
                         <button
                           type="button"
                           onClick={() => removeLine(line.key)}
                           title="Remove item"
-                          className="p-1 rounded-lg text-rose-500 hover:bg-rose-50 transition-colors"
+                          className="p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-rose-500 hover:bg-rose-50 transition-colors"
                         >
-                          <Trash2 size={13} />
+                          <Trash2 size={15} />
                         </button>
                       </div>
-                    </td>
-                  </tr>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="flex flex-col gap-0.5">
+                        <span className="text-[10px] font-bold uppercase text-[#697797]">Rate (₹)</span>
+                        <input
+                          id={`bill-cell-${idx}-rate`}
+                          type="text"
+                          inputMode="decimal"
+                          value={line.rate ?? ''}
+                          readOnly={!canEditPrice}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '' || /^[0-9]*\.?[0-9]*$/.test(val)) {
+                              updateLine(line.key, { rate: val });
+                            }
+                          }}
+                          onKeyDown={(e) => handleCellKeyDown(e, idx, 'rate')}
+                          className={`w-full rounded-lg border px-2 py-1.5 text-right text-xs font-semibold outline-none transition-all min-h-[34px] ${
+                            canEditPrice
+                              ? 'border-[#E5E7F5] bg-white text-ink focus:border-[#6F2DA8] focus:ring-1 focus:ring-[#6F2DA8]/20'
+                              : 'border-[#E5E7F5] bg-[#F7F5FF]/50 text-[#697797] cursor-default'
+                          }`}
+                        />
+                      </label>
+
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[10px] font-bold uppercase text-[#697797]">Qty</span>
+                        <div className="flex items-center justify-between rounded-lg border border-[#E5E7F5] bg-white min-h-[34px]">
+                          <button
+                            type="button"
+                            tabIndex={-1}
+                            onClick={() => bumpQty(line, -1)}
+                            disabled={Number(line.qty) <= 1}
+                            className="px-2.5 py-1.5 text-[#697797] hover:text-ink disabled:opacity-30 min-h-[32px]"
+                          >
+                            <Minus size={12} />
+                          </button>
+                          <input
+                            id={`bill-cell-${idx}-qty`}
+                            type="text"
+                            inputMode="decimal"
+                            value={line.qty ?? ''}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === '' || /^[0-9]*\.?[0-9]*$/.test(val)) {
+                                updateLine(line.key, { qty: val });
+                              }
+                            }}
+                            onKeyDown={(e) => handleCellKeyDown(e, idx, 'qty')}
+                            className="w-12 flex-1 min-w-0 text-center py-1 text-xs font-bold text-ink bg-transparent focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            tabIndex={-1}
+                            onClick={() => bumpQty(line, 1)}
+                            className="px-2.5 py-1.5 text-[#697797] hover:text-ink min-h-[32px]"
+                          >
+                            <Plus size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2">
+                      <label className="flex flex-col gap-0.5">
+                        <span className="text-[10px] font-bold uppercase text-[#697797]">Disc ₹</span>
+                        <input
+                          id={`bill-cell-${idx}-discount_amount`}
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="0.00"
+                          value={line.discount_amount ?? ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '' || /^[0-9]*\.?[0-9]*$/.test(val)) {
+                              updateLine(line.key, { discount_amount: val });
+                            }
+                          }}
+                          onKeyDown={(e) => handleCellKeyDown(e, idx, 'discount_amount')}
+                          className="w-full rounded-lg border border-[#E5E7F5] px-2 py-1 text-right text-xs font-semibold text-ink focus:border-[#6F2DA8] outline-none min-h-[32px]"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-0.5">
+                        <span className="text-[10px] font-bold uppercase text-[#697797]">Disc %</span>
+                        <input
+                          id={`bill-cell-${idx}-discount_percent`}
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="0.00"
+                          value={line.discount_percent ?? ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '' || /^[0-9]*\.?[0-9]*$/.test(val)) {
+                              const num = parseFloat(val);
+                              if (val === '' || isNaN(num) || num <= 100) {
+                                updateLine(line.key, { discount_percent: val });
+                              }
+                            }
+                          }}
+                          onKeyDown={(e) => handleCellKeyDown(e, idx, 'discount_percent')}
+                          className="w-full rounded-lg border border-[#E5E7F5] px-2 py-1 text-right text-xs font-semibold text-ink focus:border-[#6F2DA8] outline-none min-h-[32px]"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-0.5">
+                        <span className="text-[10px] font-bold uppercase text-[#697797]">Free</span>
+                        <input
+                          id={`bill-cell-${idx}-free_qty`}
+                          type="text"
+                          inputMode="decimal"
+                          disabled={!isFreeQtyAllowed}
+                          value={line.free_qty ?? 0}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '' || /^[0-9]*\.?[0-9]*$/.test(val)) {
+                              updateLine(line.key, { free_qty: val });
+                            }
+                          }}
+                          onKeyDown={(e) => handleCellKeyDown(e, idx, 'free_qty')}
+                          className="w-full rounded-lg border border-[#E5E7F5] px-2 py-1 text-center text-xs text-ink disabled:bg-gray-50 disabled:opacity-50 focus:border-[#6F2DA8] outline-none min-h-[32px]"
+                        />
+                      </label>
+                    </div>
+                  </div>
                 );
               })}
 
               {pricedLines.length === 0 && (
-                <tr>
-                  <td colSpan={11} className="py-10 text-center text-[#697797]">
-                    <div className="flex flex-col items-center justify-center gap-1.5">
-                      <PackageX size={24} className="text-[#94A3B8]" />
-                      <p className="text-xs font-semibold">Bill is empty.</p>
-                      <p className="text-[11px] text-[#94A3B8]">
-                        Type product name or scan barcode to add items.
-                      </p>
-                    </div>
-                  </td>
-                </tr>
+                <div className="py-10 px-4 text-center text-[#697797]">
+                  <div className="flex flex-col items-center justify-center gap-1.5">
+                    <PackageX size={24} className="text-[#94A3B8]" />
+                    <p className="text-xs font-semibold">Bill is empty.</p>
+                    <p className="text-[11px] text-[#94A3B8]">
+                      Type product name or scan barcode to add items.
+                    </p>
+                  </div>
+                </div>
               )}
-            </tbody>
-          </table>
+            </div>
+          ) : (
+            <table className="w-full text-xs text-left min-w-[900px]">
+              <thead className="sticky top-0 bg-[#F7F5FF] border-b border-[#E5E7F5] z-10">
+                <tr className="text-[#697797] font-bold text-[11px]">
+                  <th className="py-2 px-2 text-center w-10">#</th>
+                  <th className="py-2 px-3 w-20">Code</th>
+                  <th className="py-2 px-3 min-w-[180px]">Product Name</th>
+                  <th className="py-2 px-3 text-right w-24">MRP (₹)</th>
+                  <th className="py-2 px-3 text-right w-24">Rate (₹)</th>
+                  <th className="py-2 px-3 text-center w-24">Qty</th>
+                  <th className="py-2 px-3 text-center w-28">Discount ₹</th>
+                  <th className="py-2 px-3 text-center w-24">Discount %</th>
+                  <th className="py-2 px-3 text-center w-24">Free Qty</th>
+                  <th className="py-2 px-3 text-right w-28">Amount (₹)</th>
+                  <th className="py-2 px-3 text-center w-20">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#E5E7F5]">
+                {pricedLines.map((line, idx) => {
+                  const code = line.item?.item_code || `P${String(line.item?.id || idx + 1).padStart(3, '0')}`;
+                  const name = line.item ? line.item.item_name : (line.name || line.item_name_snapshot);
+                  const mrp = Number(line.priced.mrp).toFixed(2);
+                  const rate = Number(line.rate).toFixed(2);
+                  const lineTotal = Number(line.priced.line_total).toFixed(2);
+
+                  return (
+                    <tr key={line.key} className="hover:bg-[#FAF8FF] transition-colors">
+                      {/* # Index */}
+                      <td className="py-2 px-2 text-center text-[#697797] font-medium">{idx + 1}</td>
+
+                      {/* Code */}
+                      <td className="py-2 px-3 font-mono text-[#697797]">{code}</td>
+
+                      {/* Product Name */}
+                      <td className="py-2 px-3 font-semibold text-ink">
+                        <div className="flex flex-col">
+                          <span>{name}</span>
+                          {line.item && (
+                            <div className="mt-0.5 flex items-center gap-1.5">
+                              {taxBadge(line.item, billType)}
+                              {Number(line.free_qty) > 0 && isFreeQtyAllowed && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
+                                  Free: {line.free_qty}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* MRP */}
+                      <td className="py-2 px-3 text-right text-[#697797]">{mrp}</td>
+
+                      {/* Rate with 4-way arrow nav */}
+                      <td className="py-2 px-3 text-right font-medium">
+                        <input
+                          id={`bill-cell-${idx}-rate`}
+                          type="text"
+                          inputMode="decimal"
+                          value={line.rate ?? ''}
+                          readOnly={!canEditPrice}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '' || /^[0-9]*\.?[0-9]*$/.test(val)) {
+                              updateLine(line.key, { rate: val });
+                            }
+                          }}
+                          onKeyDown={(e) => handleCellKeyDown(e, idx, 'rate')}
+                          className={`w-16 rounded-lg border px-1.5 py-0.5 text-right text-xs font-semibold outline-none transition-all ${
+                            canEditPrice
+                              ? 'border-[#E5E7F5] bg-white text-ink focus:border-[#6F2DA8] focus:ring-1 focus:ring-[#6F2DA8]/20'
+                              : 'border-transparent bg-transparent text-[#697797] cursor-default'
+                          }`}
+                        />
+                      </td>
+
+                      {/* Quantity with stepper & 4-way arrow nav */}
+                      <td className="py-2 px-3 text-center">
+                        <div className="inline-flex items-center rounded-lg border border-[#E5E7F5] bg-white">
+                          <button
+                            type="button"
+                            tabIndex={-1}
+                            onClick={() => bumpQty(line, -1)}
+                            disabled={Number(line.qty) <= 1}
+                            className="px-1.5 py-0.5 text-[#697797] hover:text-ink disabled:opacity-30"
+                          >
+                            <Minus size={10} />
+                          </button>
+                          <input
+                            id={`bill-cell-${idx}-qty`}
+                            type="text"
+                            inputMode="decimal"
+                            value={line.qty ?? ''}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === '' || /^[0-9]*\.?[0-9]*$/.test(val)) {
+                                updateLine(line.key, { qty: val });
+                              }
+                            }}
+                            onKeyDown={(e) => handleCellKeyDown(e, idx, 'qty')}
+                            className="w-12 text-center py-0.5 text-xs font-bold text-ink bg-transparent focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            tabIndex={-1}
+                            onClick={() => bumpQty(line, 1)}
+                            className="px-1.5 py-0.5 text-[#697797] hover:text-ink"
+                          >
+                            <Plus size={10} />
+                          </button>
+                        </div>
+                      </td>
+
+                      {/* Discount ₹ with 4-way arrow nav */}
+                      <td className="py-2 px-3 text-center">
+                        <input
+                          id={`bill-cell-${idx}-discount_amount`}
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="0.00"
+                          value={line.discount_amount ?? ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '' || /^[0-9]*\.?[0-9]*$/.test(val)) {
+                              updateLine(line.key, { discount_amount: val });
+                            }
+                          }}
+                          onKeyDown={(e) => handleCellKeyDown(e, idx, 'discount_amount')}
+                          className="w-20 rounded-lg border border-[#E5E7F5] px-1.5 py-0.5 text-right text-xs font-semibold text-ink focus:border-[#6F2DA8] focus:ring-1 focus:ring-[#6F2DA8]/20 outline-none"
+                        />
+                      </td>
+
+                      {/* Discount % with 4-way arrow nav */}
+                      <td className="py-2 px-3 text-center">
+                        <input
+                          id={`bill-cell-${idx}-discount_percent`}
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="0.00"
+                          value={line.discount_percent ?? ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '' || /^[0-9]*\.?[0-9]*$/.test(val)) {
+                              const num = parseFloat(val);
+                              if (val === '' || isNaN(num) || num <= 100) {
+                                updateLine(line.key, { discount_percent: val });
+                              }
+                            }
+                          }}
+                          onKeyDown={(e) => handleCellKeyDown(e, idx, 'discount_percent')}
+                          className="w-16 rounded-lg border border-[#E5E7F5] px-1.5 py-0.5 text-right text-xs font-semibold text-ink focus:border-[#6F2DA8] focus:ring-1 focus:ring-[#6F2DA8]/20 outline-none"
+                        />
+                      </td>
+
+                      {/* Free Qty with 4-way arrow nav */}
+                      <td className="py-2 px-3 text-center">
+                        <input
+                          id={`bill-cell-${idx}-free_qty`}
+                          type="text"
+                          inputMode="decimal"
+                          disabled={!isFreeQtyAllowed}
+                          value={line.free_qty ?? 0}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '' || /^[0-9]*\.?[0-9]*$/.test(val)) {
+                              updateLine(line.key, { free_qty: val });
+                            }
+                          }}
+                          onKeyDown={(e) => handleCellKeyDown(e, idx, 'free_qty')}
+                          className="w-14 rounded-lg border border-[#E5E7F5] px-1 py-0.5 text-center text-xs text-ink disabled:bg-gray-50 disabled:opacity-50 focus:border-[#6F2DA8] outline-none"
+                        />
+                      </td>
+
+                      {/* Line Amount */}
+                      <td className="py-2 px-3 text-right font-bold text-ink">
+                        {lineTotal}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="py-2 px-3 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => removeLine(line.key)}
+                            title="Remove item"
+                            className="p-1 rounded-lg text-rose-500 hover:bg-rose-50 transition-colors"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {pricedLines.length === 0 && (
+                  <tr>
+                    <td colSpan={11} className="py-10 text-center text-[#697797]">
+                      <div className="flex flex-col items-center justify-center gap-1.5">
+                        <PackageX size={24} className="text-[#94A3B8]" />
+                        <p className="text-xs font-semibold">Bill is empty.</p>
+                        <p className="text-[11px] text-[#94A3B8]">
+                          Type product name or scan barcode to add items.
+                        </p>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
 
@@ -2030,8 +2323,8 @@ export function POS() {
       </div>
 
       {/* 6. STATUS FOOTER BAR */}
-      <div className="flex items-center justify-between text-xs text-[#697797] pt-1 border-t border-[#E5E7F5] shrink-0">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-1.5 text-[11px] sm:text-xs text-[#697797] pt-1 border-t border-[#E5E7F5] shrink-0">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
           <span>
             <kbd className="font-bold text-ink bg-white px-1.5 py-0.5 rounded border border-[#E5E7F5]">F6</kbd> : Save
           </span>
@@ -2259,7 +2552,7 @@ function PaymentModal({
         {!splitMode ? (
           <>
             <div className="mb-1 text-[11px] font-semibold text-ink-muted">Payment Method</div>
-            <div className="mb-2 grid grid-cols-5 gap-1.5" role="radiogroup" aria-label="Payment Method">
+            <div className="mb-2 grid grid-cols-2 min-[380px]:grid-cols-3 sm:grid-cols-5 gap-1.5" role="radiogroup" aria-label="Payment Method">
               {PAYMENT_METHODS.map((m) => (
                 <button
                   key={m.key}

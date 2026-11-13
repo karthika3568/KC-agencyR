@@ -131,7 +131,7 @@ export function CustomerSelect({
   };
 
   return (
-    <div ref={wrapperRef} className={`relative min-w-[240px] flex-1 ${className}`}>
+    <div ref={wrapperRef} className={`relative min-w-0 w-full sm:min-w-[240px] flex-1 ${className}`}>
       <div className="relative flex items-center">
         <Search size={15} className="pointer-events-none absolute left-3 text-ink-muted z-10" />
         <input

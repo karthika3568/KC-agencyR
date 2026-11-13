@@ -158,8 +158,8 @@ function PrebookingPrintView({ data, onClose }) {
     0
   );
   return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-4">
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto bg-white p-8 text-sm text-ink shadow-xl print:max-h-none print:shadow-none">
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-3 sm:p-4">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto bg-white p-4 sm:p-8 text-sm text-ink shadow-xl print:max-h-none print:shadow-none">
         <div className="mb-1 flex items-center justify-between print:hidden">
           <Button variant="secondary" size="sm" onClick={onClose}>
             Close
@@ -187,30 +187,32 @@ function PrebookingPrintView({ data, onClose }) {
           {data.issue_no && <div><b>Van Issue:</b> {data.issue_no}</div>}
           {data.invoice_no && <div><b>Invoice Bill:</b> {data.invoice_no}</div>}
         </div>
-        <table className="mb-3 w-full border-collapse text-xs">
-          <thead>
-            <tr className="border-y border-ink/30 text-left">
-              <th className="py-1">S.No</th>
-              <th className="py-1">Product</th>
-              <th className="py-1">Code</th>
-              <th className="py-1">Qty</th>
-              <th className="py-1">Rate</th>
-              <th className="py-1">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.items.map((l, idx) => (
-              <tr key={l.id || idx} className="border-b border-ink/10">
-                <td className="py-1">{idx + 1}</td>
-                <td className="py-1">{l.item_name}</td>
-                <td className="py-1">{l.item_code}</td>
-                <td className="py-1">{l.qty}</td>
-                <td className="py-1">{l.rate}</td>
-                <td className="py-1">{(Number(l.qty) * Number(l.rate)).toFixed(2)}</td>
+        <div className="mb-3 overflow-x-auto">
+          <table className="w-full min-w-[460px] border-collapse text-xs">
+            <thead>
+              <tr className="border-y border-ink/30 text-left">
+                <th className="py-1">S.No</th>
+                <th className="py-1">Product</th>
+                <th className="py-1">Code</th>
+                <th className="py-1">Qty</th>
+                <th className="py-1">Rate</th>
+                <th className="py-1">Amount</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {data.items.map((l, idx) => (
+                <tr key={l.id || idx} className="border-b border-ink/10">
+                  <td className="py-1">{idx + 1}</td>
+                  <td className="py-1">{l.item_name}</td>
+                  <td className="py-1">{l.item_code}</td>
+                  <td className="py-1">{l.qty}</td>
+                  <td className="py-1">{l.rate}</td>
+                  <td className="py-1">{(Number(l.qty) * Number(l.rate)).toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
         <div className="mb-3 flex justify-end">
           <div className="w-48 text-xs">
             <div className="flex justify-between"><span>Subtotal</span><span>₹{subtotal.toFixed(2)}</span></div>
@@ -664,7 +666,7 @@ function CustomerPrebookingPanel() {
 
       <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
         {/* Left Column Form */}
-        <div className="lg:col-span-5">
+        <div className="min-w-0 lg:col-span-5">
           <div className="card p-3.5 space-y-2.5 lg:sticky lg:top-3">
             <div className="border-b border-border-soft pb-2">
               <h2 className="font-semibold text-ink text-sm sm:text-base flex items-center gap-2">
@@ -758,7 +760,7 @@ function CustomerPrebookingPanel() {
         </div>
 
         {/* Right Column Table */}
-        <div className="lg:col-span-7 space-y-2.5">
+        <div className="min-w-0 lg:col-span-7 space-y-2.5">
           <div className="card p-2.5 flex flex-col sm:flex-row items-center justify-between gap-2">
             <div className="relative w-full sm:w-64">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
@@ -785,7 +787,119 @@ function CustomerPrebookingPanel() {
             <div className="px-3.5 py-2 border-b border-border-soft flex items-center justify-between">
               <h3 className="font-semibold text-ink text-xs sm:text-sm">Customer Pre-Bookings Register</h3>
             </div>
-            <div className="max-h-[calc(100vh-240px)] overflow-x-auto overflow-y-auto">
+            <div className="md:hidden divide-y divide-border-soft/60 max-h-[calc(100dvh-250px)] overflow-y-auto">
+              {prebookingPagination.pagedItems.map((r) => {
+                const statusKey = r.status || 'pending';
+                return (
+                  <div key={r.id} className="p-3 space-y-2 hover:bg-page/50">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-mono font-bold text-sm text-ink break-words">{r.prebooking_no}</div>
+                        <div className="text-xs font-medium text-ink break-words">{r.customer_name}</div>
+                        <div className="text-[11px] text-ink-muted">{r.created_at?.slice(0, 10)}</div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="text-sm font-bold text-emerald-400">₹{Number(r.estimated_total || 0).toFixed(2)}</div>
+                        <Badge variant={PREBOOKING_STATUS_VARIANT[statusKey] || 'warning'}>
+                          {statusKey.replace(/_/g, ' ')}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {r.issue_no && (
+                        <button
+                          type="button"
+                          onClick={() => setSearchParams({ tab: 'van-stock' })}
+                          className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 px-1.5 py-0.5 rounded border border-amber-500/20"
+                        >
+                          <Truck size={10} /> {r.issue_no}
+                        </button>
+                      )}
+                      {r.invoice_no && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                          <Receipt size={10} /> {r.invoice_no}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center justify-end gap-1.5 pt-1.5 border-t border-border-soft/50">
+                      <button
+                        type="button"
+                        title="View Details"
+                        onClick={() => setViewingId(r.id)}
+                        className="p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border border-border-soft hover:bg-surface-subtle text-ink-muted hover:text-ink"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        title="Print Slip"
+                        onClick={() => setPrintingId(r.id)}
+                        className="p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border border-emerald-200 hover:bg-emerald-50 text-emerald-600"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                      </button>
+                      {statusKey !== 'cancelled' && !r.invoice_id && (
+                        <Link
+                          to={`/pos?prebooking_id=${r.id}`}
+                          title="Convert to Bill in POS"
+                          className="p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border border-border-soft hover:bg-surface-subtle text-ink-muted hover:text-emerald-400"
+                        >
+                          <Receipt className="w-3.5 h-3.5" />
+                        </Link>
+                      )}
+                      {statusKey !== 'completed' && statusKey !== 'cancelled' && !r.van_issue_id && (
+                        <button
+                          type="button"
+                          title="Dispatch to Van"
+                          onClick={() => setDispatchingBooking(r)}
+                          className="p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border border-border-soft hover:bg-surface-subtle text-ink-muted hover:text-gold"
+                        >
+                          <Truck className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      {canCreate && statusKey === 'pending' && (
+                        <button
+                          type="button"
+                          title="Edit"
+                          onClick={() => openEdit(r)}
+                          className="p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border border-border-soft hover:bg-surface-subtle text-ink-muted hover:text-gold"
+                        >
+                          <Plus className="w-3.5 h-3.5 rotate-45" />
+                        </button>
+                      )}
+                      {canManageStatus &&
+                        PREBOOKING_NEXT_STATUS[statusKey]
+                          ?.filter((s) => s !== 'cancelled')
+                          .map((next) => (
+                            <button
+                              key={next}
+                              type="button"
+                              title={`Mark ${next}`}
+                              onClick={() => statusMutation.mutate({ id: r.id, status: next })}
+                              className="p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border border-border-soft hover:bg-surface-subtle text-ink-muted hover:text-emerald-400"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                            </button>
+                          ))}
+                      {canManageStatus && PREBOOKING_NEXT_STATUS[statusKey]?.includes('cancelled') && (
+                        <button
+                          type="button"
+                          title="Cancel Pre-booking"
+                          onClick={() => cancelMutation.mutate(r.id)}
+                          className="p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border border-rose-200 hover:bg-surface-subtle text-danger"
+                        >
+                          <Ban className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {prebookingPagination.total === 0 && (
+                <div className="px-4 py-8 text-center text-ink-muted text-xs">No customer pre-bookings logged yet.</div>
+              )}
+            </div>
+            <div className="hidden md:block max-h-[calc(100vh-240px)] overflow-x-auto overflow-y-auto">
               <table className="w-full min-w-[650px] text-left text-xs">
                 <thead className="sticky top-0 bg-page z-10">
                   <tr className="border-b border-border-soft uppercase text-ink-muted font-medium">
@@ -936,11 +1050,11 @@ function CustomerPrebookingPanel() {
         <PrebookingPrintView data={printQuery.data} onClose={() => setPrintingId(null)} />
       )}
       {viewingId && viewQuery.data && (
-        <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/30 p-4">
-          <div className="max-h-[85vh] w-[560px] overflow-auto card p-5">
-            <div className="mb-2 flex items-center justify-between">
+        <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/30 p-3 sm:p-4">
+          <div className="max-h-[88dvh] w-full max-w-[560px] overflow-auto card p-4 sm:p-5">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <span className="text-lg font-semibold text-ink">{viewQuery.data.prebooking_no}</span>
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <Badge variant={PREBOOKING_STATUS_VARIANT[viewQuery.data.status] || 'warning'}>
                   {viewQuery.data.status}
                 </Badge>
@@ -961,29 +1075,31 @@ function CustomerPrebookingPanel() {
               {viewQuery.data.booking_source}
               {viewQuery.data.employee_name && ` · Salesman: ${viewQuery.data.employee_name}`}
             </div>
-            <table className="mb-3 w-full text-xs">
-              <thead>
-                <tr className="border-b border-border-soft text-left text-ink-muted">
-                  <th className="py-1">Item</th>
-                  <th className="py-1">Qty</th>
-                  <th className="py-1">Rate</th>
-                  <th className="py-1 text-right">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(viewQuery.data.items || []).map((l, idx) => (
-                  <tr key={l.id || idx} className="border-b border-border-soft">
-                    <td className="py-1">{l.item_name}</td>
-                    <td className="py-1">{l.qty}</td>
-                    <td className="py-1">₹{l.rate}</td>
-                    <td className="py-1 text-right">₹{(Number(l.qty) * Number(l.rate)).toFixed(2)}</td>
+            <div className="mb-3 overflow-x-auto">
+              <table className="w-full min-w-[380px] text-xs">
+                <thead>
+                  <tr className="border-b border-border-soft text-left text-ink-muted">
+                    <th className="py-1">Item</th>
+                    <th className="py-1">Qty</th>
+                    <th className="py-1">Rate</th>
+                    <th className="py-1 text-right">Amount</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {(viewQuery.data.items || []).map((l, idx) => (
+                    <tr key={l.id || idx} className="border-b border-border-soft">
+                      <td className="py-1">{l.item_name}</td>
+                      <td className="py-1">{l.qty}</td>
+                      <td className="py-1">₹{l.rate}</td>
+                      <td className="py-1 text-right">₹{(Number(l.qty) * Number(l.rate)).toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             {viewQuery.data.notes && <p className="mb-3 text-xs text-ink-muted">Notes: {viewQuery.data.notes}</p>}
-            <div className="flex items-center justify-between pt-2 border-t border-border-soft">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border-soft">
+              <div className="flex flex-wrap items-center gap-2">
                 {viewQuery.data.status !== 'cancelled' && !viewQuery.data.invoice_id && (
                   <Link
                     to={`/pos?prebooking_id=${viewQuery.data.id}`}
@@ -1030,8 +1146,8 @@ function RequestPrintView({ data, onClose }) {
   if (!data || !data.items) return null;
   const total = data.items.reduce((s, l) => s + Number(l.qty || 0) * Number(l.rate || 0), 0);
   return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-4">
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto bg-white p-8 text-sm text-ink shadow-xl print:max-h-none print:shadow-none">
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-3 sm:p-4">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto bg-white p-4 sm:p-8 text-sm text-ink shadow-xl print:max-h-none print:shadow-none">
         <div className="mb-1 flex items-center justify-between print:hidden">
           <Button variant="secondary" size="sm" onClick={onClose}>
             Close
@@ -1056,30 +1172,32 @@ function RequestPrintView({ data, onClose }) {
           <div><b>Requested By:</b> {data.created_by_name || '-'}</div>
           <div><b>Status:</b> {data.status}</div>
         </div>
-        <table className="mb-3 w-full border-collapse text-xs">
-          <thead>
-            <tr className="border-y border-ink/30 text-left">
-              <th className="py-1">S.No</th>
-              <th className="py-1">Product</th>
-              <th className="py-1">Code</th>
-              <th className="py-1">Requested Qty</th>
-              <th className="py-1">Purchase Rate</th>
-              <th className="py-1">Est. Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.items.map((l, idx) => (
-              <tr key={l.id || idx} className="border-b border-ink/10">
-                <td className="py-1">{idx + 1}</td>
-                <td className="py-1">{l.item_name}</td>
-                <td className="py-1">{l.item_code}</td>
-                <td className="py-1">{l.qty}</td>
-                <td className="py-1">₹{l.rate}</td>
-                <td className="py-1">₹{(Number(l.qty) * Number(l.rate)).toFixed(2)}</td>
+        <div className="mb-3 overflow-x-auto">
+          <table className="w-full min-w-[460px] border-collapse text-xs">
+            <thead>
+              <tr className="border-y border-ink/30 text-left">
+                <th className="py-1">S.No</th>
+                <th className="py-1">Product</th>
+                <th className="py-1">Code</th>
+                <th className="py-1">Requested Qty</th>
+                <th className="py-1">Purchase Rate</th>
+                <th className="py-1">Est. Amount</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {data.items.map((l, idx) => (
+                <tr key={l.id || idx} className="border-b border-ink/10">
+                  <td className="py-1">{idx + 1}</td>
+                  <td className="py-1">{l.item_name}</td>
+                  <td className="py-1">{l.item_code}</td>
+                  <td className="py-1">{l.qty}</td>
+                  <td className="py-1">₹{l.rate}</td>
+                  <td className="py-1">₹{(Number(l.qty) * Number(l.rate)).toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
         <div className="mb-3 flex justify-end text-sm font-bold">Total Estimated Amount: ₹{total.toFixed(2)}</div>
         {data.notes && <div className="mb-3 text-xs"><b>Notes / Remarks:</b> {data.notes}</div>}
       </div>
@@ -1159,8 +1277,8 @@ function ConvertToGrnModal({ request, onClose }) {
         </p>
         <div className="mb-3 flex flex-col gap-2">
           {lines.map((l, idx) => (
-            <div key={idx} className="flex items-center gap-2 rounded-lg border border-border-soft p-2 text-sm">
-              <span className="min-w-[140px] flex-1 text-xs">{l.item_name}</span>
+            <div key={idx} className="flex flex-wrap items-center gap-2 rounded-lg border border-border-soft p-2 text-sm">
+              <span className="min-w-[140px] flex-1 text-xs font-medium">{l.item_name}</span>
               <label className="flex items-center gap-1 text-xs text-ink-muted">
                 Qty
                 <input
@@ -1342,7 +1460,7 @@ function SupplierRequestPanel() {
 
       <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
         {/* Left Column Form */}
-        <div className="lg:col-span-5">
+        <div className="min-w-0 lg:col-span-5">
           <div className="card p-3.5 space-y-2.5 lg:sticky lg:top-3">
             <div className="border-b border-border-soft pb-2">
               <h2 className="font-semibold text-ink text-sm sm:text-base flex items-center gap-2">
@@ -1398,7 +1516,7 @@ function SupplierRequestPanel() {
         </div>
 
         {/* Right Column Table */}
-        <div className="lg:col-span-7 space-y-2.5">
+        <div className="min-w-0 lg:col-span-7 space-y-2.5">
           <div className="card p-2.5 flex flex-col sm:flex-row items-center justify-between gap-2">
             <div className="relative w-full sm:w-64">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
@@ -1420,7 +1538,72 @@ function SupplierRequestPanel() {
             <div className="px-3.5 py-2 border-b border-border-soft flex items-center justify-between">
               <h3 className="font-semibold text-ink text-xs sm:text-sm">Purchase Indents Register</h3>
             </div>
-            <div className="max-h-[calc(100vh-240px)] overflow-x-auto overflow-y-auto">
+            <div className="md:hidden divide-y divide-border-soft/60 max-h-[calc(100dvh-250px)] overflow-y-auto">
+              {requestPagination.pagedItems.map((r) => {
+                const statusKey = r.status || 'open';
+                return (
+                  <div key={r.id} className="p-3 space-y-2 hover:bg-page/50">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-mono font-bold text-sm text-ink break-words">{r.request_no}</div>
+                        <div className="text-xs font-medium text-ink break-words">{r.supplier_name}</div>
+                        <div className="text-[11px] text-ink-muted">{r.item_count} item(s)</div>
+                      </div>
+                      <div className="text-right shrink-0 space-y-0.5">
+                        <div className="text-sm font-bold text-emerald-400">₹{Number(r.estimated_total || 0).toFixed(2)}</div>
+                        <Badge variant={REQUEST_STATUS_VARIANT[statusKey] || 'warning'}>
+                          {statusKey.replace(/_/g, ' ')}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-end gap-1.5 pt-1.5 border-t border-border-soft/50">
+                      <button
+                        type="button"
+                        title="Print Indent"
+                        onClick={() => setPrintingId(r.id)}
+                        className="p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border border-emerald-200 hover:bg-emerald-50 text-emerald-600"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                      </button>
+                      {canApprove && statusKey === 'open' && (
+                        <button
+                          type="button"
+                          title="Approve"
+                          onClick={() => approveMutation.mutate(r.id)}
+                          className="p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border border-border-soft hover:bg-surface-subtle text-ink-muted hover:text-emerald-400"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      {canGrn && statusKey === 'approved' && (
+                        <button
+                          type="button"
+                          title="Create GRN"
+                          onClick={async () => setConverting(await purchaseRequestsApi.get(r.id))}
+                          className="px-2.5 py-1.5 min-h-[36px] rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-semibold hover:bg-amber-500/30"
+                        >
+                          Create GRN
+                        </button>
+                      )}
+                      {canCreate && statusKey === 'open' && (
+                        <button
+                          type="button"
+                          title="Cancel Request"
+                          onClick={() => cancelMutation.mutate(r.id)}
+                          className="p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border border-rose-200 hover:bg-surface-subtle text-danger"
+                        >
+                          <Ban className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {requestPagination.total === 0 && (
+                <div className="px-4 py-8 text-center text-ink-muted text-xs">No purchase requests logged yet.</div>
+              )}
+            </div>
+            <div className="hidden md:block max-h-[calc(100vh-240px)] overflow-x-auto overflow-y-auto">
               <table className="w-full min-w-[650px] text-left text-xs">
                 <thead className="sticky top-0 bg-page z-10">
                   <tr className="border-b border-border-soft uppercase text-ink-muted font-medium">

@@ -111,7 +111,7 @@ function ExpensesPanel({ canManage }) {
 
       <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
         {/* Left Column Form */}
-        <div className="lg:col-span-4">
+        <div className="min-w-0 lg:col-span-4">
           <div className="card p-3.5 space-y-2.5 lg:sticky lg:top-3">
             <div className="border-b border-border-soft pb-2">
               <h2 className="font-semibold text-ink text-sm flex items-center gap-1.5">
@@ -193,8 +193,8 @@ function ExpensesPanel({ canManage }) {
         </div>
 
         {/* Right Column Table */}
-        <div className="lg:col-span-8 space-y-2.5">
-          <div className="card p-2.5 flex flex-col sm:flex-row items-center justify-between gap-2">
+        <div className="min-w-0 lg:col-span-8 space-y-2.5">
+          <div className="card p-2.5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
             <div className="relative w-full sm:w-72">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
               <input
@@ -212,7 +212,45 @@ function ExpensesPanel({ canManage }) {
             <div className="px-3.5 py-2 border-b border-border-soft flex items-center justify-between">
               <h3 className="font-semibold text-ink text-xs sm:text-sm">Expenses History</h3>
             </div>
-            <div className="max-h-[calc(100vh-240px)] overflow-x-auto overflow-y-auto">
+            <div className="md:hidden divide-y divide-border-soft/60 max-h-[calc(100dvh-250px)] overflow-y-auto">
+              {pagedExpenses.map((item) => {
+                const catName = categories.find((c) => c.id === item.category_id)?.name || '-';
+                return (
+                  <div key={item.id} className="p-3 space-y-1.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-mono font-bold text-sm text-ink break-words">{item.expense_no || `#${item.id}`}</div>
+                        <div className="text-xs font-medium text-ink">{catName}</div>
+                        <div className="text-[11px] text-ink-muted">{item.expense_date || item.created_at || '-'}</div>
+                      </div>
+                      <div className="text-right shrink-0 space-y-1">
+                        <div className="text-sm font-bold text-red-400">₹{Number(item.amount).toFixed(2)}</div>
+                        <span className="inline-block px-1.5 py-0.5 rounded text-[10px] uppercase font-medium bg-slate-800 text-slate-300 border border-slate-700">
+                          {item.payment_mode || 'cash'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-border-soft/50">
+                      <span className="text-xs text-ink-muted break-words">{item.description || '-'}</span>
+                      {canManage && (
+                        <button
+                          type="button"
+                          onClick={() => removeMutation.mutate(item.id)}
+                          className="p-2 min-h-[34px] min-w-[34px] flex items-center justify-center rounded-lg border border-rose-200 hover:bg-surface-subtle text-ink-muted hover:text-red-400"
+                          title="Delete Expense"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {filteredExpenses.length === 0 && (
+                <div className="px-3 py-6 text-center text-ink-muted text-xs">No expenses found.</div>
+              )}
+            </div>
+            <div className="hidden md:block max-h-[calc(100vh-240px)] overflow-x-auto overflow-y-auto">
               <table className="w-full min-w-[650px] text-left text-xs">
                 <thead className="sticky top-0 bg-page z-10 shadow-sm">
                   <tr className="border-b border-border-soft bg-surface-subtle/30 text-ink-muted font-medium">
@@ -365,7 +403,7 @@ function OtherIncomePanel({ canManage }) {
 
       <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
         {/* Left Column Form */}
-        <div className="lg:col-span-4">
+        <div className="min-w-0 lg:col-span-4">
           <div className="card p-3.5 space-y-2.5 lg:sticky lg:top-3">
             <div className="border-b border-border-soft pb-2">
               <h2 className="font-semibold text-ink text-sm flex items-center gap-1.5">
@@ -431,8 +469,8 @@ function OtherIncomePanel({ canManage }) {
         </div>
 
         {/* Right Column Table */}
-        <div className="lg:col-span-8 space-y-2.5">
-          <div className="card p-2.5 flex flex-col sm:flex-row items-center justify-between gap-2">
+        <div className="min-w-0 lg:col-span-8 space-y-2.5">
+          <div className="card p-2.5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
             <div className="relative w-full sm:w-72">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
               <input
@@ -450,7 +488,41 @@ function OtherIncomePanel({ canManage }) {
             <div className="px-3.5 py-2 border-b border-border-soft flex items-center justify-between">
               <h3 className="font-semibold text-ink text-xs sm:text-sm">Income Receipts History</h3>
             </div>
-            <div className="max-h-[calc(100vh-240px)] overflow-x-auto overflow-y-auto">
+            <div className="md:hidden divide-y divide-border-soft/60 max-h-[calc(100dvh-250px)] overflow-y-auto">
+              {pagedIncomes.map((item) => (
+                <div key={item.id} className="p-3 space-y-1.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-mono font-bold text-sm text-ink break-words">{item.receipt_no || `#${item.id}`}</div>
+                      <div className="text-[11px] text-ink-muted">{item.income_date || item.created_at || '-'}</div>
+                    </div>
+                    <div className="text-right shrink-0 space-y-1">
+                      <div className="text-sm font-bold text-emerald-400">₹{Number(item.amount).toFixed(2)}</div>
+                      <span className="inline-block px-1.5 py-0.5 rounded text-[10px] uppercase font-medium bg-slate-800 text-slate-300 border border-slate-700">
+                        {item.payment_mode || 'cash'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-border-soft/50">
+                    <span className="text-xs text-ink-muted break-words">{item.description || '-'}</span>
+                    {canManage && (
+                      <button
+                        type="button"
+                        onClick={() => removeMutation.mutate(item.id)}
+                        className="p-2 min-h-[34px] min-w-[34px] flex items-center justify-center rounded-lg border border-rose-200 hover:bg-surface-subtle text-ink-muted hover:text-red-400"
+                        title="Delete Receipt"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {filteredIncomes.length === 0 && (
+                <div className="px-3 py-6 text-center text-ink-muted text-xs">No extra income receipts found.</div>
+              )}
+            </div>
+            <div className="hidden md:block max-h-[calc(100vh-240px)] overflow-x-auto overflow-y-auto">
               <table className="w-full min-w-[650px] text-left text-xs">
                 <thead className="sticky top-0 bg-page z-10 shadow-sm">
                   <tr className="border-b border-border-soft bg-surface-subtle/30 text-ink-muted font-medium">

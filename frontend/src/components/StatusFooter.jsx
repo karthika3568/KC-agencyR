@@ -14,7 +14,7 @@ export function StatusFooter() {
   });
 
   return (
-    <footer className="flex shrink-0 items-center justify-between border-t border-border-soft bg-white/80 px-5 py-2 text-[11px] font-medium text-ink-muted backdrop-blur-sm">
+    <footer className="flex shrink-0 items-center justify-between border-t border-border-soft bg-white/80 px-3 sm:px-5 py-1.5 sm:py-2 text-[11px] font-medium text-ink-muted backdrop-blur-sm">
       <div className="flex items-center gap-2">
         <span className="font-semibold text-ink">KC Agency</span>
         <span>&middot;</span>

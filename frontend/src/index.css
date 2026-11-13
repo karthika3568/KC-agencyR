@@ -2,7 +2,17 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --pwa-banner-h: 0px;
+}
+
 @layer base {
+  html,
+  body {
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
   body {
     @apply bg-page text-ink font-sans antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";

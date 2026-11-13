@@ -163,10 +163,10 @@ function ViewModal({ id, onClose }) {
   const { data } = useQuery({ queryKey: ['invoice', id], queryFn: () => invoicesApi.get(id) });
   if (!data) return null;
   return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/30 p-4">
-      <div className="max-h-[85vh] w-[640px] overflow-auto card p-5">
-        <div className="mb-1 flex items-center justify-between">
-          <span className="text-lg font-semibold text-ink">{data.invoice_no || data.original_invoice_no || `Held #${data.id}`}</span>
+    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/30 p-3 sm:p-4">
+      <div className="max-h-[88dvh] w-full max-w-[640px] overflow-auto card p-4 sm:p-5">
+        <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+          <span className="text-base sm:text-lg font-semibold text-ink break-words">{data.invoice_no || data.original_invoice_no || `Held #${data.id}`}</span>
           <Badge variant={STATUS_VARIANT[data.payment_status] || 'neutral'}>{data.payment_status || data.status}</Badge>
         </div>
         <div className="mb-3 text-xs text-ink-muted">
@@ -186,36 +186,38 @@ function ViewModal({ id, onClose }) {
           });
           return (
             <>
-              <table className="mb-3 w-full text-xs">
-                <thead>
-                  <tr className="border-b border-border-soft text-left text-ink-muted">
-                    <th className="py-1">Item</th>
-                    <th className="py-1 text-center">Qty</th>
-                    <th className="py-1 text-right">Rate</th>
-                    <th className="py-1 text-right">Disc (₹)</th>
-                    <th className="py-1 text-right">Disc (%)</th>
-                    <th className="py-1 text-right">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.items.map((line) => {
-                    const gross = Number(line.qty || 0) * Number(line.rate || 0);
-                    const pct = Number(line.discount_percent || 0);
-                    const pctDisc = gross > 0 && pct > 0 ? Math.round(((gross * pct) / 100) * 100) / 100 : 0;
-                    const directAmt = Math.max(0, Math.round((Number(line.discount_amount || 0) - pctDisc) * 100) / 100);
-                    return (
-                      <tr key={line.id} className="border-b border-border-soft">
-                        <td className="py-1 font-medium">{line.item_name_snapshot}</td>
-                        <td className="py-1 text-center">{line.qty} {line.unit_code}</td>
-                        <td className="py-1 text-right">₹{Number(line.rate).toFixed(2)}</td>
-                        <td className="py-1 text-right">{directAmt > 0 ? `₹${directAmt.toFixed(2)}` : '-'}</td>
-                        <td className="py-1 text-right">{pct > 0 ? `${pct.toFixed(2)}%` : '-'}</td>
-                        <td className="py-1 text-right font-semibold">₹{Number(line.net_amount ?? line.line_total).toFixed(2)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              <div className="mb-3 overflow-x-auto">
+                <table className="w-full min-w-[440px] text-xs">
+                  <thead>
+                    <tr className="border-b border-border-soft text-left text-ink-muted">
+                      <th className="py-1 pr-2">Item</th>
+                      <th className="py-1 px-1.5 text-center">Qty</th>
+                      <th className="py-1 px-1.5 text-right">Rate</th>
+                      <th className="py-1 px-1.5 text-right">Disc (₹)</th>
+                      <th className="py-1 px-1.5 text-right">Disc (%)</th>
+                      <th className="py-1 pl-1.5 text-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.items.map((line) => {
+                      const gross = Number(line.qty || 0) * Number(line.rate || 0);
+                      const pct = Number(line.discount_percent || 0);
+                      const pctDisc = gross > 0 && pct > 0 ? Math.round(((gross * pct) / 100) * 100) / 100 : 0;
+                      const directAmt = Math.max(0, Math.round((Number(line.discount_amount || 0) - pctDisc) * 100) / 100);
+                      return (
+                        <tr key={line.id} className="border-b border-border-soft">
+                          <td className="py-1 pr-2 font-medium">{line.item_name_snapshot}</td>
+                          <td className="py-1 px-1.5 text-center whitespace-nowrap">{line.qty} {line.unit_code}</td>
+                          <td className="py-1 px-1.5 text-right whitespace-nowrap">₹{Number(line.rate).toFixed(2)}</td>
+                          <td className="py-1 px-1.5 text-right whitespace-nowrap">{directAmt > 0 ? `₹${directAmt.toFixed(2)}` : '-'}</td>
+                          <td className="py-1 px-1.5 text-right whitespace-nowrap">{pct > 0 ? `${pct.toFixed(2)}%` : '-'}</td>
+                          <td className="py-1 pl-1.5 text-right font-semibold whitespace-nowrap">₹{Number(line.net_amount ?? line.line_total).toFixed(2)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
               <div className="mb-3 space-y-1 text-xs border-t border-border-soft pt-2">
                 <div className="flex justify-between text-ink-muted">
                   <span>Subtotal:</span>
@@ -280,8 +282,8 @@ function CancelModal({ invoice, onClose, onConfirm, error }) {
     confirmMessage: 'You entered a cancellation reason. Close without cancelling the invoice?',
   });
   return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/30 p-4">
-      <div className="w-[420px] card p-5">
+    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/30 p-3 sm:p-4">
+      <div className="w-full max-w-[420px] max-h-[88dvh] overflow-y-auto card p-4 sm:p-5">
         <div className="mb-1 text-lg font-semibold text-ink">Cancel {invoice.invoice_no}</div>
         <p className="mb-3 text-xs text-ink-muted">
           This reverses the stock deducted by this sale and, if it was a credit sale, reduces the customer's
@@ -314,8 +316,8 @@ function DeleteModal({ invoice, onClose, onConfirm, error }) {
     confirmMessage: 'You entered a deletion reason. Close without deleting the invoice?',
   });
   return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/30 p-4">
-      <div className="w-[420px] card p-5">
+    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/30 p-3 sm:p-4">
+      <div className="w-full max-w-[420px] max-h-[88dvh] overflow-y-auto card p-4 sm:p-5">
         <div className="mb-1 text-lg font-semibold text-ink">Delete {invoice.invoice_no}</div>
         <p className="mb-3 text-xs text-ink-muted">
           This reverses the stock deducted by this sale and, if it was a credit sale, reduces the customer's
@@ -715,8 +717,8 @@ export function InvoiceManagement() {
       <Card
         title="Invoices"
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            <div className="relative flex-1 min-w-[160px] sm:flex-initial">
               <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
               <input
                 value={search}
@@ -725,7 +727,7 @@ export function InvoiceManagement() {
                   setPage(1);
                 }}
                 placeholder="Search invoice # or customer"
-                className="input w-48 sm:w-56 pl-8 text-xs py-1"
+                className="input w-full sm:w-56 pl-8 text-xs py-1.5"
               />
             </div>
             <select
@@ -734,7 +736,7 @@ export function InvoiceManagement() {
                 setStatusFilter(e.target.value);
                 setPage(1);
               }}
-              className="input w-36 text-xs py-1"
+              className="input w-full sm:w-36 text-xs py-1.5"
             >
               <option value="">All statuses</option>
               <option value="completed">Completed</option>
@@ -745,7 +747,86 @@ export function InvoiceManagement() {
           </div>
         }
       >
-        <div className="max-h-[calc(100vh-210px)] overflow-x-auto overflow-y-auto">
+        <div className="md:hidden divide-y divide-border-soft/70 max-h-[calc(100dvh-240px)] overflow-y-auto">
+          {invoices.map((inv) => (
+            <div key={inv.id} className="p-3 space-y-2 hover:bg-surface-subtle/20">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="font-bold text-sm text-ink truncate">
+                    {inv.invoice_no || inv.original_invoice_no || `Held #${inv.id}`}
+                  </div>
+                  <div className="text-xs text-ink-muted truncate">
+                    {inv.customer_name || 'Walk-in'} · {inv.invoice_date}
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="text-sm font-extrabold text-ink">₹{inv.grand_total}</div>
+                  <div className="mt-0.5 flex items-center justify-end gap-1">
+                    <Badge variant={STATUS_VARIANT[inv.payment_status] || 'neutral'}>{inv.payment_status || '-'}</Badge>
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-border-soft/50">
+                <span className="text-[11px] capitalize text-ink-muted font-medium">
+                  Status: <strong className="text-ink">{inv.status}</strong>{inv.edited_at ? ' (edited)' : ''}
+                </span>
+                <div className="flex flex-wrap items-center gap-1">
+                  <button
+                    type="button"
+                    title="View"
+                    onClick={() => setViewingId(inv.id)}
+                    className="p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border border-border-soft text-ink-muted hover:text-ink hover:bg-page"
+                  >
+                    <Eye size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    title="Print"
+                    onClick={() => setPrintingId(inv.id)}
+                    className="p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border border-emerald-200 text-emerald-600 hover:bg-emerald-50"
+                  >
+                    <Printer size={15} />
+                  </button>
+                  {canEdit && inv.status === 'completed' && (
+                    <button
+                      type="button"
+                      title="Edit"
+                      onClick={() => setEditingId(inv.id)}
+                      className="p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border border-border-soft text-ink-muted hover:text-gold hover:bg-page"
+                    >
+                      <Pencil size={15} />
+                    </button>
+                  )}
+                  {canCancel && inv.status === 'completed' && (
+                    <button
+                      type="button"
+                      title="Cancel"
+                      onClick={() => { setCancelling(inv); setCancelError(''); }}
+                      className="p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border border-rose-200 text-danger hover:bg-rose-50"
+                    >
+                      <Ban size={15} />
+                    </button>
+                  )}
+                  {canDelete && inv.status === 'completed' && (
+                    <button
+                      type="button"
+                      title="Delete"
+                      onClick={() => { setDeleting(inv); setDeleteError(''); }}
+                      className="p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border border-rose-200 text-danger hover:bg-rose-50"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+          {invoices.length === 0 && (
+            <div className="px-3 py-6 text-center text-xs text-ink-muted">No invoices found.</div>
+          )}
+        </div>
+
+        <div className="hidden md:block max-h-[calc(100vh-210px)] overflow-x-auto overflow-y-auto">
           <table className="w-full min-w-[700px] text-xs">
             <thead className="sticky top-0 bg-page z-10 shadow-sm">
               <tr className="border-b border-border-soft text-left uppercase text-ink-muted font-medium bg-surface-subtle/30">

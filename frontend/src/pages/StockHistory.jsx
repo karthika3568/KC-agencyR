@@ -220,8 +220,8 @@ function StockIssuesTab() {
               </button>
             </div>
 
-            <div className="max-h-60 overflow-y-auto">
-              <table className="w-full text-left text-xs">
+            <div className="max-h-60 overflow-x-auto overflow-y-auto">
+              <table className="w-full min-w-[360px] text-left text-xs">
                 <thead className="bg-page text-ink-muted text-[10px] uppercase font-bold">
                   <tr>
                     <th className="p-2">Item</th>
@@ -532,7 +532,8 @@ function StockReturnsTab() {
                                     {items.length} item{items.length === 1 ? '' : 's'} recorded
                                   </span>
                                 </div>
-                                <table className="w-full text-left text-xs">
+                                <div className="overflow-x-auto">
+                                  <table className="w-full min-w-[460px] text-left text-xs">
                                   <thead className="bg-[#FAF8FF] text-ink-muted uppercase text-[10px] font-bold">
                                     <tr>
                                       <th className="px-2.5 py-1.5">#</th>
@@ -561,7 +562,8 @@ function StockReturnsTab() {
                                       </tr>
                                     ))}
                                   </tbody>
-                                </table>
+                                  </table>
+                                </div>
                               </div>
                             </td>
                           </tr>
@@ -702,8 +704,8 @@ function StockReturnsTab() {
               )}
             </div>
 
-            <div className="max-h-60 overflow-y-auto">
-              <table className="w-full text-left text-xs">
+            <div className="max-h-60 overflow-x-auto overflow-y-auto">
+              <table className="w-full min-w-[360px] text-left text-xs">
                 <thead className="bg-page text-ink-muted text-[10px] uppercase font-bold sticky top-0">
                   <tr>
                     <th className="p-2">Item</th>

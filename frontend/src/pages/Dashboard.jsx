@@ -636,16 +636,16 @@ function StandardDashboard() {
       {/* Discrepancy Alert Banner if needed */}
       {canViewFinancials && summary && summary.unresolved_handover_discrepancies?.length > 0 && (
         <Card className="border-rose-200 bg-rose-50/80 p-2.5 rounded-xl text-rose-800">
-          <div className="flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2 font-bold text-rose-700">
-              <AlertTriangle size={16} />
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2 font-bold text-rose-700 min-w-0">
+              <AlertTriangle size={16} className="shrink-0" />
               <span>{summary.unresolved_handover_discrepancies.length} unresolved cash handover discrepancy</span>
             </div>
             <Link
               to="/cash-handover"
               data-dashboard-nav="true"
               data-dashboard-discrepancy="true"
-              className="font-bold text-rose-800 underline hover:text-rose-950 focus:outline-none focus:ring-2 focus:ring-rose-600 focus:ring-offset-2 rounded"
+              className="font-bold text-rose-800 underline hover:text-rose-950 focus:outline-none focus:ring-2 focus:ring-rose-600 focus:ring-offset-2 rounded shrink-0"
             >
               Resolve now →
             </Link>

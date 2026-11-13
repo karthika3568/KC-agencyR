@@ -40,11 +40,11 @@ export function Tabs({ tabs, activeKey, onTabChange, className = '' }) {
   const activeTab = tabs.find((t) => t.key === currentActive) || tabs[0];
 
   return (
-    <div className={className}>
+    <div className={`min-w-0 w-full ${className}`}>
       <div
         role="tablist"
         aria-label="Navigation tabs"
-        className="mb-2.5 flex items-center gap-1 sm:gap-1.5 overflow-x-auto border-b border-border-soft scroll-smooth pb-px"
+        className="mb-2.5 flex w-full min-w-0 items-center gap-1 sm:gap-1.5 overflow-x-auto border-b border-border-soft scroll-smooth pb-px no-scrollbar"
       >
         {tabs.map((tab, idx) => {
           const isActive = currentActive === tab.key;

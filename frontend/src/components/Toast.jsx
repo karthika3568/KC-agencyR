@@ -17,7 +17,7 @@ export function Toast({ message, onClose, variant = 'success', title }) {
   const v = VARIANTS[variant] || VARIANTS.success;
   const Icon = v.icon;
   return (
-    <div className={`fixed right-6 top-6 z-50 flex items-start gap-3 rounded-2xl border ${v.ring} bg-white px-4 py-3 text-xs font-bold shadow-xl shadow-[#0B1B45]/10 animate-fade-in max-w-sm`}>
+    <div className={`fixed left-3 right-3 sm:left-auto sm:right-6 top-[max(0.75rem,env(safe-area-inset-top))] sm:top-6 z-50 flex items-start gap-3 rounded-2xl border ${v.ring} bg-white px-3.5 py-2.5 sm:px-4 sm:py-3 text-xs font-bold shadow-xl shadow-[#0B1B45]/10 animate-fade-in sm:w-full sm:max-w-sm`}>
       <div className={`flex h-7 w-7 items-center justify-center rounded-xl ring-1 shrink-0 ${v.iconWrap}`}>
         <Icon className="h-4 w-4" />
       </div>

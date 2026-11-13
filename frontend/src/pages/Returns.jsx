@@ -514,7 +514,7 @@ function SalesReturnsPanel({ canCreate, canApprove }) {
 
       <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
         {/* Left Column Form */}
-        <div className="lg:col-span-5">
+        <div className="min-w-0 lg:col-span-5">
           <div className="card p-3.5 space-y-2.5 lg:sticky lg:top-3">
             <div className="border-b border-border-soft pb-2">
               <h2 className="font-semibold text-ink text-sm sm:text-base flex items-center gap-2">
@@ -645,8 +645,8 @@ function SalesReturnsPanel({ canCreate, canApprove }) {
         </div>
 
         {/* Right Column Table */}
-        <div className="lg:col-span-7 space-y-2.5">
-          <div className="card p-2.5 flex flex-col sm:flex-row items-center justify-between gap-2">
+        <div className="min-w-0 lg:col-span-7 space-y-2.5">
+          <div className="card p-2.5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
             <div className="relative w-full sm:w-64">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
               <input
@@ -664,7 +664,68 @@ function SalesReturnsPanel({ canCreate, canApprove }) {
             <div className="px-3.5 py-2 border-b border-border-soft flex items-center justify-between">
               <h3 className="font-semibold text-ink text-xs sm:text-sm">Sales Returns Log</h3>
             </div>
-            <div className="max-h-[calc(100vh-240px)] overflow-x-auto overflow-y-auto">
+            <div className="md:hidden divide-y divide-border-soft/60 max-h-[calc(100dvh-250px)] overflow-y-auto">
+              {paginatedReturns.map((r) => (
+                <div key={r.id} className="p-3 space-y-2 hover:bg-page/50">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-mono font-bold text-sm text-ink break-words">{r.return_no}</div>
+                      <div className="text-xs font-medium text-ink break-words">{r.customer_name || 'Walk-in'}</div>
+                      <div className="text-[11px] text-ink-muted mt-0.5">
+                        {r.invoice_no ? (
+                          <span className="font-mono">Inv: {r.invoice_no}</span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                            Untraceable
+                          </span>
+                        )}
+                        <span className="ml-2 capitalize">· {r.refund_action?.replace('_', ' ')}</span>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0 space-y-1">
+                      <div className="text-sm font-bold text-ink">Rs. {Number(r.refund_amount ?? 0).toFixed(2)}</div>
+                      <div className="capitalize">
+                        {r.status === 'completed' || r.status === 'approved' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            {r.status}
+                          </span>
+                        ) : r.status === 'pending_approval' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                            Pending Approval
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-500/10 text-red-400 border border-red-500/20">
+                            {r.status}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  {r.status === 'pending_approval' && canApprove && (
+                    <div className="flex justify-end gap-2 pt-1.5 border-t border-border-soft/50">
+                      <button
+                        type="button"
+                        onClick={() => approveMutation.mutate(r.id)}
+                        className="px-3 py-1.5 min-h-[34px] rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-semibold hover:bg-emerald-500/30"
+                      >
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => rejectMutation.mutate(r.id)}
+                        className="px-3 py-1.5 min-h-[34px] rounded bg-red-500/20 text-red-300 border border-red-500/30 text-xs font-semibold hover:bg-red-500/30"
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+              {filteredReturns.length === 0 && (
+                <div className="px-4 py-8 text-center text-ink-muted text-xs">No sales returns recorded yet.</div>
+              )}
+            </div>
+            <div className="hidden md:block max-h-[calc(100vh-240px)] overflow-x-auto overflow-y-auto">
               <table className="w-full min-w-[650px] text-left text-xs">
                 <thead className="sticky top-0 bg-page z-10">
                   <tr className="border-b border-border-soft uppercase text-ink-muted font-medium">
@@ -892,7 +953,7 @@ function PurchaseReturnsPanel({ canManage }) {
 
       <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
         {/* Left Column Form */}
-        <div className="lg:col-span-5">
+        <div className="min-w-0 lg:col-span-5">
           <div className="card p-3.5 space-y-2.5 lg:sticky lg:top-3">
             <div className="border-b border-border-soft pb-2">
               <h2 className="font-semibold text-ink text-sm sm:text-base flex items-center gap-2">
@@ -983,8 +1044,8 @@ function PurchaseReturnsPanel({ canManage }) {
         </div>
 
         {/* Right Column Table */}
-        <div className="lg:col-span-7 space-y-2.5">
-          <div className="card p-2.5 flex flex-col sm:flex-row items-center justify-between gap-2">
+        <div className="min-w-0 lg:col-span-7 space-y-2.5">
+          <div className="card p-2.5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
             <div className="relative w-full sm:w-64">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
               <input
@@ -1002,7 +1063,27 @@ function PurchaseReturnsPanel({ canManage }) {
             <div className="px-3.5 py-2 border-b border-border-soft flex items-center justify-between">
               <h3 className="font-semibold text-ink text-xs sm:text-sm">Purchase Returns History</h3>
             </div>
-            <div className="max-h-[calc(100vh-240px)] overflow-x-auto overflow-y-auto">
+            <div className="md:hidden divide-y divide-border-soft/60 max-h-[calc(100dvh-250px)] overflow-y-auto">
+              {paginatedReturns.map((r) => (
+                <div key={r.id} className="p-3 space-y-1.5 hover:bg-page/50">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-mono font-bold text-sm text-ink break-words">{r.return_no}</div>
+                      <div className="text-xs font-medium text-ink break-words">{r.supplier_name}</div>
+                      <div className="text-[11px] text-ink-muted font-mono">GRN: {r.grn_no || '-'}</div>
+                    </div>
+                    <div className="text-right shrink-0 font-bold text-sm text-ink">
+                      Rs. {Number(r.refund_amount ?? 0).toFixed(2)}
+                    </div>
+                  </div>
+                  {r.reason && <div className="text-xs text-ink-muted">Reason: {r.reason}</div>}
+                </div>
+              ))}
+              {filteredReturns.length === 0 && (
+                <div className="px-4 py-8 text-center text-ink-muted text-xs">No purchase returns recorded yet.</div>
+              )}
+            </div>
+            <div className="hidden md:block max-h-[calc(100vh-240px)] overflow-x-auto overflow-y-auto">
               <table className="w-full min-w-[650px] text-left text-xs">
                 <thead className="sticky top-0 bg-page z-10">
                   <tr className="border-b border-border-soft uppercase text-ink-muted font-medium">

@@ -239,7 +239,7 @@ export function CustomersPanel({ canManage }) {
   return (
     <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
       {/* LEFT FORM */}
-      <div className="lg:col-span-5">
+      <div className="min-w-0 lg:col-span-5">
         <div className="card p-3.5 border border-border-soft bg-white shadow-xs rounded-xl lg:sticky lg:top-2">
           <div className="flex items-center justify-between border-b border-border-soft pb-2 mb-2.5">
             <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
@@ -403,7 +403,7 @@ export function CustomersPanel({ canManage }) {
       </div>
 
       {/* RIGHT TABLE */}
-      <div className="lg:col-span-7">
+      <div className="min-w-0 lg:col-span-7">
         <div className="card border border-border-soft bg-white shadow-xs rounded-xl overflow-hidden">
           <div className="px-3.5 py-2.5 border-b border-border-soft flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
@@ -411,8 +411,8 @@ export function CustomersPanel({ canManage }) {
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-700">{filtered.length} Total</span>
             </h2>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative">
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+              <div className="relative flex-1 min-w-[140px] sm:flex-initial">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={13} />
                 <input
                   type="text"
@@ -422,7 +422,7 @@ export function CustomersPanel({ canManage }) {
                     setSearchQuery(e.target.value);
                     pagination.resetPage();
                   }}
-                  className="input pl-7 py-1 text-xs w-36 sm:w-48"
+                  className="input pl-7 py-1 text-xs w-full sm:w-48"
                 />
               </div>
 
@@ -432,7 +432,7 @@ export function CustomersPanel({ canManage }) {
                   setStatusFilter(e.target.value);
                   pagination.resetPage();
                 }}
-                className="input py-1 text-xs w-24"
+                className="input py-1 text-xs w-28"
               >
                 <option value="all">All Status</option>
                 <option value="active">Active</option>
@@ -456,7 +456,7 @@ export function CustomersPanel({ canManage }) {
                   type="file"
                   accept=".xlsx,.xls,.csv"
                   onChange={(e) => { setImportFile(e.target.files[0] || null); setImportResult(null); }}
-                  className="text-xs"
+                  className="w-full max-w-full min-w-0 sm:w-auto text-xs"
                 />
                 <Button
                   size="sm"
@@ -502,7 +502,52 @@ export function CustomersPanel({ canManage }) {
             </div>
           )}
 
-          <div className="overflow-x-auto max-h-[calc(100vh-210px)] overflow-y-auto">
+          <div className="md:hidden divide-y divide-border-soft max-h-[calc(100dvh-240px)] overflow-y-auto">
+            {pagination.pagedItems.map((r, index) => {
+              const cActive = r.status !== 'inactive' && r.is_active !== 0 && r.is_active !== false;
+              const overallIndex = (pagination.page - 1) * 10 + index + 1;
+              return (
+                <div key={r.id} className="p-3 space-y-2 hover:bg-slate-50/50">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-bold text-slate-900 break-words">
+                        <span className="text-slate-400 mr-1.5">#{overallIndex}</span>
+                        {r.ledger_name || r.name}
+                      </div>
+                      <div className="text-xs text-slate-600 mt-0.5 flex flex-wrap gap-x-3">
+                        <span>{r.phone || '-'}</span>
+                        {r.gstin && <span className="font-mono">GSTIN: {r.gstin}</span>}
+                      </div>
+                    </div>
+                    {cActive ? (
+                      <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10.5px] font-bold text-emerald-700 border border-emerald-200 shrink-0">Active</span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10.5px] font-bold text-slate-500 border border-slate-200 shrink-0">Inactive</span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-border-soft/60 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10.5px] font-bold capitalize text-slate-700">
+                        {r.pricing_type || 'normal'}
+                      </span>
+                      <span className="font-bold text-indigo-600">Limit: Rs. {Number(r.credit_limit || 0).toLocaleString()}</span>
+                    </div>
+                    {canManage && (
+                      <div className="flex items-center gap-1.5">
+                        <button type="button" onClick={() => handleEdit(r)} className="rounded-lg bg-slate-100 p-2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-700 hover:bg-indigo-50 hover:text-indigo-600"><Edit2 size={14} /></button>
+                        <button type="button" onClick={() => { if (confirm(`Delete "${r.ledger_name || r.name}"?`)) removeMutation.mutate(r.id); }} className="rounded-lg bg-slate-100 p-2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-700 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={14} /></button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            {pagination.total === 0 && (
+              <div className="px-3 py-6 text-center text-xs text-slate-400 font-medium">No customers found.</div>
+            )}
+          </div>
+
+          <div className="hidden md:block overflow-x-auto max-h-[calc(100vh-210px)] overflow-y-auto">
             <table className="w-full min-w-[600px] text-left text-xs">
               <thead className="sticky top-0 bg-slate-50 z-10">
                 <tr className="border-b border-border-soft bg-slate-50/95 text-[10.5px] font-bold uppercase tracking-wider text-slate-500">
@@ -730,7 +775,7 @@ function SuppliersPanel({ canManage }) {
   return (
     <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-12">
       {/* LEFT FORM */}
-      <div className="lg:col-span-4">
+      <div className="min-w-0 lg:col-span-4">
         <div className="card p-3.5 border border-border-soft bg-white shadow-xs rounded-xl lg:sticky lg:top-2">
           <div className="flex items-center justify-between border-b border-border-soft pb-2 mb-2.5">
             <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
@@ -793,7 +838,7 @@ function SuppliersPanel({ canManage }) {
       </div>
 
       {/* RIGHT TABLE */}
-      <div className="lg:col-span-8">
+      <div className="min-w-0 lg:col-span-8">
         <div className="card border border-border-soft bg-white shadow-xs rounded-xl overflow-hidden">
           <div className="px-3.5 py-2.5 border-b border-border-soft flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
@@ -801,8 +846,8 @@ function SuppliersPanel({ canManage }) {
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-700">{filtered.length} Total</span>
             </h2>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative">
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+              <div className="relative flex-1 min-w-[140px] sm:flex-initial">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={13} />
                 <input
                   type="text"
@@ -812,7 +857,7 @@ function SuppliersPanel({ canManage }) {
                     setSearchQuery(e.target.value);
                     pagination.resetPage();
                   }}
-                  className="input pl-7 py-1 text-xs w-36 sm:w-48"
+                  className="input pl-7 py-1 text-xs w-full sm:w-48"
                 />
               </div>
               <select
@@ -821,7 +866,7 @@ function SuppliersPanel({ canManage }) {
                   setStatusFilter(e.target.value);
                   pagination.resetPage();
                 }}
-                className="input py-1 text-xs w-24"
+                className="input py-1 text-xs w-28"
               >
                 <option value="all">All Status</option>
                 <option value="active">Active</option>
@@ -830,7 +875,50 @@ function SuppliersPanel({ canManage }) {
             </div>
           </div>
 
-          <div className="overflow-x-auto max-h-[calc(100vh-210px)] overflow-y-auto">
+          <div className="md:hidden divide-y divide-border-soft max-h-[calc(100dvh-240px)] overflow-y-auto">
+            {pagination.pagedItems.map((r, index) => {
+              const cActive = r.status !== 'inactive' && r.is_active !== 0 && r.is_active !== false;
+              const val = Number(balanceById.get(r.id)?.current_outstanding ?? 0);
+              const overallIndex = (pagination.page - 1) * 10 + index + 1;
+              return (
+                <div key={r.id} className="p-3 space-y-2 hover:bg-slate-50/50">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-bold text-slate-900 break-words">
+                        <span className="text-slate-400 mr-1.5">#{overallIndex}</span>
+                        {r.name}
+                      </div>
+                      <div className="text-xs text-slate-600 mt-0.5 flex flex-wrap gap-x-3">
+                        <span>{r.phone || '-'}</span>
+                        {r.gstin && <span className="font-mono">GSTIN: {r.gstin}</span>}
+                      </div>
+                    </div>
+                    {cActive ? (
+                      <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10.5px] font-bold text-emerald-700 border border-emerald-200 shrink-0">Active</span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10.5px] font-bold text-slate-500 border border-slate-200 shrink-0">Inactive</span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-border-soft/60 text-xs">
+                    <span className={`font-bold ${val > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                      Outstanding: Rs. {val.toFixed(2)}
+                    </span>
+                    {canManage && (
+                      <div className="flex items-center gap-1.5">
+                        <button type="button" onClick={() => handleEdit(r)} className="rounded-lg bg-slate-100 p-2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-700 hover:bg-indigo-50 hover:text-indigo-600"><Edit2 size={14} /></button>
+                        <button type="button" onClick={() => { if (confirm(`Delete "${r.name}"?`)) removeMutation.mutate(r.id); }} className="rounded-lg bg-slate-100 p-2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-700 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={14} /></button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            {pagination.total === 0 && (
+              <div className="px-3 py-6 text-center text-xs text-slate-400 font-medium">No suppliers found.</div>
+            )}
+          </div>
+
+          <div className="hidden md:block overflow-x-auto max-h-[calc(100vh-210px)] overflow-y-auto">
             <table className="w-full min-w-[600px] text-left text-xs">
               <thead className="sticky top-0 bg-slate-50 z-10">
                 <tr className="border-b border-border-soft bg-slate-50/95 text-[10.5px] font-bold uppercase tracking-wider text-slate-500">
