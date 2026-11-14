@@ -31,6 +31,7 @@ import { Customers } from './pages/Customers.jsx';
 import { Vans } from './pages/Vans.jsx';
 import { VanStock } from './pages/VanStock.jsx';
 import { StockHistory } from './pages/StockHistory.jsx';
+import { Shortcuts } from './pages/Shortcuts.jsx';
 
 function Protected({ children, perm, targetPath }) {
   return (
@@ -106,6 +107,7 @@ export default function App() {
       <Route path="/reports" element={<Protected perm={ROUTE_PERMISSIONS['/reports']}><Reports /></Protected>} />
       <Route path="/staff" element={<Protected perm={ROUTE_PERMISSIONS['/staff']}><StaffPermissions /></Protected>} />
       <Route path="/settings" element={<Protected perm={ROUTE_PERMISSIONS['/settings']}><Settings /></Protected>} />
+      <Route path="/shortcuts" element={<Protected><Shortcuts /></Protected>} />
       <Route path="/print/invoice/:id" element={<ProtectedRoute perm="pos.access"><InvoicePrint /></ProtectedRoute>} />
       <Route path="*" element={<Protected><AccessDenied /></Protected>} />
     </Routes>

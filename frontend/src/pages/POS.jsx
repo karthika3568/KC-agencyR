@@ -23,6 +23,7 @@ import {
   X,
   Check,
   Pause,
+  Keyboard,
 } from 'lucide-react';
 import { itemsApi, stockUnitsApi, categoriesApi } from '../api/catalog';
 import { customersApi } from '../api/parties';
@@ -2332,6 +2333,15 @@ export function POS() {
           <span>
             <kbd className="font-bold text-ink bg-white px-1.5 py-0.5 rounded border border-[#E5E7F5]">Enter</kbd> : Select / Continue
           </span>
+          <span>|</span>
+          <Link
+            to="/shortcuts"
+            className="inline-flex items-center justify-center p-1 rounded-md text-[#6F2DA8] hover:text-[#5C238C] hover:bg-[#F7F5FF] transition-colors cursor-pointer outline-none focus:ring-1 focus:ring-[#6F2DA8]/40"
+            title="Keyboard Shortcuts / Instructions"
+            aria-label="Keyboard Shortcuts / Instructions"
+          >
+            <Keyboard size={14} className="shrink-0" />
+          </Link>
         </div>
         <div className="font-medium">
           KC Agency &nbsp;|&nbsp; POS Billing
