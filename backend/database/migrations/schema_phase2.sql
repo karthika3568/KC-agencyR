@@ -82,7 +82,6 @@ CREATE TABLE IF NOT EXISTS items (
   UNIQUE KEY uq_items_barcode (barcode),
   CONSTRAINT fk_items_category FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL,
   CONSTRAINT fk_items_brand FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE SET NULL,
-  CONSTRAINT fk_items_product_line FOREIGN KEY (product_line_id) REFERENCES product_lines(id) ON DELETE SET NULL,
   CONSTRAINT fk_items_base_unit FOREIGN KEY (base_unit_id) REFERENCES stock_units(id),
   CONSTRAINT fk_items_secondary_unit FOREIGN KEY (secondary_unit_id) REFERENCES stock_units(id) ON DELETE SET NULL,
   CONSTRAINT fk_items_tax_code FOREIGN KEY (tax_code_id) REFERENCES tax_codes(id) ON DELETE SET NULL
