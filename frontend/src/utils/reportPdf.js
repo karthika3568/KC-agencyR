@@ -275,6 +275,87 @@ export function downloadVanIssuePdf(detailRows, filename, { print = false } = {}
 }
 
 /**
+ * Builds and downloads a printable/exportable PDF for Van Stock Day Returns.
+ */
+export function downloadVanReturnPdf(detailRows, filename, { print = false } = {}) {
+  const byReturn = new Map();
+  detailRows.forEach((r) => {
+    const key = r.return_no || `RTN-${r.id}`;
+    if (!byReturn.has(key)) byReturn.set(key, []);
+    byReturn.get(key).push(r);
+  });
+
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const left = 40;
+  let first = true;
+
+  byReturn.forEach((lines, returnNo) => {
+    if (!first) doc.addPage();
+    first = false;
+    const h = lines[0];
+
+    doc.setFontSize(14);
+    doc.setFont(undefined, 'bold');
+    doc.text('SALESMAN VAN STOCK DAY-END RETURN', left, 36);
+    doc.setFont(undefined, 'normal');
+    doc.setFontSize(9);
+
+    const meta = [
+      ['Return No', returnNo],
+      ['Linked Issue #', h.issue_no || 'None (General Return)'],
+      ['Salesman', h.employee_name],
+      ['Branch', h.branch_name],
+      ['Date', h.returned_at],
+      ['Received By', h.returned_by_name],
+      ['Notes', h.notes],
+    ].filter(([, v]) => v);
+
+    let y = 58;
+    meta.forEach(([label, val]) => {
+      doc.text(`${label}: ${val}`, left, y);
+      y += 14;
+    });
+
+    y += 6;
+    const totalQty = lines.reduce((sum, l) => sum + Number(l.qty || 0), 0);
+    const totalAmount = lines.reduce((sum, l) => sum + Number(l.line_amount || (Number(l.qty || 0) * Number(l.unit_price || 0))), 0);
+
+    autoTable(doc, {
+      startY: y,
+      head: [['S.No', 'Item', 'SKU', 'Unit', 'Return Qty', 'Unit Price', 'Return Amount']],
+      body: [
+        ...lines.map((l, i) => [
+          i + 1,
+          l.item_name,
+          l.item_code || '',
+          l.unit_code || '',
+          l.qty,
+          Number(l.unit_price || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+          Number(l.line_amount || (Number(l.qty || 0) * Number(l.unit_price || 0))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        ]),
+        [
+          { content: 'Total Returned', colSpan: 4, styles: { fontStyle: 'bold', halign: 'right' } },
+          { content: String(totalQty), styles: { fontStyle: 'bold' } },
+          '',
+          { content: `₹${totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, styles: { fontStyle: 'bold' } },
+        ],
+      ],
+      styles: { fontSize: 9, cellPadding: 5 },
+      headStyles: { fillColor: [79, 70, 229], textColor: 255, fontStyle: 'bold' },
+      margin: { left, right: left },
+    });
+  });
+
+  if (print) {
+    doc.autoPrint();
+    window.open(doc.output('bloburl'), '_blank');
+  } else {
+    doc.save(filename);
+  }
+}
+
+/**
  * Builds and downloads a CSV/Excel file for report rows (e.g. selected rows or filtered rows).
  * Uses UTF-8 BOM so Excel opens values, special characters, and numbers cleanly.
  */

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Printer } from 'lucide-react';
 import { invoicesApi } from '../api/invoices';
-import { vanStockIssuesApi } from '../api/purchasing';
+import { vanStockIssuesApi, vanStockReturnsApi } from '../api/purchasing';
 import { ThermalTemplate } from '../print/ThermalTemplate';
 import { A4Template } from '../print/A4Template';
 import { A5Template } from '../print/A5Template';
@@ -89,6 +89,79 @@ export function adaptStockIssueToPrintData(issue) {
 }
 
 /**
+ * Transforms a stock return transaction into the KC Agency bill presentation format.
+ */
+export function adaptStockReturnToPrintData(returnDoc) {
+  if (!returnDoc) return null;
+  const rawItems = returnDoc.items || [];
+  const items = rawItems.map((it, idx) => {
+    const qty = Number(it.quantity ?? it.qty ?? 0);
+    const unitPrice = Number(it.unit_price ?? it.rate ?? 0);
+    const lineAmount = Number(it.line_amount ?? it.amount ?? (qty * unitPrice));
+    return {
+      id: it.id || idx,
+      item_name: it.item_name || it.name || '',
+      item_name_snapshot: it.item_name || it.name || '',
+      sku: it.sku || it.item_code || '',
+      item_code: it.sku || it.item_code || '',
+      unit: it.unit || it.unit_code || 'PCS',
+      unit_code: it.unit || it.unit_code || 'PCS',
+      qty: qty,
+      rate: unitPrice,
+      unit_price: unitPrice,
+      line_total: lineAmount,
+      net_amount: lineAmount,
+    };
+  });
+
+  const totalQty = returnDoc.total_qty != null
+    ? Number(returnDoc.total_qty)
+    : items.reduce((s, it) => s + it.qty, 0);
+
+  const totalAmount = returnDoc.total_amount != null
+    ? Number(returnDoc.total_amount)
+    : items.reduce((s, it) => s + it.line_total, 0);
+
+  const returnNo = returnDoc.return_no || (`RTN-${String(returnDoc.id || '').padStart(5, '0')}`);
+  const returnDate = returnDoc.returned_at || returnDoc.created_at || new Date().toISOString();
+  const salesmanName = returnDoc.salesman_name || returnDoc.employee_name || 'Salesman';
+  const branchName = returnDoc.branch_name || returnDoc.branch_print_name || 'Main Branch';
+  const linkedIssueNo = returnDoc.issue_no || '';
+  const notes = returnDoc.notes || '';
+
+  return {
+    is_stock_issue: true,
+    is_stock_return: true,
+    title: 'VAN STOCK DAY-END RETURN RECEIPT',
+    invoice: {
+      invoice_no: returnNo,
+      invoice_date: returnDate,
+      salesman_name: salesmanName,
+      salesman_code: '',
+      salesman_phone: '',
+      customer_name: linkedIssueNo ? `Linked Issue #${linkedIssueNo}` : 'General Stock Return',
+      customer_phone: '',
+      prebooking_no: '',
+      branch_name: branchName,
+      notes: notes,
+      items: items,
+      grand_total: totalAmount,
+      subtotal: totalAmount,
+      taxable_value: totalAmount,
+    },
+    customer: null,
+    branch: {
+      name: branchName,
+      print_name: 'KC AGENCY',
+    },
+    tax_slabs: [],
+    amount_in_words: returnDoc.amount_in_words || '',
+    total_qty: totalQty,
+    total_amount: totalAmount,
+  };
+}
+
+/**
  * In-app print preview — replaces the old window.open(new tab) flow.
  * Rendered via portal directly into <body> so print.css's
  * `body.has-print-modal #root { display: none }` rule can hide the app
@@ -97,7 +170,7 @@ export function adaptStockIssueToPrintData(issue) {
  * Supports both sales invoices (invoiceId) and van stock issues (stockIssue / issueId)
  * reusing the established KC Agency bill templates (A4 and Thermal 80mm).
  */
-export function PrintPreviewModal({ invoiceId, stockIssue, issueId, onClose }) {
+export function PrintPreviewModal({ invoiceId, stockIssue, issueId, stockReturn, returnId, onClose }) {
   useEscNavigation({
     priority: ESC_PRIORITY.MODAL,
     onEsc: onClose,
@@ -105,8 +178,13 @@ export function PrintPreviewModal({ invoiceId, stockIssue, issueId, onClose }) {
   });
 
   const isStockIssue = Boolean(stockIssue || issueId);
-  const [format, setFormat] = useState(isStockIssue ? 'a4' : 'thermal');
-  const [data, setData] = useState(() => (stockIssue ? adaptStockIssueToPrintData(stockIssue) : null));
+  const isStockReturn = Boolean(stockReturn || returnId);
+  const [format, setFormat] = useState(isStockIssue || isStockReturn ? 'a4' : 'thermal');
+  const [data, setData] = useState(() => {
+    if (stockIssue) return adaptStockIssueToPrintData(stockIssue);
+    if (stockReturn) return adaptStockReturnToPrintData(stockReturn);
+    return null;
+  });
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -140,8 +218,19 @@ export function PrintPreviewModal({ invoiceId, stockIssue, issueId, onClose }) {
             setError(err?.response?.data?.error || 'Failed to load stock issue print data');
           }
         });
+    } else if (stockReturn?.id || returnId) {
+      const targetId = stockReturn?.id || returnId;
+      vanStockReturnsApi.get(targetId)
+        .then((fullReturn) => {
+          setData(adaptStockReturnToPrintData(fullReturn));
+        })
+        .catch((err) => {
+          if (!stockReturn) {
+            setError(err?.response?.data?.error || 'Failed to load stock return print data');
+          }
+        });
     }
-  }, [invoiceId, issueId, stockIssue?.id]);
+  }, [invoiceId, issueId, stockIssue?.id, returnId, stockReturn?.id]);
 
   const whatsappHref = () => {
     if (!data) return '#';

@@ -4,13 +4,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Package, Search, Plus, Trash2, CheckCircle2, AlertTriangle, Truck, SlidersHorizontal, X, FileSpreadsheet, FileDown, Printer, ChevronDown, ChevronRight, ShoppingCart } from 'lucide-react';
 import { itemsApi } from '../api/catalog';
 import { usersApi } from '../api/users';
-import { stockAdjustmentsApi, stockHubApi, vanStockApi, vanStockIssuesApi } from '../api/purchasing';
+import { stockAdjustmentsApi, stockHubApi, vanStockApi, vanStockIssuesApi, vanStockReturnsApi } from '../api/purchasing';
 import { Tabs } from '../components/Tabs';
 import { useAuth } from '../hooks/useAuth.jsx';
 import { usePermission } from '../hooks/usePermission';
 import { Button } from '../components/Button.jsx';
 import { ConfirmDialog } from '../components/ConfirmDialog.jsx';
-import { downloadReportPdf, downloadVanIssuePdf } from '../utils/reportPdf';
+import { downloadReportPdf, downloadVanIssuePdf, downloadVanReturnPdf } from '../utils/reportPdf';
 import { Pagination } from '../components/Pagination';
 import { useClientPagination } from '../hooks/useClientPagination';
 import { PrintPreviewModal } from '../components/PrintPreviewModal';
@@ -598,6 +598,7 @@ export function VanStockPanel({ canManage }) {
   });
 
   const [selectedOrderId, setSelectedOrderId] = useState('');
+  const [selectedReturnIssueId, setSelectedReturnIssueId] = useState('');
   const [notes, setNotes] = useState('');
 
   const [lines, setLines] = useState([{ item_id: '', qty: 1 }]);
@@ -607,8 +608,18 @@ export function VanStockPanel({ canManage }) {
   const [exportError, setExportError] = useState('');
   const [exporting, setExporting] = useState(false);
 
+  // Active right column view: 'van-stock' | 'issues' | 'returns'
+  const [rightView, setRightView] = useState('van-stock');
+
+  // Return Transactions states
+  const [selectedReturnIds, setSelectedReturnIds] = useState([]);
+  const [returnExportError, setReturnExportError] = useState('');
+  const [returnExporting, setReturnExporting] = useState(false);
+  const [printingReturn, setPrintingReturn] = useState(null);
+  const [expandedReturnIds, setExpandedReturnIds] = useState([]);
+
   useUnsavedChangesGuard(
-    Boolean(selectedOrderId || notes.trim() || lines.some((l) => l.item_id)),
+    Boolean(selectedOrderId || selectedReturnIssueId || notes.trim() || lines.some((l) => l.item_id)),
     {
       title: 'Leave Van Stock Form?',
       message: 'You have unsaved van stock issue/return lines in the form. Discard them and go back?',
@@ -642,6 +653,11 @@ export function VanStockPanel({ canManage }) {
     queryFn: () => vanStockIssuesApi.list(employeeId || undefined),
     enabled: !!employeeId || canManage,
   });
+  const returnsQuery = useQuery({
+    queryKey: ['van-returns', employeeId],
+    queryFn: () => vanStockReturnsApi.list(employeeId || undefined),
+    enabled: !!employeeId || canManage,
+  });
   const eligibleOrdersQuery = useQuery({
     queryKey: ['eligible-orders'],
     queryFn: () => vanStockApi.eligibleOrders('customer'),
@@ -650,6 +666,11 @@ export function VanStockPanel({ canManage }) {
 
   const eligibleOrders = eligibleOrdersQuery.data || [];
   const selectedOrder = eligibleOrders.find((o) => String(o.id) === String(selectedOrderId));
+
+  const items = itemsQuery.data || [];
+  const issues = issuesQuery.data || [];
+  const returns = returnsQuery.data || [];
+  const pending = pendingQuery.data || [];
 
   const handleSelectOrder = (orderIdStr) => {
     setSelectedOrderId(orderIdStr);
@@ -680,19 +701,49 @@ export function VanStockPanel({ canManage }) {
     setNotes('');
   };
 
+  const handleSelectReturnIssue = (issueIdStr) => {
+    setSelectedReturnIssueId(issueIdStr);
+    if (!issueIdStr) {
+      setLines([{ item_id: '', qty: 1 }]);
+      return;
+    }
+    const targetIssue = issues.find((i) => String(i.id) === String(issueIdStr));
+    if (targetIssue && targetIssue.items && targetIssue.items.length > 0) {
+      setLines(
+        targetIssue.items.map((it) => ({
+          item_id: String(it.item_id),
+          qty: 0,
+          issued_qty: Number(it.qty || 0),
+          unit_price: Number(it.unit_price || 0),
+          fromIssue: true,
+        }))
+      );
+      if (!notes) {
+        setNotes(`Day-end return against ${targetIssue.issue_no}`);
+      }
+    }
+  };
+
+  const handleClearReturnIssue = () => {
+    setSelectedReturnIssueId('');
+    setLines([{ item_id: '', qty: 1 }]);
+  };
+
   const mutation = useMutation({
     mutationFn: (payload) => (mode === 'issue' ? vanStockApi.issue(payload) : vanStockApi.returnStock(payload)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['van-pending', employeeId] });
       queryClient.invalidateQueries({ queryKey: ['van-issues'] });
+      queryClient.invalidateQueries({ queryKey: ['van-returns'] });
       queryClient.invalidateQueries({ queryKey: ['eligible-orders'] });
       queryClient.invalidateQueries({ queryKey: ['customer-prebookings'] });
       queryClient.invalidateQueries({ queryKey: ['stock-hub'] });
       queryClient.invalidateQueries({ queryKey: ['items'] });
       setLines([{ item_id: '', qty: 1 }]);
       setSelectedOrderId('');
+      setSelectedReturnIssueId('');
       setNotes('');
-      setMessage(mode === 'issue' ? 'Stock issued to salesman successfully!' : 'Van stock return recorded.');
+      setMessage(mode === 'issue' ? 'Stock issued to salesman successfully!' : 'Van stock return recorded successfully!');
       setTimeout(() => setMessage(''), 3000);
     },
   });
@@ -765,14 +816,14 @@ export function VanStockPanel({ canManage }) {
         payload.customer_id = Number(ord.customer_id);
       }
     }
+    if (mode === 'return' && selectedReturnIssueId) {
+      payload.issue_id = Number(selectedReturnIssueId);
+    }
 
     await submitPayload(payload);
   };
 
   const users = usersQuery.data || [];
-  const items = itemsQuery.data || [];
-  const pending = pendingQuery.data || [];
-  const issues = issuesQuery.data || [];
   const selectedEmployee = canManage
     ? users.find((u) => String(u.id) === String(employeeId))
     : user;
@@ -964,6 +1015,100 @@ export function VanStockPanel({ canManage }) {
     }
   };
 
+  // Return Transactions logic
+  const {
+    page: returnsPage,
+    setPage: setReturnsPage,
+    total: returnsTotal,
+    paginatedItems: pagedReturns,
+  } = useClientPagination(returns, 10);
+
+  const toggleExpandReturn = (id) => {
+    setExpandedReturnIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectReturn = (id) => setSelectedReturnIds((prev) => (
+    prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+  ));
+  const toggleSelectAllReturns = () => setSelectedReturnIds((prev) => (
+    prev.length === returns.length ? [] : returns.map((r) => r.id)
+  ));
+
+  const handleExportReturnsExcel = async () => {
+    setReturnExportError('');
+    setReturnExporting(true);
+    try {
+      await vanStockReturnsApi.downloadExport(selectedReturnIds.length > 0 ? selectedReturnIds : returns.map((r) => r.id));
+    } catch (err) {
+      setReturnExportError(err?.response?.data?.error || err?.message || 'Unable to generate the Excel file. Please try again.');
+    } finally {
+      setReturnExporting(false);
+    }
+  };
+
+  const handleExportSelectedReturnsExcel = async () => {
+    if (selectedReturnIds.length === 0) {
+      setReturnExportError('Please select at least one return transaction to export.');
+      return;
+    }
+    await handleExportReturnsExcel();
+  };
+
+  const handleReturnsPdfOrPrint = async (print) => {
+    setReturnExportError('');
+    const ids = selectedReturnIds.length > 0 ? selectedReturnIds : returns.map((r) => r.id);
+    if (ids.length === 0) {
+      setReturnExportError('No return transactions to export.');
+      return;
+    }
+    setReturnExporting(true);
+    try {
+      const detailRows = await vanStockReturnsApi.detail(ids);
+      if (detailRows.length === 0) {
+        setReturnExportError('No return transactions to export.');
+        return;
+      }
+      const singleReturnNo = ids.length === 1 ? detailRows[0]?.return_no : null;
+      downloadVanReturnPdf(
+        detailRows,
+        singleReturnNo ? `${singleReturnNo}.pdf` : `Van_Stock_Returns_${new Date().toISOString().slice(0, 10)}.pdf`,
+        { print }
+      );
+    } catch (err) {
+      setReturnExportError(err?.response?.data?.error || err?.message || 'Unable to generate the PDF. Please try again.');
+    } finally {
+      setReturnExporting(false);
+    }
+  };
+
+  // Form price computations
+  const formCalculations = lines.reduce(
+    (acc, line) => {
+      const qty = Number(line.qty || 0);
+      const curItem = items.find((i) => i.id === Number(line.item_id));
+      const price = Number(line.unit_price ?? curItem?.net_srate ?? curItem?.retail_price ?? 0);
+      const lineTotal = qty * price;
+      const issuedQty = Number(line.issued_qty || 0);
+      const issuedTotal = issuedQty * price;
+
+      acc.totalQty += qty;
+      acc.totalAmount += lineTotal;
+      acc.issuedQty += issuedQty;
+      acc.issuedAmount += issuedTotal;
+      return acc;
+    },
+    { totalQty: 0, totalAmount: 0, issuedQty: 0, issuedAmount: 0 }
+  );
+
+  const selectedReturnIssue = issues.find((i) => String(i.id) === String(selectedReturnIssueId));
+  const originalIssuedAmount = selectedReturnIssue
+    ? Number(selectedReturnIssue.total_amount || formCalculations.issuedAmount)
+    : formCalculations.issuedAmount;
+  const returnedAmount = formCalculations.totalAmount;
+  const netAdjustedAmount = Math.max(0, originalIssuedAmount - returnedAmount);
+
   return (
     <div className="space-y-2.5">
       {message && (
@@ -1079,6 +1224,60 @@ export function VanStockPanel({ canManage }) {
                   </div>
                 )}
 
+                {mode === 'return' && (
+                  <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-2.5 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold text-amber-300 flex items-center gap-1.5">
+                        <Truck className="w-3.5 h-3.5 text-amber-400" />
+                        Select Van Stock Issue (Day-end Return Link)
+                      </label>
+                      {selectedReturnIssueId && (
+                        <button
+                          type="button"
+                          onClick={handleClearReturnIssue}
+                          className="text-[10px] text-red-400 hover:text-red-300 underline font-medium"
+                        >
+                          Clear Issue Link
+                        </button>
+                      )}
+                    </div>
+                    <select
+                      value={selectedReturnIssueId}
+                      onChange={(e) => handleSelectReturnIssue(e.target.value)}
+                      className="input w-full text-xs bg-surface border-amber-500/40 text-ink"
+                    >
+                      <option value="">-- Optional: Link to an Issue Note (Auto-populate Products &amp; Prices) --</option>
+                      {issues
+                        .filter((iss) => !employeeId || String(iss.employee_id) === String(employeeId))
+                        .map((iss) => (
+                          <option key={iss.id} value={iss.id}>
+                            {iss.issue_no} — {iss.customer_name ? `${iss.customer_name} • ` : ''}₹{Number(iss.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ({iss.item_count} items · {iss.issued_at})
+                          </option>
+                        ))}
+                    </select>
+
+                    {selectedReturnIssue && (
+                      <div className="text-[11px] bg-surface/90 border border-amber-500/30 rounded p-2 text-ink space-y-1">
+                        <div className="flex items-center justify-between font-semibold">
+                          <span className="text-amber-400 font-mono">
+                            Linked: {selectedReturnIssue.issue_no}
+                          </span>
+                          <span className="font-mono text-emerald-400 font-bold">
+                            Issued Total: ₹{Number(selectedReturnIssue.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        <div className="text-[10.5px] text-ink-muted flex items-center justify-between">
+                          <span>Salesman: {selectedReturnIssue.employee_name}</span>
+                          <span>{selectedReturnIssue.item_count} items issued</span>
+                        </div>
+                        <div className="text-[10px] text-amber-300/90 pt-0.5">
+                          💡 Enter the quantity returned for each product below. The system automatically computes the returned value and net sales amount.
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div>
                   <label className="text-xs font-medium text-ink-muted block mb-0.5">Salesman *</label>
                   {!canManage ? (
@@ -1110,98 +1309,193 @@ export function VanStockPanel({ canManage }) {
                       <span className="text-[10.5px] text-indigo-400 font-medium">Order items + Extra items</span>
                     )}
                   </div>
-                  {lines.map((line, idx) => (
-                    <div key={idx} className="flex flex-wrap items-center gap-2">
-                      <select
-                        value={line.item_id}
-                        onChange={(e) => updateLine(idx, { item_id: e.target.value })}
-                        className="input text-xs flex-1 min-w-[140px]"
-                      >
-                        <option value="">Select Item</option>
-                        {items.map((i) => {
-                          const vanItem = mode === 'return' ? pending.find((p) => p.item_id === i.id) : null;
-                          const branchStock = Number(i.quantity_on_hand ?? i.stock ?? 0);
-                          const vanStock = vanItem ? Number(vanItem.quantity_on_hand) : 0;
+                  {lines.map((line, idx) => {
+                    const curItem = items.find((i) => i.id === Number(line.item_id));
+                    const unitPrice = Number(line.unit_price ?? curItem?.net_srate ?? curItem?.retail_price ?? 0);
+                    const qtyVal = Number(line.qty || 0);
+                    const lineTotal = qtyVal * unitPrice;
+                    const issuedQty = Number(line.issued_qty || 0);
+                    const issuedTotal = issuedQty * unitPrice;
+                    const remainingQty = Math.max(0, issuedQty - qtyVal);
+                    const remainingTotal = remainingQty * unitPrice;
 
-                          let stockStr = '';
-                          let isUnavailable = false;
-                          if (mode === 'return') {
-                            stockStr = ` [In Van: ${vanStock}]`;
-                            isUnavailable = vanStock <= 0;
-                          } else {
-                            if (branchStock < 0) {
-                              stockStr = ` [Negative Stock: ${branchStock}]`;
-                              isUnavailable = true;
-                            } else if (branchStock === 0) {
-                              stockStr = ` [Out of Stock: 0]`;
-                              isUnavailable = true;
-                            } else {
-                              stockStr = ` [Stock: ${branchStock}]`;
-                              isUnavailable = false;
-                            }
-                          }
-                          return (
-                            <option key={i.id} value={i.id} disabled={isUnavailable}>
-                              {i.item_name} ({i.item_code}){stockStr}
-                            </option>
-                          );
-                        })}
-                      </select>
-                      <input
-                        type="number"
-                        step="any"
-                        min="0.01"
-                        placeholder="Qty"
-                        value={line.qty}
-                        onChange={(e) => updateLine(idx, { qty: e.target.value })}
-                        className="input text-xs w-20"
-                      />
-                      {line.item_id && (() => {
-                        const curItem = items.find((it) => it.id === Number(line.item_id));
-                        const vanItem = mode === 'return' ? pending.find((p) => p.item_id === Number(line.item_id)) : null;
-                        const avail = mode === 'return' ? (vanItem ? Number(vanItem.quantity_on_hand) : 0) : Number(curItem?.quantity_on_hand ?? curItem?.stock ?? 0);
-                        const isOver = Number(line.qty) > avail;
-                        const isZeroOrNeg = avail <= 0;
-                        return (
-                          <span
-                            className={`text-[10px] px-1.5 py-0.5 rounded font-medium whitespace-nowrap ${
-                              isZeroOrNeg
-                                ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
-                                : isOver
-                                ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
-                                : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                            }`}
-                            title={isZeroOrNeg ? 'No available stock' : isOver ? 'Quantity exceeds available stock' : 'Stock available'}
+                    return (
+                      <div key={idx} className="p-2 rounded bg-surface border border-border-soft space-y-1.5 text-xs">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <select
+                            value={line.item_id}
+                            onChange={(e) => updateLine(idx, { item_id: e.target.value })}
+                            className="input text-xs flex-1 min-w-[140px]"
                           >
-                            {mode === 'return' ? `Van: ${avail}` : avail < 0 ? `Negative: ${avail}` : avail === 0 ? 'Out of stock: 0' : `Avail: ${avail}`}
-                          </span>
-                        );
-                      })()}
-                      {line.fromOrder && (
-                        <span className="text-[9px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-1 py-0.5 rounded whitespace-nowrap">
-                          Order
+                            <option value="">Select Item</option>
+                            {items.map((i) => {
+                              const vanItem = mode === 'return' ? pending.find((p) => p.item_id === i.id) : null;
+                              const branchStock = Number(i.quantity_on_hand ?? i.stock ?? 0);
+                              const vanStock = vanItem ? Number(vanItem.quantity_on_hand) : 0;
+
+                              let stockStr = '';
+                              let isUnavailable = false;
+                              if (mode === 'return') {
+                                stockStr = ` [In Van: ${vanStock}]`;
+                                isUnavailable = vanStock <= 0;
+                              } else {
+                                if (branchStock < 0) {
+                                  stockStr = ` [Negative Stock: ${branchStock}]`;
+                                  isUnavailable = true;
+                                } else if (branchStock === 0) {
+                                  stockStr = ` [Out of Stock: 0]`;
+                                  isUnavailable = true;
+                                } else {
+                                  stockStr = ` [Stock: ${branchStock}]`;
+                                  isUnavailable = false;
+                                }
+                              }
+                              return (
+                                <option key={i.id} value={i.id} disabled={isUnavailable}>
+                                  {i.item_name} ({i.item_code}){stockStr}
+                                </option>
+                              );
+                            })}
+                          </select>
+                          <div className="flex items-center gap-1">
+                            <span className="text-[10.5px] text-ink-muted">
+                              {mode === 'return' ? 'Return Qty:' : 'Qty:'}
+                            </span>
+                            <input
+                              type="number"
+                              step="any"
+                              min={mode === 'return' ? '0' : '0.01'}
+                              placeholder="Qty"
+                              value={line.qty}
+                              onChange={(e) => updateLine(idx, { qty: e.target.value })}
+                              className="input text-xs w-20 text-right font-medium"
+                            />
+                          </div>
+                          {line.item_id && (() => {
+                            const vanItem = mode === 'return' ? pending.find((p) => p.item_id === Number(line.item_id)) : null;
+                            const avail = mode === 'return' ? (vanItem ? Number(vanItem.quantity_on_hand) : 0) : Number(curItem?.quantity_on_hand ?? curItem?.stock ?? 0);
+                            const isOver = Number(line.qty) > avail;
+                            const isZeroOrNeg = avail <= 0;
+                            return (
+                              <span
+                                className={`text-[10px] px-1.5 py-0.5 rounded font-medium whitespace-nowrap ${
+                                  isZeroOrNeg
+                                    ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                                    : isOver
+                                    ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                                    : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                                }`}
+                                title={isZeroOrNeg ? 'No available stock' : isOver ? 'Quantity exceeds available stock' : 'Stock available'}
+                              >
+                                {mode === 'return' ? `Van: ${avail}` : avail < 0 ? `Negative: ${avail}` : avail === 0 ? 'Out of stock: 0' : `Avail: ${avail}`}
+                              </span>
+                            );
+                          })()}
+                          {line.fromOrder && (
+                            <span className="text-[9px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-1 py-0.5 rounded whitespace-nowrap">
+                              Order
+                            </span>
+                          )}
+                          {line.fromIssue && (
+                            <span className="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1 py-0.5 rounded whitespace-nowrap">
+                              Issue Line
+                            </span>
+                          )}
+                          {lines.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeLine(idx)}
+                              className="p-1 text-red-400 hover:text-red-300 transition"
+                              title="Remove item line"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Price & Adjustment info row */}
+                        {line.item_id && (
+                          <div className="flex flex-wrap items-center justify-between text-[11px] pt-1 border-t border-border-soft/60 text-ink-muted">
+                            <div className="flex items-center gap-2">
+                              <span>Unit Price: <strong className="text-ink font-mono">₹{unitPrice.toFixed(2)}</strong></span>
+                              {mode === 'return' && line.issued_qty != null && (
+                                <span className="text-indigo-400">
+                                  Issued: <strong>{issuedQty}</strong> (₹{issuedTotal.toFixed(2)})
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {mode === 'return' && line.issued_qty != null && (
+                                <span className="text-amber-400">
+                                  Net Sold: <strong>{remainingQty}</strong> (₹{remainingTotal.toFixed(2)})
+                                </span>
+                              )}
+                              <span className="font-semibold text-ink">
+                                {mode === 'return' ? 'Return Amount: ' : 'Line Total: '}
+                                <span className="text-emerald-400 font-mono font-bold">₹{lineTotal.toFixed(2)}</span>
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  <div className="flex items-center justify-between pt-0.5">
+                    <button
+                      type="button"
+                      onClick={addLine}
+                      className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition flex items-center gap-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      {selectedOrderId ? 'Add Extra Item to Van' : 'Add Another Item'}
+                    </button>
+                    <span className="text-[11px] text-ink-muted">
+                      {lines.filter((l) => l.item_id).length} item line(s)
+                    </span>
+                  </div>
+
+                  {/* Live Total & Price Adjustment Summary Card */}
+                  <div className="bg-surface-subtle border border-border-soft rounded-lg p-2.5 space-y-1.5 mt-2">
+                    {mode === 'issue' ? (
+                      <div className="flex items-center justify-between text-xs font-semibold">
+                        <span className="text-ink-muted">
+                          Total Issue Summary ({formCalculations.totalQty} PCS):
                         </span>
-                      )}
-                      {lines.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removeLine(idx)}
-                          className="p-1 text-red-400 hover:text-red-300 transition"
-                          title="Remove item line"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={addLine}
-                    className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition flex items-center gap-1 pt-0.5"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    {selectedOrderId ? 'Add Extra Item to Van' : 'Add Another Item'}
-                  </button>
+                        <span className="text-emerald-400 font-mono text-sm font-bold">
+                          Total Amount: ₹{formCalculations.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        <div className="text-[11px] font-semibold text-ink flex items-center justify-between border-b border-border-soft/60 pb-1">
+                          <span className="text-ink-muted">Day-end Return Price Adjustment</span>
+                          <span className="text-[10px] text-amber-400 font-normal">Real-time Calculated</span>
+                        </div>
+                        {selectedReturnIssue && (
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-ink-muted">Original Issued Amount:</span>
+                            <span className="font-mono font-medium text-ink">
+                              ₹{originalIssuedAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-amber-400 font-medium">(-) Total Returned Stock Value ({formCalculations.totalQty} PCS):</span>
+                          <span className="font-mono font-semibold text-amber-400">
+                            - ₹{returnedAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        {selectedReturnIssue && (
+                          <div className="flex items-center justify-between text-xs pt-1 border-t border-border-soft/60 font-bold">
+                            <span className="text-emerald-400">(=) Net Sales / Consumed Amount:</span>
+                            <span className="font-mono text-emerald-400 text-sm">
+                              ₹{netAdjustedAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div>
@@ -1235,6 +1529,49 @@ export function VanStockPanel({ canManage }) {
 
         {/* Right Column Table */}
         <div className={canManage ? 'min-w-0 lg:col-span-7 space-y-2.5' : 'min-w-0 space-y-2.5'}>
+          {/* Sub-view switcher tabs for Right Column */}
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-soft pb-1">
+            <div className="flex items-center gap-1.5 bg-surface p-1 rounded-lg border border-border-soft">
+              <button
+                type="button"
+                onClick={() => setRightView('van-stock')}
+                className={`px-3 py-1 rounded text-xs font-semibold transition ${
+                  rightView === 'van-stock'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-ink-muted hover:text-ink'
+                }`}
+              >
+                Van Stock Balance ({pending.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setRightView('issues')}
+                className={`px-3 py-1 rounded text-xs font-semibold transition ${
+                  rightView === 'issues'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-ink-muted hover:text-ink'
+                }`}
+              >
+                Issue History ({issues.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setRightView('returns')}
+                className={`px-3 py-1 rounded text-xs font-semibold transition ${
+                  rightView === 'returns'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'text-ink-muted hover:text-ink'
+                }`}
+              >
+                Day-end Returns ({returns.length})
+              </button>
+            </div>
+            <span className="text-xs text-ink-muted">
+              {selectedEmployee ? `Salesman: ${selectedEmployee.name}` : (employeeId ? `Salesman ID: ${employeeId}` : 'All salesmen')}
+            </span>
+          </div>
+
+          {(rightView === 'van-stock') && (
           <div className="card overflow-hidden">
             <div className="px-3.5 py-2 border-b border-border-soft flex flex-wrap items-center justify-between gap-2">
               <h3 className="font-semibold text-ink text-xs sm:text-sm">Salesman Active Van Stock</h3>
@@ -1329,7 +1666,9 @@ export function VanStockPanel({ canManage }) {
             </div>
             <Pagination page={pendingPage} pageSize={10} total={pendingTotal} onPageChange={setPendingPage} />
           </div>
+          )}
 
+          {(rightView === 'issues') && (
           <div className="card overflow-hidden">
             <div className="px-3.5 py-2 border-b border-border-soft flex flex-wrap items-center justify-between gap-2">
               <h3 className="font-semibold text-ink text-xs sm:text-sm">Issue Transactions</h3>
@@ -1618,6 +1957,280 @@ export function VanStockPanel({ canManage }) {
             </div>
             <Pagination page={issuesPage} pageSize={10} total={issuesTotal} onPageChange={setIssuesPage} />
           </div>
+          )}
+
+          {(rightView === 'returns') && (
+          <div className="card overflow-hidden">
+            <div className="px-3.5 py-2 border-b border-border-soft flex flex-wrap items-center justify-between gap-2">
+              <h3 className="font-semibold text-ink text-xs sm:text-sm">Day-end Return Transactions</h3>
+              <span className="text-xs text-ink-muted">
+                {selectedEmployee ? `Salesman: ${selectedEmployee.name}` : (canManage ? 'All salesmen' : '')}
+              </span>
+            </div>
+            <div className="px-3.5 py-1.5 border-b border-border-soft flex flex-wrap items-center gap-1.5 bg-surface-subtle/20">
+              <button onClick={() => handleReturnsPdfOrPrint(true)} className="rounded bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors">Print</button>
+              <button onClick={() => handleReturnsPdfOrPrint(false)} className="rounded bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors">Download PDF</button>
+              <button onClick={handleExportReturnsExcel} disabled={returnExporting} className="rounded bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors disabled:opacity-60">
+                {returnExporting ? 'Exporting…' : 'Export Excel'}
+              </button>
+              <button onClick={handleExportSelectedReturnsExcel} disabled={returnExporting} className="rounded bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors disabled:opacity-60">
+                Export Selected
+              </button>
+              {selectedReturnIds.length > 0 && <span className="text-xs text-ink-muted">{selectedReturnIds.length} selected</span>}
+            </div>
+            {returnExportError && <div className="mx-3.5 mt-2 text-xs font-medium text-red-600 bg-white p-2 rounded border border-red-300 shadow-sm">{returnExportError}</div>}
+            <div className="md:hidden">
+              {returns.length > 0 && (
+                <div className="px-3 py-2 border-b border-border-soft flex items-center gap-2 text-xs text-ink-muted bg-page/40">
+                  <input type="checkbox" checked={selectedReturnIds.length === returns.length} onChange={toggleSelectAllReturns} />
+                  <span>Select all returns ({returns.length})</span>
+                </div>
+              )}
+              <div className="divide-y divide-border-soft/60">
+                {pagedReturns.map((r) => {
+                  const isExpanded = expandedReturnIds.includes(r.id);
+                  return (
+                    <div key={r.id} className="p-3 space-y-2 text-xs">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-start gap-2 min-w-0">
+                          <input
+                            type="checkbox"
+                            className="mt-0.5 shrink-0"
+                            checked={selectedReturnIds.includes(r.id)}
+                            onChange={() => toggleSelectReturn(r.id)}
+                          />
+                          <div className="min-w-0">
+                            <p className="font-mono font-semibold text-ink">{r.return_no}</p>
+                            <p className="text-[11px] text-ink-muted break-words">
+                              {r.issue_no ? (
+                                <span className="font-mono text-amber-400 font-semibold">
+                                  Linked Issue: {r.issue_no}
+                                </span>
+                              ) : 'General Van Return'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="font-bold text-amber-400">
+                            ₹{Number(r.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </p>
+                          <p className="text-[10px] text-ink-muted">{r.item_count} items • Returned Qty {r.total_qty}</p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-ink-muted">
+                        <span>{r.employee_name}</span>
+                        <span>{r.returned_at}</span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => toggleExpandReturn(r.id)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 min-h-[34px] text-xs font-medium rounded border border-border-soft bg-page hover:bg-surface-subtle text-ink"
+                        >
+                          {isExpanded ? <ChevronDown className="w-3.5 h-3.5 text-amber-400" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                          <span>{isExpanded ? 'Hide Items' : 'View Items'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPrintingReturn(r)}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 min-h-[34px] text-xs font-semibold rounded bg-amber-600 hover:bg-amber-700 text-white"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          <span>Print Receipt</span>
+                        </button>
+                      </div>
+                      {isExpanded && (
+                        <div className="bg-surface border border-border-soft rounded-lg p-2.5 space-y-1.5">
+                          {r.items?.map((item, idx) => (
+                            <div key={item.id || idx} className="flex items-start justify-between gap-2 text-[11px] border-b border-border-soft/60 last:border-0 pb-1 last:pb-0">
+                              <div className="min-w-0">
+                                <p className="font-medium text-ink break-words">{idx + 1}. {item.item_name}</p>
+                                <p className="text-[10px] text-ink-muted">{item.item_code || '-'} • Returned Qty {item.qty} {item.unit_code || ''}</p>
+                              </div>
+                              <span className="font-semibold text-ink shrink-0">
+                                ₹{Number(item.line_amount || (Number(item.qty || 0) * Number(item.unit_price || 0))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                          ))}
+                          {(!r.items || r.items.length === 0) && (
+                            <p className="text-[11px] italic text-ink-muted">No item lines recorded for this return transaction.</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {returns.length === 0 && (
+                  <div className="px-4 py-8 text-center text-ink-muted text-xs">
+                    No return transactions found.
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="hidden md:block max-h-[calc(100vh-320px)] overflow-x-auto overflow-y-auto">
+              <table className="w-full min-w-[650px] text-left text-xs">
+                <thead className="sticky top-0 bg-page z-10">
+                  <tr className="border-b border-border-soft uppercase text-ink-muted font-medium">
+                    <th className="w-8 px-3 py-1.5">
+                      {returns.length > 0 && (
+                        <input type="checkbox" checked={selectedReturnIds.length === returns.length} onChange={toggleSelectAllReturns} />
+                      )}
+                    </th>
+                    <th className="w-6 px-1 py-1.5 text-center"></th>
+                    <th className="px-3 py-1.5">Return #</th>
+                    <th className="px-3 py-1.5">Linked Issue #</th>
+                    <th className="px-3 py-1.5">Salesman</th>
+                    <th className="px-3 py-1.5">Date</th>
+                    <th className="px-3 py-1.5 text-center">Items</th>
+                    <th className="px-3 py-1.5 text-right">Returned Qty</th>
+                    <th className="px-3 py-1.5 text-right">Return Amount</th>
+                    <th className="px-3 py-1.5 text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border-soft/60">
+                  {pagedReturns.map((r) => {
+                    const isExpanded = expandedReturnIds.includes(r.id);
+                    return (
+                      <Fragment key={r.id}>
+                        <tr className="hover:bg-page/50 transition">
+                          <td className="px-3 py-1.5">
+                            <input type="checkbox" checked={selectedReturnIds.includes(r.id)} onChange={() => toggleSelectReturn(r.id)} />
+                          </td>
+                          <td className="px-1 py-1.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => toggleExpandReturn(r.id)}
+                              className="p-1 rounded hover:bg-surface-subtle text-ink-muted hover:text-ink transition cursor-pointer"
+                              title={isExpanded ? 'Collapse product details' : 'View product prices & details'}
+                            >
+                              {isExpanded ? <ChevronDown className="w-3.5 h-3.5 text-amber-400" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                            </button>
+                          </td>
+                          <td className="px-3 py-1.5 font-mono font-medium text-ink">{r.return_no}</td>
+                          <td className="px-3 py-1.5">
+                            {r.issue_no ? (
+                              <span className="font-mono text-amber-400 font-semibold flex items-center gap-1">
+                                <Truck size={12} /> {r.issue_no}
+                              </span>
+                            ) : (
+                              <span className="text-ink-muted text-[11px] italic">General Return</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-1.5 text-ink">{r.employee_name}</td>
+                          <td className="px-3 py-1.5 text-ink-muted whitespace-nowrap">{r.returned_at}</td>
+                          <td className="px-3 py-1.5 text-center text-ink-muted font-medium">{r.item_count}</td>
+                          <td className="px-3 py-1.5 text-right font-semibold text-ink">{r.total_qty}</td>
+                          <td className="px-3 py-1.5 text-right font-bold text-amber-400 whitespace-nowrap">
+                            ₹{Number(r.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          <td className="px-3 py-1.5 text-center whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => setPrintingReturn(r)}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded bg-amber-600 hover:bg-amber-700 text-white shadow-xs transition cursor-pointer"
+                              title="Print Day-End Return Receipt"
+                            >
+                              <Printer className="w-3.5 h-3.5" />
+                              <span>Print Receipt</span>
+                            </button>
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <tr className="bg-surface-subtle/20 border-b border-border-soft">
+                            <td colSpan={10} className="p-3">
+                              <div className="bg-surface border border-border-soft rounded-lg p-3 space-y-2 shadow-xs">
+                                <div className="flex flex-wrap items-center justify-between border-b border-border-soft pb-1.5 gap-2">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="font-semibold text-xs text-ink">
+                                      Returned Products Breakdown — <span className="font-mono text-amber-400">{r.return_no}</span>
+                                    </span>
+                                    {r.issue_no && (
+                                      <span className="text-[10.5px] bg-amber-500/10 border border-amber-500/30 text-amber-300 px-1.5 py-0.5 rounded font-mono">
+                                        Linked Issue: {r.issue_no}
+                                      </span>
+                                    )}
+                                    <span className="text-[11px] text-ink-muted">
+                                      ({r.items?.length || 0} product{r.items?.length === 1 ? '' : 's'})
+                                    </span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setPrintingReturn(r)}
+                                    className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded bg-amber-600 hover:bg-amber-700 text-white shadow-xs transition cursor-pointer"
+                                  >
+                                    <Printer className="w-3 h-3" />
+                                    <span>Print Receipt</span>
+                                  </button>
+                                </div>
+                                <div className="overflow-x-auto">
+                                  <table className="w-full min-w-[480px] text-left text-xs border border-border-soft rounded overflow-hidden">
+                                  <thead className="bg-surface-subtle text-ink-muted uppercase text-[10px] font-semibold">
+                                    <tr>
+                                      <th className="px-2.5 py-1.5 w-10 text-center">#</th>
+                                      <th className="px-2.5 py-1.5">Product</th>
+                                      <th className="px-2.5 py-1.5">SKU</th>
+                                      <th className="px-2.5 py-1.5 text-center">Unit</th>
+                                      <th className="px-2.5 py-1.5 text-right">Returned Qty</th>
+                                      <th className="px-2.5 py-1.5 text-right">Unit Price</th>
+                                      <th className="px-2.5 py-1.5 text-right">Amount</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-border-soft/60">
+                                    {r.items?.map((item, idx) => (
+                                      <tr key={item.id || idx} className="hover:bg-page/40 transition">
+                                        <td className="px-2.5 py-1.5 text-center text-ink-muted">{idx + 1}</td>
+                                        <td className="px-2.5 py-1.5 font-medium text-ink">{item.item_name}</td>
+                                        <td className="px-2.5 py-1.5 text-ink-muted font-mono">{item.item_code || '-'}</td>
+                                        <td className="px-2.5 py-1.5 text-center text-ink-muted">{item.unit_code || '-'}</td>
+                                        <td className="px-2.5 py-1.5 text-right font-medium text-ink">{item.qty}</td>
+                                        <td className="px-2.5 py-1.5 text-right text-ink">
+                                          ₹{Number(item.unit_price || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </td>
+                                        <td className="px-2.5 py-1.5 text-right font-semibold text-ink">
+                                          ₹{Number(item.line_amount || (Number(item.qty || 0) * Number(item.unit_price || 0))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                    {(!r.items || r.items.length === 0) && (
+                                      <tr>
+                                        <td colSpan={7} className="px-3 py-4 text-center text-ink-muted text-xs italic">
+                                          No item lines recorded for this return transaction.
+                                        </td>
+                                      </tr>
+                                    )}
+                                  </tbody>
+                                  <tfoot className="border-t border-border-soft bg-surface-subtle/50 font-semibold text-ink text-xs">
+                                    <tr>
+                                      <td colSpan={4} className="px-2.5 py-1.5 text-right text-ink-muted">Total:</td>
+                                      <td className="px-2.5 py-1.5 text-right font-bold text-ink">{r.total_qty}</td>
+                                      <td></td>
+                                      <td className="px-2.5 py-1.5 text-right text-amber-400 font-bold">
+                                        ₹{Number(r.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                      </td>
+                                    </tr>
+                                  </tfoot>
+                                </table>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
+                  {returns.length === 0 && (
+                    <tr>
+                      <td colSpan={10} className="px-4 py-8 text-center text-ink-muted text-xs">
+                        No return transactions found.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <Pagination page={returnsPage} pageSize={10} total={returnsTotal} onPageChange={setReturnsPage} />
+          </div>
+          )}
         </div>
       </div>
 
@@ -1625,6 +2238,13 @@ export function VanStockPanel({ canManage }) {
         <PrintPreviewModal
           stockIssue={printingIssue}
           onClose={() => setPrintingIssue(null)}
+        />
+      )}
+
+      {printingReturn && (
+        <PrintPreviewModal
+          stockReturn={printingReturn}
+          onClose={() => setPrintingReturn(null)}
         />
       )}
     </div>
