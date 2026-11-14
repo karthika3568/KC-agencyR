@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS category_brands (
 -- supplier a given GRN was actually bought from).
 -- ---------------------------------------------------------------------
 
-ALTER TABLE items ADD COLUMN supplier_id INT UNSIGNED NULL AFTER product_line_id;
+ALTER TABLE items ADD COLUMN supplier_id INT UNSIGNED NULL AFTER brand_id;
 ALTER TABLE items ADD CONSTRAINT fk_items_supplier FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL;
 
 SET FOREIGN_KEY_CHECKS = 1;
