@@ -17,7 +17,16 @@ class PermissionMiddleware
      */
     public static function require(array $claims, string $permissionCode): void
     {
+        // Super Admin role or wildcard permission bypasses granular permission checks
+        $role = strtolower((string) ($claims['role'] ?? ''));
+        if ($role === 'super admin' || $role === 'admin' || (int) ($claims['role_id'] ?? 0) === 1 || (int) ($claims['role_id'] ?? 0) === 2) {
+            return;
+        }
+
         $permissions = (array) ($claims['permissions'] ?? []);
+        if (in_array('*', $permissions, true)) {
+            return;
+        }
 
         if (!in_array($permissionCode, $permissions, true)) {
             Response::error("Forbidden: missing permission '{$permissionCode}'", 403);
@@ -32,7 +41,15 @@ class PermissionMiddleware
      */
     public static function requireAny(array $claims, array $permissionCodes): void
     {
+        $role = strtolower((string) ($claims['role'] ?? ''));
+        if ($role === 'super admin' || $role === 'admin' || (int) ($claims['role_id'] ?? 0) === 1 || (int) ($claims['role_id'] ?? 0) === 2) {
+            return;
+        }
+
         $permissions = (array) ($claims['permissions'] ?? []);
+        if (in_array('*', $permissions, true)) {
+            return;
+        }
 
         foreach ($permissionCodes as $code) {
             if (in_array($code, $permissions, true)) {
@@ -46,8 +63,13 @@ class PermissionMiddleware
 
     public static function has(array $claims, string $permissionCode): bool
     {
+        $role = strtolower((string) ($claims['role'] ?? ''));
+        if ($role === 'super admin' || $role === 'admin' || (int) ($claims['role_id'] ?? 0) === 1 || (int) ($claims['role_id'] ?? 0) === 2) {
+            return true;
+        }
+
         $permissions = (array) ($claims['permissions'] ?? []);
-        return in_array($permissionCode, $permissions, true);
+        return in_array('*', $permissions, true) || in_array($permissionCode, $permissions, true);
     }
 
     public static function hasAny(array $claims, array $permissionCodes): bool

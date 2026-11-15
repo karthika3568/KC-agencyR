@@ -44,11 +44,17 @@ class AuthController
 
         $permissions = $this->users->getEffectivePermissionCodes((int) $user['id'], (int) $user['role_id']);
 
+        $isSuperAdmin = ((int) $user['role_id'] === 1 || (int) $user['role_id'] === 2 || strcasecmp($user['role_name'] ?? '', 'Super Admin') === 0 || strcasecmp($user['role_name'] ?? '', 'Admin') === 0);
+        if ($isSuperAdmin && !in_array('*', $permissions, true)) {
+            $permissions[] = '*';
+        }
+
         $token = JwtHelper::issue([
             'sub' => (int) $user['id'],
             'name' => $user['name'],
             'email' => $user['email'],
             'role' => $user['role_name'],
+            'role_id' => (int) $user['role_id'],
             'branch_id' => $user['branch_id'] !== null ? (int) $user['branch_id'] : null,
             'permissions' => $permissions,
         ]);
