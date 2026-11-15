@@ -12,13 +12,13 @@ $dotenv = Dotenv::createImmutable($envDir);
 $dotenv->safeLoad();
 
 // Support DATABASE_URL / MYSQL_URL provided by cloud hosting (e.g. EthioDeploy, Railway, Render)
-$dbHost = $_ENV['DB_HOST'] ?? '127.0.0.1';
-$dbPort = $_ENV['DB_PORT'] ?? '3306';
-$dbName = $_ENV['DB_DATABASE'] ?? $_ENV['DB_NAME'] ?? 'pos_system';
-$dbUser = $_ENV['DB_USERNAME'] ?? $_ENV['DB_USER'] ?? 'root';
-$dbPass = $_ENV['DB_PASSWORD'] ?? $_ENV['DB_PASS'] ?? '';
+$databaseUrl = getenv('DATABASE_URL') ?: ($_ENV['DATABASE_URL'] ?? (getenv('MYSQL_URL') ?: ($_ENV['MYSQL_URL'] ?? null)));
 
-$databaseUrl = $_ENV['DATABASE_URL'] ?? $_ENV['MYSQL_URL'] ?? null;
+$dbHost = getenv('DB_HOST') ?: ($_ENV['DB_HOST'] ?? (getenv('MYSQLHOST') ?: ($_ENV['MYSQLHOST'] ?? '127.0.0.1')));
+$dbPort = getenv('DB_PORT') ?: ($_ENV['DB_PORT'] ?? (getenv('MYSQLPORT') ?: ($_ENV['MYSQLPORT'] ?? '3306')));
+$dbName = getenv('DB_DATABASE') ?: ($_ENV['DB_DATABASE'] ?? (getenv('DB_NAME') ?: ($_ENV['DB_NAME'] ?? (getenv('MYSQLDATABASE') ?: ($_ENV['MYSQLDATABASE'] ?? 'pos_system')))));
+$dbUser = getenv('DB_USERNAME') ?: ($_ENV['DB_USERNAME'] ?? (getenv('DB_USER') ?: ($_ENV['DB_USER'] ?? (getenv('MYSQLUSER') ?: ($_ENV['MYSQLUSER'] ?? 'root')))));
+$dbPass = getenv('DB_PASSWORD') ?: ($_ENV['DB_PASSWORD'] ?? (getenv('DB_PASS') ?: ($_ENV['DB_PASS'] ?? (getenv('MYSQLPASSWORD') ?: ($_ENV['MYSQLPASSWORD'] ?? '')))));
 if ($databaseUrl) {
     $parts = parse_url($databaseUrl);
     if ($parts !== false) {
