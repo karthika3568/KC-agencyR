@@ -11,13 +11,42 @@ $envDir = file_exists(__DIR__ . '/../.env') ? __DIR__ . '/..' : __DIR__;
 $dotenv = Dotenv::createImmutable($envDir);
 $dotenv->safeLoad();
 
+// Support DATABASE_URL / MYSQL_URL provided by cloud hosting (e.g. EthioDeploy, Railway, Render)
+$dbHost = $_ENV['DB_HOST'] ?? '127.0.0.1';
+$dbPort = $_ENV['DB_PORT'] ?? '3306';
+$dbName = $_ENV['DB_DATABASE'] ?? $_ENV['DB_NAME'] ?? 'pos_system';
+$dbUser = $_ENV['DB_USERNAME'] ?? $_ENV['DB_USER'] ?? 'root';
+$dbPass = $_ENV['DB_PASSWORD'] ?? $_ENV['DB_PASS'] ?? '';
+
+$databaseUrl = $_ENV['DATABASE_URL'] ?? $_ENV['MYSQL_URL'] ?? null;
+if ($databaseUrl) {
+    $parts = parse_url($databaseUrl);
+    if ($parts !== false) {
+        if (!empty($parts['host'])) {
+            $dbHost = $parts['host'];
+        }
+        if (!empty($parts['port'])) {
+            $dbPort = (string) $parts['port'];
+        }
+        if (!empty($parts['user'])) {
+            $dbUser = urldecode($parts['user']);
+        }
+        if (isset($parts['pass'])) {
+            $dbPass = urldecode($parts['pass']);
+        }
+        if (!empty($parts['path'])) {
+            $dbName = ltrim($parts['path'], '/');
+        }
+    }
+}
+
 return [
     'db' => [
-        'host' => $_ENV['DB_HOST'] ?? '127.0.0.1',
-        'port' => $_ENV['DB_PORT'] ?? '3306',
-        'database' => $_ENV['DB_DATABASE'] ?? 'pos_system',
-        'username' => $_ENV['DB_USERNAME'] ?? 'root',
-        'password' => $_ENV['DB_PASSWORD'] ?? '',
+        'host' => $dbHost,
+        'port' => $dbPort,
+        'database' => $dbName,
+        'username' => $dbUser,
+        'password' => $dbPass,
     ],
     'jwt' => [
         'secret' => $_ENV['JWT_SECRET'] ?? 'insecure-dev-secret-change-me',

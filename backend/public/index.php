@@ -51,6 +51,11 @@ if (!str_starts_with($uri, '/api') && $uri !== '/') {
     $uri = '/api' . (str_starts_with($uri, '/') ? $uri : '/' . $uri);
 }
 
+// Health check / root endpoint (before initializing DB so health checks pass)
+if ($uri === '/' || $uri === '/api' || $uri === '/health' || $uri === '/api/health') {
+    Response::json(['status' => 'ok', 'app' => 'KC Agency POS API']);
+}
+
 $pdo = get_pdo();
 $router = new Router();
 
