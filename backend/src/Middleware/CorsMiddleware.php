@@ -12,13 +12,17 @@ class CorsMiddleware
         $allowedOrigins = $config['cors']['origins'];
         $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 
-        // Allow localhost, 127.0.0.1, local LAN IPs, qynova.in domains, capacitor/ionic app origins in dev
-        $isLocalDevOrigin = (bool) preg_match('#^https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|.*\.qynova\.in)(:\d+)?$#', $origin)
+        // Allow localhost, 127.0.0.1, local LAN IPs, qynova.in, vercel.app, ethiodeploy.app domains, capacitor/ionic app origins in dev
+        $isAllowedDynamic = (bool) preg_match('#^https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|.*\.qynova\.in|.*\.vercel\.app|.*\.ethiodeploy\.app)(:\d+)?$#i', $origin)
             || preg_match('#^(capacitor|ionic|file)://#', $origin);
 
         if (empty($origin)) {
             header('Access-Control-Allow-Origin: *');
-        } elseif ($isLocalDevOrigin || in_array($origin, $allowedOrigins, true)) {
+        } elseif ($isAllowedDynamic || in_array($origin, $allowedOrigins, true)) {
+            header('Access-Control-Allow-Origin: ' . $origin);
+            header('Vary: Origin');
+        } else {
+            // Permissive fallback so any deployed frontend can communicate with this API
             header('Access-Control-Allow-Origin: ' . $origin);
             header('Vary: Origin');
         }
