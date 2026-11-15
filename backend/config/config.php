@@ -49,9 +49,15 @@ return [
         'password' => $dbPass,
     ],
     'jwt' => [
-        'secret' => $_ENV['JWT_SECRET'] ?? 'insecure-dev-secret-change-me',
-        'issuer' => $_ENV['JWT_ISSUER'] ?? 'pos-system',
-        'access_ttl' => (int) ($_ENV['JWT_ACCESS_TOKEN_TTL'] ?? 36000),
+        'secret' => (function() {
+            $s = getenv('JWT_SECRET') ?: ($_ENV['JWT_SECRET'] ?? '');
+            if (empty($s) || strlen($s) < 32) {
+                return 'dev-only-secret-h8f3k29dslq0zx71mvbn4pgtwecy6ru5-must-be-at-least-256-bits';
+            }
+            return $s;
+        })(),
+        'issuer' => getenv('JWT_ISSUER') ?: ($_ENV['JWT_ISSUER'] ?? 'pos-system'),
+        'access_ttl' => (int) (getenv('JWT_ACCESS_TOKEN_TTL') ?: ($_ENV['JWT_ACCESS_TOKEN_TTL'] ?? 36000)),
     ],
     'cors' => [
         'origins' => array_filter(array_map('trim', explode(',', $_ENV['APP_CORS_ORIGINS'] ?? 'http://localhost:5173'))),
