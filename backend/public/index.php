@@ -56,7 +56,14 @@ if ($uri === '/' || $uri === '/api' || $uri === '/health' || $uri === '/api/heal
     Response::json(['status' => 'ok', 'app' => 'KC Agency POS API']);
 }
 
-$pdo = get_pdo();
+try {
+    $pdo = get_pdo();
+} catch (\Throwable $e) {
+    Response::json([
+        'error' => 'Database connection failed',
+        'detail' => $e->getMessage(),
+    ], 500);
+}
 $router = new Router();
 
 // ---------------------------------------------------------------
